@@ -45,7 +45,7 @@ void ApplicationBarItem::paintEvent(QPaintEvent*)
     if (hoverd || selected) {
         painter.save();
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(0xc8, 0xcf, 0xcd, 60));
+        painter.setBrush(QColor(0xD8, 0xD8, 0xD8, 224));
         painter.drawRoundedRect(rect(), 10, 10);
         painter.restore();
     }

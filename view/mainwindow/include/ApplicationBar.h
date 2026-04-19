@@ -26,7 +26,6 @@ private:
     void layoutItems();
     ApplicationBarItem* selectedItem = nullptr;
     QPixmap avatarPixmap;
-    QImage noiseTexture;
     QVector<ApplicationBarItem*> topItems;
     QVector<ApplicationBarItem*> bottomItems;
     const int marginTop     = 20;

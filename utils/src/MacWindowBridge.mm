@@ -3,10 +3,54 @@
 #ifdef Q_OS_MACOS
 
 #import <AppKit/AppKit.h>
+#import <objc/runtime.h>
 #import <QuartzCore/QuartzCore.h>
 #import <dispatch/dispatch.h>
 
 #include <QWidget>
+
+static void configureStandardButtons(NSWindow* window);
+
+@interface NLTrafficLightsObserver : NSObject
+@property(nonatomic, assign) NSWindow* window;
+- (instancetype)initWithWindow:(NSWindow*)window;
+@end
+
+@implementation NLTrafficLightsObserver
+
+- (instancetype)initWithWindow:(NSWindow*)window
+{
+    self = [super init];
+    if (self) {
+        self.window = window;
+        NSNotificationCenter* center = NSNotificationCenter.defaultCenter;
+        [center addObserver:self
+                   selector:@selector(handleWindowLayoutChange:)
+                       name:NSWindowDidResizeNotification
+                     object:window];
+        [center addObserver:self
+                   selector:@selector(handleWindowLayoutChange:)
+                       name:NSWindowDidEndLiveResizeNotification
+                     object:window];
+    }
+    return self;
+}
+
+- (void)dealloc
+{
+    [NSNotificationCenter.defaultCenter removeObserver:self];
+    [super dealloc];
+}
+
+- (void)handleWindowLayoutChange:(NSNotification*)notification
+{
+    Q_UNUSED(notification);
+    if (self.window) {
+        configureStandardButtons(self.window);
+    }
+}
+
+@end
 
 namespace {
 
@@ -18,6 +62,11 @@ constexpr CGFloat kFallbackLeadingInset = 52.0;
 constexpr CGFloat kTrafficLightsHorizontalPadding = 5.5;
 constexpr CGFloat kTrafficLightsButtonSize = 11.5;
 constexpr CGFloat kTrafficLightsInterButtonGap = 5.5;
+constexpr NSInteger kTrafficLightsRetryPasses = 6;
+constexpr int64_t kTrafficLightsRetryDelayNanos = 16 * NSEC_PER_MSEC;
+
+const void* const kTrafficLightsLayoutGenerationKey = &kTrafficLightsLayoutGenerationKey;
+const void* const kTrafficLightsObserverKey = &kTrafficLightsObserverKey;
 
 CGFloat trafficLightsClusterWidth()
 {
@@ -120,9 +169,6 @@ NSVisualEffectView* ensureBackdropView(NSView* hostView, NSView* qtView)
 
 NSVisualEffectMaterial backdropMaterial()
 {
-    if (@available(macOS 10.14, *)) {
-        return NSVisualEffectMaterialWindowBackground;
-    }
     return NSVisualEffectMaterialSidebar;
 }
 
@@ -179,7 +225,121 @@ NSToolbar* ensureCompactToolbar(NSWindow* window)
     return toolbar;
 }
 
-void configureStandardButtons(NSWindow* window)
+void ensureTrafficLightsObserver(NSWindow* window)
+{
+    if (!window) {
+        return;
+    }
+
+    if (objc_getAssociatedObject(window, kTrafficLightsObserverKey)) {
+        return;
+    }
+
+    NLTrafficLightsObserver* observer = [[NLTrafficLightsObserver alloc] initWithWindow:window];
+    objc_setAssociatedObject(window,
+                             kTrafficLightsObserverKey,
+                             observer,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [observer release];
+}
+
+NSInteger nextTrafficLightsLayoutGeneration(NSWindow* window)
+{
+    NSNumber* currentGeneration =
+            (NSNumber*)objc_getAssociatedObject(window, kTrafficLightsLayoutGenerationKey);
+    const NSInteger nextGeneration = currentGeneration ? currentGeneration.integerValue + 1 : 1;
+    objc_setAssociatedObject(window,
+                             kTrafficLightsLayoutGenerationKey,
+                             @(nextGeneration),
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return nextGeneration;
+}
+
+bool isCurrentTrafficLightsLayoutGeneration(NSWindow* window, NSInteger generation)
+{
+    NSNumber* currentGeneration =
+            (NSNumber*)objc_getAssociatedObject(window, kTrafficLightsLayoutGenerationKey);
+    return currentGeneration && currentGeneration.integerValue == generation;
+}
+
+void applyTrafficLightsLayout(NSButton* closeButton,
+                              NSButton* miniButton,
+                              NSButton* zoomButton,
+                              NSView* clusterView)
+{
+    if (!closeButton || !miniButton || !zoomButton) {
+        return;
+    }
+
+    if (clusterView && [clusterView respondsToSelector:@selector(layoutSubtreeIfNeeded)]) {
+        [clusterView layoutSubtreeIfNeeded];
+    }
+
+    NSButton* orderedButtons[] = { closeButton, miniButton, zoomButton };
+    CGFloat nextX = kTrafficLightsHorizontalPadding;
+
+    for (NSInteger index = 0; index < 3; ++index) {
+        NSButton* button = orderedButtons[index];
+        NSRect frame = button.frame;
+        const CGFloat naturalWidth = MAX(NSWidth(frame), 1.0);
+        const CGFloat naturalHeight = MAX(NSHeight(frame), 1.0);
+        const CGFloat centerY = NSMidY(frame);
+        const CGFloat scaleX = kTrafficLightsButtonSize / naturalWidth;
+        const CGFloat scaleY = kTrafficLightsButtonSize / naturalHeight;
+
+        prepareLayerBackedView(button);
+        button.frame = NSMakeRect(nextX,
+                                  centerY - naturalHeight / 2.0,
+                                  naturalWidth,
+                                  naturalHeight);
+        button.layer.anchorPoint = CGPointMake(0.0, 0.5);
+        button.layer.position = CGPointMake(nextX, centerY);
+        CGAffineTransform transform = {
+            scaleX, 0.0,
+            0.0, scaleY,
+            0.0, 0.0
+        };
+        button.layer.affineTransform = transform;
+        [button setNeedsDisplay:YES];
+        nextX += kTrafficLightsButtonSize + kTrafficLightsInterButtonGap;
+    }
+
+    if (clusterView) {
+        [clusterView setNeedsLayout:YES];
+        [clusterView setNeedsDisplay:YES];
+    }
+}
+
+void scheduleTrafficLightsLayout(NSWindow* window,
+                                 NSButton* closeButton,
+                                 NSButton* miniButton,
+                                 NSButton* zoomButton,
+                                 NSView* clusterView,
+                                 NSInteger generation,
+                                 NSInteger remainingPasses)
+{
+    if (!window || !isCurrentTrafficLightsLayoutGeneration(window, generation)) {
+        return;
+    }
+
+    applyTrafficLightsLayout(closeButton, miniButton, zoomButton, clusterView);
+    if (remainingPasses <= 0) {
+        return;
+    }
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, kTrafficLightsRetryDelayNanos),
+                   dispatch_get_main_queue(), ^{
+        scheduleTrafficLightsLayout(window,
+                                    closeButton,
+                                    miniButton,
+                                    zoomButton,
+                                    clusterView,
+                                    generation,
+                                    remainingPasses - 1);
+    });
+}
+
+void configureStandardButtonsImpl(NSWindow* window)
 {
     const NSWindowButton buttonTypes[] = {
         NSWindowCloseButton,
@@ -217,58 +377,31 @@ void configureStandardButtons(NSWindow* window)
     if (clusterView) {
         clusterView.hidden = YES;
     }
+    const NSInteger generation = nextTrafficLightsLayoutGeneration(window);
+    applyTrafficLightsLayout(closeButton, miniButton, zoomButton, clusterView);
 
-    auto applyCompactLayout = ^{
-        if (!closeButton || !miniButton || !zoomButton) {
-            return;
-        }
+    if (clusterView) {
+        clusterView.hidden = NO;
+        [clusterView setNeedsDisplay:YES];
+    }
 
-        NSButton* orderedButtons[] = { closeButton, miniButton, zoomButton };
-        CGFloat nextX = kTrafficLightsHorizontalPadding;
-
-        for (NSInteger index = 0; index < 3; ++index) {
-            NSButton* button = orderedButtons[index];
-            NSRect frame = button.frame;
-            const CGFloat naturalWidth = MAX(NSWidth(frame), 1.0);
-            const CGFloat naturalHeight = MAX(NSHeight(frame), 1.0);
-            const CGFloat centerY = NSMidY(frame);
-            const CGFloat scaleX = kTrafficLightsButtonSize / naturalWidth;
-            const CGFloat scaleY = kTrafficLightsButtonSize / naturalHeight;
-
-            prepareLayerBackedView(button);
-            button.frame = NSMakeRect(nextX,
-                                      centerY - naturalHeight / 2.0,
-                                      naturalWidth,
-                                      naturalHeight);
-            button.layer.anchorPoint = CGPointMake(0.0, 0.5);
-            button.layer.position = CGPointMake(nextX, centerY);
-            CGAffineTransform transform = {
-                scaleX, 0.0,
-                0.0, scaleY,
-                0.0, 0.0
-            };
-            button.layer.affineTransform = transform;
-            [button setNeedsDisplay:YES];
-            nextX += kTrafficLightsButtonSize + kTrafficLightsInterButtonGap;
-        }
-
-        if (clusterView) {
-            [clusterView setNeedsLayout:YES];
-            [clusterView setNeedsDisplay:YES];
-        }
-    };
-
-    applyCompactLayout();
     dispatch_async(dispatch_get_main_queue(), ^{
-        applyCompactLayout();
-        if (clusterView) {
-            clusterView.hidden = NO;
-            [clusterView setNeedsDisplay:YES];
-        }
+        scheduleTrafficLightsLayout(window,
+                                    closeButton,
+                                    miniButton,
+                                    zoomButton,
+                                    clusterView,
+                                    generation,
+                                    kTrafficLightsRetryPasses - 1);
     });
 }
 
 } // namespace
+
+static void configureStandardButtons(NSWindow* window)
+{
+    configureStandardButtonsImpl(window);
+}
 
 namespace MacWindowBridge {
 
@@ -301,6 +434,7 @@ WindowMetrics configureWindow(QWidget* widget, const QColor& tintColor)
     [window setShowsToolbarButton:NO];
 
     ensureCompactToolbar(window);
+    ensureTrafficLightsObserver(window);
     if ([window respondsToSelector:@selector(setToolbarStyle:)]) {
         window.toolbarStyle = NSWindowToolbarStyleUnifiedCompact;
     }

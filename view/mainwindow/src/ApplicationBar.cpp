@@ -4,22 +4,13 @@
 #include "CurrentUser.h"
 #include <QPainter>
 #include <QPainterPath>
-#include <QRandomGenerator>
-#include <QGraphicsBlurEffect>
-#include <QImage>
 
 ApplicationBar::ApplicationBar(QWidget* parent)
     : QWidget(parent)
 {
-    noiseTexture = QImage(100, 100, QImage::Format_ARGB32);
-    auto *rng = QRandomGenerator::global();  // 获取全局随机数生成器
-    for (int x = 0; x < noiseTexture.width(); ++x) {
-        for (int y = 0; y < noiseTexture.height(); ++y) {
-            int gray = rng->bounded(56) + 200;   // 200~255
-            int alpha = rng->bounded(51) + 30;   // 30~80
-            noiseTexture.setPixelColor(x, y, QColor(gray, gray, gray, alpha));
-        }
-    }
+#ifdef Q_OS_MACOS
+    setAttribute(Qt::WA_TranslucentBackground);
+#endif
 
     setAvatar(UserRepository::instance().getAvatar(CurrentUser::instance().getUserId()));
 
@@ -85,16 +76,12 @@ void ApplicationBar::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.setRenderHints(QPainter::Antialiasing |
                            QPainter::SmoothPixmapTransform);
-    painter.fillRect(rect(), QColor(0xc4, 0xdd, 0xe6, 180));
-    //painter.fillRect(rect(), QColor(0xD0, 0x50, 0x10, 120));
+    painter.fillRect(rect(), QColor(0xF2, 0xF2, 0xF2, 64));
     int w = width();
-    painter.save();
-    painter.setOpacity(0.5);  // 调整噪声层透明度
-    painter.drawTiledPixmap(rect(), QPixmap::fromImage(noiseTexture));
     if (selectedItem) {
         painter.save();
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(0xc8, 0xcf, 0xcd, 192));
+        painter.setBrush(QColor(0xD8, 0xD8, 0xD8));
         int x = (width() - iconSize) / 2;
         QRect r(x, highlightPosY, iconSize, iconSize);
         painter.drawRoundedRect(r, 10, 10);
@@ -102,7 +89,7 @@ void ApplicationBar::paintEvent(QPaintEvent*) {
     }
 
     if (!avatarPixmap.isNull()) {
-        painter.restore();
+        painter.save();
         int x = (w - avatarSize) / 2;
         int y = topInset + marginTop + spacing;
         QPainterPath circlePath;
@@ -112,7 +99,7 @@ void ApplicationBar::paintEvent(QPaintEvent*) {
                            avatarPixmap.scaled(avatarSize, avatarSize,
                                                Qt::KeepAspectRatioByExpanding,
                                                Qt::SmoothTransformation));
-        painter.setClipping(false);
+        painter.restore();
     }
 }
 

@@ -24,6 +24,7 @@ MainWindow::MainWindow(QWidget* parent)
     setMinimumHeight(525);
     setMinimumWidth(685);
     setAttribute(Qt::WA_TranslucentBackground);
+
     setBackdropColor(QColor(248, 248, 252, 92));
 
     CurrentUser::instance().setMainWindow(this);
