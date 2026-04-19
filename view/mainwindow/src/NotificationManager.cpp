@@ -1,4 +1,5 @@
 #include "NotificationManager.h"
+#include "ImageService.h"
 #include <QPainter>
 #include <QHBoxLayout>
 #include <QScreen>
@@ -49,7 +50,7 @@ void NotificationManager::showMessage(const QString& message, Type type)
 {
     QString iconPath = (type == Success) ? ":/resources/icon/correct.png"
                                          : ":/resources/icon/fail.png";
-    iconLabel->setPixmap(QPixmap(iconPath));
+    iconLabel->setPixmap(ImageService::instance().scaled(iconPath, QSize(20, 20)));
     messageLabel->setText(message);
 
     if (isShowing) {
@@ -91,7 +92,7 @@ void NotificationManager::showMessage(const QString& message, Type type, QWidget
     // 设置图标
     QString iconPath = (type == Success) ? ":/resources/icon/correct.png"
                                          : ":/resources/icon/fail.png";
-    iconLabel->setPixmap(QPixmap(iconPath));
+    iconLabel->setPixmap(ImageService::instance().scaled(iconPath, QSize(20, 20)));
     messageLabel->setText(message);
 
     // === 动态计算宽度 ===

@@ -1,4 +1,5 @@
 #include "PostCreatePage.h"
+#include "ImageService.h"
 #include "NotificationManager.h"
 #include "CurrentUser.h"
 #include <QVBoxLayout>
@@ -22,7 +23,8 @@ void PostCreatePage::setupUI()
 {
     // 创建标题输入框
     m_titleEdit = new LineEditComponent(this);
-    m_titleEdit->setIcon(QPixmap(":/resources/icon/blazer.png"));
+    m_titleEdit->setIcon(ImageService::instance().scaled(":/resources/icon/blazer.png",
+                                                         QSize(20, 20)));
     m_titleEdit->setIconSize(QSize(20, 20));
     m_titleEdit->getLineEdit()->setPlaceholderText("请输入标题");
     m_titleEdit->setFixedHeight(40);
@@ -137,8 +139,7 @@ void PostCreatePage::onImageButtonClicked()
 void PostCreatePage::handleImageSelected(const QString& path)
 {
     m_selectedImagePath = path;
-    QPixmap pixmap(path);
-    m_imagePreview->setPixmap(pixmap);
+    m_imagePreview->setPixmap(ImageService::instance().centerCrop(path, m_imagePreview->size(), 10));
     m_imagePreview->show();
     m_imageButton->hide();
 }

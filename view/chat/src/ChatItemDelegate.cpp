@@ -4,6 +4,7 @@
 #include "ChatArea.h"
 #include "NotificationManager.h"
 #include "CurrentUser.h"
+#include "ImageService.h"
 #include <QPainter>
 #include <QTextLayout>
 #include <QTextOption>
@@ -158,7 +159,7 @@ void ChatItemDelegate::drawBubble(QPainter* painter, const QRect& rect,
         drawTextMessage(painter, rect, message->getContent(), isFromMe, isSelected);
     } else if (message->getType() == MessageType::Image) {
         const ImageMessage* imgMsg = static_cast<const ImageMessage*>(message);
-        drawImageMessage(painter, rect, imgMsg->getImage(), isFromMe);
+        drawImageMessage(painter, rect, imgMsg->getImageSource());
     }
 }
 
@@ -166,7 +167,11 @@ void ChatItemDelegate::drawBubble(QPainter* painter, const QRect& rect,
 void ChatItemDelegate::drawAvatar(QPainter* painter, const QRect& rect,
                                   const QString& userID) const
 {
-    painter->drawPixmap(rect, UserRepository::instance().getAvatar(userID));
+    const QString avatarPath = UserRepository::instance().requestUserAvatarPath(userID);
+    const QPixmap avatar = ImageService::instance().circularAvatar(avatarPath,
+                                                                   rect.width(),
+                                                                   painter->device()->devicePixelRatioF());
+    painter->drawPixmap(rect, avatar);
 }
 
 void ChatItemDelegate::drawTextMessage(QPainter* painter, const QRect& rect,
@@ -217,18 +222,25 @@ void ChatItemDelegate::drawTextMessage(QPainter* painter, const QRect& rect,
 }
 
 void ChatItemDelegate::drawImageMessage(QPainter* painter, const QRect& rect,
-                                      const QPixmap& image, bool isFromMe) const
+                                      const QString& imageSource) const
 {
-    if (image.isNull()) return;
-
     QRect imageRect = rect.adjusted(BUBBLE_PADDING, BUBBLE_PADDING,
                                   -BUBBLE_PADDING, -BUBBLE_PADDING);
-    QSize scaledSize = image.size().scaled(imageRect.size(), Qt::KeepAspectRatio);
+    const QSize sourceSize = ImageService::instance().sourceSize(imageSource);
+    if (!sourceSize.isValid()) {
+        return;
+    }
+
+    QSize scaledSize = sourceSize.scaled(imageRect.size(), Qt::KeepAspectRatio);
 
     QRect targetRect(imageRect.x() + (imageRect.width() - scaledSize.width()) / 2,
                     imageRect.y() + (imageRect.height() - scaledSize.height()) / 2,
                     scaledSize.width(), scaledSize.height());
 
+    const QPixmap image = ImageService::instance().scaled(imageSource,
+                                                          targetRect.size(),
+                                                          Qt::KeepAspectRatio,
+                                                          painter->device()->devicePixelRatioF());
     painter->drawPixmap(targetRect, image);
 }
 
@@ -414,10 +426,11 @@ QSize ChatItemDelegate::sizeHint(const QStyleOptionViewItem& option,
             }
         } else if (message->getType() == MessageType::Image) {
             const ImageMessage* imgMsg = static_cast<const ImageMessage*>(message);
-            QPixmap image = imgMsg->getImage();
-            if (!image.isNull()) {
-                QSize scaledSize = image.size().scaled(maxBubbleWidth - 2 * BUBBLE_PADDING,
-                                                     200, Qt::KeepAspectRatio);
+            const QSize sourceSize = ImageService::instance().sourceSize(imgMsg->getImageSource());
+            if (sourceSize.isValid()) {
+                QSize scaledSize = sourceSize.scaled(maxBubbleWidth - 2 * BUBBLE_PADDING,
+                                                     200,
+                                                     Qt::KeepAspectRatio);
                 bubbleHeight = scaledSize.height() + 2 * BUBBLE_PADDING;
             }
             if (message->isInGroupChat()) {
@@ -471,10 +484,11 @@ QRect ChatItemDelegate::calculateBubbleRect(const QRect& contentRect,
         bubbleHeight = qCeil(textHeight) + 2 * BUBBLE_PADDING;
     } else if (message->getType() == MessageType::Image) {
         const ImageMessage* imgMsg = static_cast<const ImageMessage*>(message);
-        QPixmap image = imgMsg->getImage();
-        if (!image.isNull()) {
-            QSize scaledSize = image.size().scaled(maxWidth - 2 * BUBBLE_PADDING,
-                                                 200, Qt::KeepAspectRatio);
+        const QSize sourceSize = ImageService::instance().sourceSize(imgMsg->getImageSource());
+        if (sourceSize.isValid()) {
+            QSize scaledSize = sourceSize.scaled(maxWidth - 2 * BUBBLE_PADDING,
+                                                 200,
+                                                 Qt::KeepAspectRatio);
             bubbleWidth = scaledSize.width() + 2 * BUBBLE_PADDING;
             bubbleHeight = scaledSize.height() + 2 * BUBBLE_PADDING;
         }

@@ -1,9 +1,10 @@
 #include "DefaultPage.h"
+#include "ImageService.h"
 #include <QPainter>
 
 DefaultPage::DefaultPage(QWidget *parent)
         : QWidget(parent),
-          m_pixmap(":/resources/icon/icon.png"),
+          m_imageSource(":/resources/icon/icon.png"),
           m_displaySize(128, 128)  // 默认显示区域大小
 {
     setAttribute(Qt::WA_OpaquePaintEvent);
@@ -19,10 +20,14 @@ void DefaultPage::paintEvent(QPaintEvent*)
 {
     QPainter painter(this);
     painter.fillRect(rect(), QColor(0xF2F2F2));
-    //painter.fillRect(rect(), QColor(255, 255, 255, 140));
-    if (!m_pixmap.isNull()) {
-        // 缩放图像到固定大小
-        QPixmap scaled = m_pixmap.scaled(m_displaySize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    if (!m_imageSource.isEmpty()) {
+        QPixmap scaled = ImageService::instance().scaled(m_imageSource,
+                                                         m_displaySize,
+                                                         Qt::KeepAspectRatio,
+                                                         painter.device()->devicePixelRatioF());
+        if (scaled.isNull()) {
+            return;
+        }
         // 居中位置
         int x = (width()  - scaled.width())  / 2;
         int y = (height() - scaled.height()) / 2;

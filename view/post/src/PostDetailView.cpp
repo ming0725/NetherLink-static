@@ -7,6 +7,7 @@
 #include <QPainterPath>
 #include <QPropertyAnimation>
 #include <QDateTime>
+#include "ImageService.h"
 #include "UserRepository.h"
 #include "PostDetailView.h"
 #include "CurrentUser.h"
@@ -71,7 +72,6 @@ PostDetailView::PostDetailView(QWidget* parent)
 {
     setupUI();
     setAttribute(Qt::WA_TranslucentBackground);
-    m_loadedImage = QPixmap();
 }
 
 void PostDetailView::setupUI() {
@@ -80,7 +80,8 @@ void PostDetailView::setupUI() {
     m_authorAvatar->setFixedSize({40, 40});
 
     commentLineEdit = new LineEditComponent(this);
-    commentLineEdit->setIcon(QPixmap(":/resources/icon/selected_message.png"));
+    commentLineEdit->setIcon(ImageService::instance().scaled(":/resources/icon/selected_message.png",
+                                                             QSize(20, 20)));
     commentLineEdit->getLineEdit()->setPlaceholderText("说点什么吧...");
     m_authorName = new QLabel(this);
     QFont nameFont;
@@ -201,9 +202,14 @@ void PostDetailView::paintEvent(QPaintEvent*) {
     imgPath.addRoundedRect(imageRect, 12, 12);
     p.setClipPath(imgPath);
 
-    if (!m_loadedImage.isNull()) {
+    if (!m_imageSource.isEmpty()) {
+        const QPixmap image = ImageService::instance().scaled(m_imageSource,
+                                                              imageRect.size(),
+                                                              Qt::KeepAspectRatio,
+                                                              p.device()->devicePixelRatioF());
+        if (!image.isNull()) {
         // 保持图片比例并居中绘制
-        QSize scaledSize = m_loadedImage.size();
+        QSize scaledSize = image.size();
         scaledSize.scale(imgW, h, Qt::KeepAspectRatio);
 
         int x = (imgW - scaledSize.width()) / 2;
@@ -212,7 +218,10 @@ void PostDetailView::paintEvent(QPaintEvent*) {
         // 先补灰底
         p.fillRect(imageRect, QColor(0xf5f5f5));
         // 再画图
-        p.drawPixmap(x, y, m_loadedImage.scaled(scaledSize, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        p.drawPixmap(x, y, image);
+        } else {
+            p.fillRect(imageRect, QColor(0xf5f5f5));
+        }
     } else {
         // 没有图片时补灰色背景
         p.fillRect(imageRect, QColor(0xf5f5f5));
@@ -257,14 +266,16 @@ void PostDetailView::updateLayout() {
     m_contentArea->setGeometry(rightX, topH, rightW, h - topH - bottomH);
 }
 
-void PostDetailView::setPostData(const Post& data) {
-    m_postId = data.postID;
+void PostDetailView::setPostData(const PostDetailData& data) {
+    m_postId = data.postId;
 
     // 1. 更新作者信息
-    m_authorId = data.authorID;
-    m_authorName->setText(UserRepository::instance().getName(m_authorId));
-    m_authorAvatar->setPixmap(UserRepository::instance().getAvatar(m_authorId)
-                                      .scaled(32, 32, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    m_authorId = data.authorId;
+    m_imageSource = data.imagePaths.isEmpty() ? QString() : data.imagePaths.first();
+    m_authorName->setText(data.authorName);
+    m_authorAvatar->setPixmap(ImageService::instance().circularAvatar(
+            data.authorAvatarPath,
+            32));
 
     // 2. 更新内容
     m_titleLabel->setText(data.title);
@@ -272,7 +283,8 @@ void PostDetailView::setPostData(const Post& data) {
 
     // 3. 更新状态
     m_isLiked = data.isLiked;
-    m_likes = data.likes;
+    m_likes = data.likeCount;
+    m_comments = data.commentCount;
 
     m_likeBtn->setIcon(QIcon(m_isLiked ? ":/resources/icon/full_heart.png"
                                        : ":/resources/icon/heart.png"));
@@ -281,6 +293,7 @@ void PostDetailView::setPostData(const Post& data) {
 
     // 4. 更新布局
     updateLayout();
+    update();
 }
 
 void PostDetailView::showEvent(QShowEvent* event) {
@@ -323,8 +336,9 @@ QWidget* PostDetailView::createCommentWidget(const QString& userName, const QStr
     QLabel* avatar = new QLabel(commentWidget);
     avatar->setFixedSize(32, 32);
 
-    avatar->setPixmap(UserRepository::instance().getAvatar(CurrentUser::instance().getUserId())
-                    .scaled(32, 32, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    avatar->setPixmap(ImageService::instance().circularAvatar(
+            UserRepository::instance().requestUserAvatarPath(CurrentUser::instance().getUserId()),
+            32));
 
     // 创建用户名
     QLabel* nameLabel = new QLabel(userName, commentWidget);

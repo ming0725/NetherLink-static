@@ -3,14 +3,13 @@
 
 #include <QWidget>
 #include <QLabel>
-#include <QPixmap>
 #include "ClickableLabel.h"
-#include "Post.h"
+#include "RepositoryTypes.h"
 
 class PostPreviewItem : public QWidget {
     Q_OBJECT
 public:
-    explicit PostPreviewItem(const Post& post,
+    explicit PostPreviewItem(const PostSummary& post,
                              QWidget* parent = nullptr);
 
     int scaledHeightFor(double itemW);
@@ -18,7 +17,7 @@ signals:
     void viewPost(QString postID);
     void viewAuthor();
     void loadFinished();
-    void viewPostWithGeometry(Post& post, QRect globalGeometry, QPixmap originalImage);
+    void viewPostWithGeometry(const QString& postId, QRect globalGeometry);
 private slots:
     void onViewPost();
     void onViewAuthor();
@@ -27,9 +26,9 @@ protected:
     void resizeEvent(QResizeEvent* ev) Q_DECL_OVERRIDE;
 private:
     void setupUI(const QString&);
-    QPixmap m_croppedPostImage; // setupUI 裁剪后的基准图
-    QPixmap m_originalImage;
-    Post m_post;
+    int imageBaseWidth = 200;
+    int imageBaseHeight = 0;
+    PostSummary m_post;
     QString m_authorName;
     // UI 元素
     ClickableLabel* m_imageLabel;
@@ -44,5 +43,3 @@ private:
     static constexpr int Margin   = 6;
     static constexpr int AvatarR  = 30; // 头像直径
 };
-
-

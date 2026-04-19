@@ -4,8 +4,6 @@
 #include <QWidget>
 #include <QStackedWidget>
 #include <QImage>
-#include <QPixmap>
-#include "Post.h"
 
 class PostFeedPage;
 class PostApplicationBar;
@@ -17,7 +15,7 @@ Q_OBJECT
 public:
     explicit PostApplication(QWidget* parent = nullptr);
 private slots:
-    void onPostClickedWithGeometry(Post& post, const QRect& sourceGeometry, const QPixmap& originalImage);
+    void onPostClickedWithGeometry(const QString& postId, const QRect& sourceGeometry);
 protected:
     void resizeEvent(QResizeEvent* ev) override;
     void paintEvent(QPaintEvent*) override;

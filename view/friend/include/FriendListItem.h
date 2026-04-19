@@ -5,13 +5,13 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QImage>
-#include "User.h"
+#include "RepositoryTypes.h"
 
 class FriendListItem : public QWidget
 {
     Q_OBJECT
 public:
-    explicit FriendListItem(const User& user, QWidget* parent = nullptr);
+    explicit FriendListItem(const FriendSummary& user, QWidget* parent = nullptr);
     QSize sizeHint() const override;
     void setSelected(bool select);
     bool isSelected();
@@ -39,5 +39,5 @@ private:
     bool hovered = false;
     bool selected = false;
 
-    void setupUI(const User& user);
+    void setupUI(const FriendSummary& user);
 };

@@ -3,7 +3,6 @@
 
 #include <QString>
 #include <QDateTime>
-#include <QPixmap>
 #include <memory>
 
 enum class MessageType {
@@ -72,17 +71,17 @@ private:
 
 class ImageMessage : public ChatMessage {
 public:
-    ImageMessage(const QPixmap& image, bool isFromMe, const QString& senderId,
+    ImageMessage(const QString& imageSource, bool isFromMe, const QString& senderId,
                 bool isGroupChat = false, const QString& senderName = QString(),
                 GroupRole role = GroupRole::Member)
-        : ChatMessage(isFromMe, senderId, isGroupChat, senderName, role), image(image) {}
+        : ChatMessage(isFromMe, senderId, isGroupChat, senderName, role), imageSource(imageSource) {}
     
     QString getContent() const override { return "[图片]"; }
     MessageType getType() const override { return MessageType::Image; }
-    QPixmap getImage() const { return image; }
+    QString getImageSource() const { return imageSource; }
 
 private:
-    QPixmap image;
+    QString imageSource;
 };
 
-#endif // CHATMESSAGE_H 
+#endif // CHATMESSAGE_H

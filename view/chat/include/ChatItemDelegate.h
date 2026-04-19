@@ -2,8 +2,6 @@
 #define CHATITEMDELEGATE_H
 
 #include <QStyledItemDelegate>
-#include <QCache>
-#include <QPixmap>
 #include "ChatMessage.h"
 #include "TransparentMenu.h"
 
@@ -44,9 +42,9 @@ private:
     void drawTextMessage(QPainter* painter, const QRect& rect,
                         const QString& text, bool isFromMe, bool isSelected) const;
     void drawImageMessage(QPainter* painter, const QRect& rect,
-                         const QPixmap& image, bool isFromMe) const;
+                         const QString& imageSource) const;
     void drawAvatar(QPainter* painter, const QRect& rect,
-                    const QString& avatarPath) const;
+                    const QString& userId) const;
     void drawGroupInfo(QPainter* painter, const QRect& rect,
                       const ChatMessage* message) const;
     void drawGroupInfoForMe(QPainter* painter, const QRect& rect,

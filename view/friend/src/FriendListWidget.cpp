@@ -44,9 +44,9 @@ FriendListWidget::FriendListWidget(QWidget *parent)
     scrollBarThumb->setGraphicsEffect(opacity);
     scrollBarThumb->hide();
 
-    auto allUser = UserRepository::instance().getAllUser();
-    for (int i = 0; i < allUser.size(); ++i) {
-        addItem(allUser[i]);
+    const QVector<FriendSummary> allUsers = UserRepository::instance().requestFriendList();
+    for (const FriendSummary& user : allUsers) {
+        addItem(user);
     }
 
     scrollArea->setWidget(contentWidget);
@@ -94,7 +94,7 @@ void FriendListWidget::wheelEvent(QWheelEvent *event) {
     event->accept();
 }
 
-void FriendListWidget::addItem(const User& user)
+void FriendListWidget::addItem(const FriendSummary& user)
 {
     auto *item = new FriendListItem(user, contentWidget);
     itemList.append(item);
@@ -250,4 +250,3 @@ void FriendListWidget::onItemClicked(FriendListItem* item)
         }
     }
 }
-

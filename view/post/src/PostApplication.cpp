@@ -6,6 +6,7 @@
 #include "CurrentUser.h"
 #include "PostDetailView.h"
 #include "PostCreatePage.h"
+#include "PostRepository.h"
 #include <QResizeEvent>
 #include <QRandomGenerator>
 
@@ -115,7 +116,8 @@ bool PostApplication::eventFilter(QObject *obj, QEvent *ev) {
     return QWidget::eventFilter(obj, ev);
 }
 
-void PostApplication::onPostClickedWithGeometry(Post &post, const QRect &sourceGeometry, const QPixmap& originalImage) {
+void PostApplication::onPostClickedWithGeometry(const QString& postId, const QRect& sourceGeometry) {
+    const PostDetailData post = PostRepository::instance().requestPostDetail({postId});
 
     m_overlay->setGeometry(rect());
     m_overlay->lower();
@@ -126,7 +128,6 @@ void PostApplication::onPostClickedWithGeometry(Post &post, const QRect &sourceG
     if (!m_detailView) {
         m_detailView = new PostDetailView(this);
         m_detailView->setPostData(post);
-        m_detailView->setImage(originalImage);  // 设置原始图片
         m_detailView->hide();  // 先隐藏，等动画准备好再 show()
 
         // 1. 计算最终要显示的矩形（正常大小）
@@ -157,7 +158,6 @@ void PostApplication::onPostClickedWithGeometry(Post &post, const QRect &sourceG
     } else {
         // 如果已经有 detailView，可以直接更新内容并 show()
         m_detailView->setPostData(post);
-        m_detailView->setImage(originalImage);
         m_detailView->show();
         m_detailView->raise();
     }

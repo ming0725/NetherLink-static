@@ -3,7 +3,7 @@
 
 #include "CustomScrollArea.h"
 #include "PostPreviewItem.h"
-#include "Post.h"
+#include "RepositoryTypes.h"
 #include <QVector>
 #include <QWidget>
 
@@ -13,16 +13,16 @@ class PostFeedPage : public CustomScrollArea {
 public:
     explicit PostFeedPage(QWidget* parent = nullptr);
     // 设置数据源
-    void setPosts(const QVector<Post>& posts);
+    void setPosts(const QVector<PostSummary>& posts);
 signals:
     void loadMore();
-    void postClicked(const Post& data);
-    void postClickedWithGeometry(Post& post, QRect globalGeometry, QPixmap originalImage);
+    void postClicked(const QString& postId);
+    void postClickedWithGeometry(const QString& postId, QRect globalGeometry);
 protected:
     void layoutContent() Q_DECL_OVERRIDE;
     void showEvent(QShowEvent *event) Q_DECL_OVERRIDE;
 private:
-    QVector<Post>           m_data;
+    QVector<PostSummary>        m_data;
     QVector<PostPreviewItem*>   m_items;
     // 布局参数
     const int margin    = 16;

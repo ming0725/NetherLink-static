@@ -10,6 +10,7 @@
 #include "ChatMessage.h"
 #include "NewMessageNotifier.h"
 #include "FloatingInputBar.h"
+#include "RepositoryTypes.h"
 
 
 class ChatArea : public QWidget
@@ -24,7 +25,7 @@ public:
                          const QDateTime& timestamp = QDateTime::currentDateTime());
     void addTextMessage(QSharedPointer<TextMessage> message,
                         const QDateTime& timestamp = QDateTime::currentDateTime());
-    void setGroupMode(bool mode);
+    void setConversationMeta(const ConversationMeta& meta);
     void setMessageId(QString id);
     void clearAll();
 protected:

@@ -5,21 +5,23 @@
 #include <QMouseEvent>
 #include <QStyle>
 #include <QFont>
+#include "GroupRepository.h"
+#include "ImageService.h"
 #include "UserRepository.h"
 #include "MessageListItem.h"
 
-MessageListItem::MessageListItem(const MessageItemContent& data, QWidget* parent)
+MessageListItem::MessageListItem(const ConversationSummary& data, QWidget* parent)
         : QWidget(parent)
         , avatarLabel(new QLabel(this))
         , badge(new NotificationBadge(this))
-        , id(data.id)
-        , fullName(data.name)
-        , fullText(data.text)
-        , lastTime(data.timestamp)
+        , id(data.conversationId)
+        , fullName(data.title)
+        , fullText(data.previewText)
+        , lastTime(data.lastMessageTime)
 {
     setMouseTracking(true);
     setupUI(data);
-    badge->setDoNotDisturb(data.doNotDisturb);
+    badge->setDoNotDisturb(data.isDoNotDisturb);
     badge->setCount(data.unreadCount);
     resizeEvent(nullptr);
 }
@@ -112,18 +114,14 @@ void MessageListItem::paintEvent(QPaintEvent*) {
 }
 
 
-void MessageListItem::setupUI(const MessageItemContent& data)
+void MessageListItem::setupUI(const ConversationSummary& data)
 {
-    if (data.isGroup) {
-        QPixmap pixmap;
-        QPixmapCache::find("group_avatar", &pixmap);
-        avatarLabel->setPixmap(pixmap);
-    }
-    else {
-        avatarLabel->setPixmap(UserRepository::instance().getAvatar(data.id));
-    }
+    const QString avatarPath = data.isGroup
+            ? GroupRepository::instance().requestGroupAvatarPath(data.conversationId)
+            : UserRepository::instance().requestUserAvatarPath(data.conversationId);
+    avatarLabel->setPixmap(ImageService::instance().circularAvatar(avatarPath, avatarSize));
     avatarLabel->setFixedSize(avatarSize, avatarSize);
-    badge->setDoNotDisturb(data.doNotDisturb);
+    badge->setDoNotDisturb(data.isDoNotDisturb);
     badge->setCount(data.unreadCount);
 }
 

@@ -1,14 +1,14 @@
 #pragma once
 #include <QWidget>
-#include <QPixmap>
+#include <QString>
 #include <QEvent>
 #include <QPropertyAnimation>
 
 class ApplicationBarItem : public QWidget {
     Q_OBJECT
 public:
-    ApplicationBarItem(QPixmap normal, QWidget* parent = nullptr);
-    ApplicationBarItem(QPixmap normal, QPixmap selected, QWidget* parent = nullptr);
+    ApplicationBarItem(const QString& normalSource, QWidget* parent = nullptr);
+    ApplicationBarItem(const QString& normalSource, const QString& selectedSource, QWidget* parent = nullptr);
     void setPixmapScale(qreal scale);
     void setSelected(bool);
     bool isSelected();
@@ -20,13 +20,12 @@ protected:
 signals:
     void itemClicked(ApplicationBarItem* item);
 private:
-    QPixmap selectedPixmap;
-    QPixmap normalPixmap;
+    QString selectedSource;
+    QString normalSource;
     bool hoverd = false;
     bool selected = false;
     qreal pixmapScale = 0.6;
     qreal rippleRadius = 0.0;
     QVariantAnimation* rippleAnim = nullptr;
 };
-
 

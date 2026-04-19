@@ -1,5 +1,6 @@
 #include "ApplicationBarItem.h"
 #include "ApplicationBar.h"
+#include "ImageService.h"
 #include "UserRepository.h"
 #include "CurrentUser.h"
 #include <QPainter>
@@ -12,45 +13,45 @@ ApplicationBar::ApplicationBar(QWidget* parent)
     setAttribute(Qt::WA_TranslucentBackground);
 #endif
 
-    setAvatar(UserRepository::instance().getAvatar(CurrentUser::instance().getUserId()));
+    setAvatarSource(UserRepository::instance().requestUserAvatarPath(CurrentUser::instance().getUserId()));
 
     auto msgItem = new ApplicationBarItem(
-            QPixmap(":/resources/icon/unselected_message.png"),
-            QPixmap(":/resources/icon/selected_message.png"));
+            ":/resources/icon/unselected_message.png",
+            ":/resources/icon/selected_message.png");
     addItem(msgItem);
     auto friendItem = new ApplicationBarItem(
-            QPixmap(":/resources/icon/friend_unselected.png"),
-            QPixmap(":/resources/icon/friend_selected.png"));
+            ":/resources/icon/friend_unselected.png",
+            ":/resources/icon/friend_selected.png");
     friendItem->setPixmapScale(0.62);
     addItem(friendItem);
 
     auto momentItem = new ApplicationBarItem(
-            QPixmap(":/resources/icon/unselected_blazer.png"),
-            QPixmap(":/resources/icon/blazer.png"));
+            ":/resources/icon/unselected_blazer.png",
+            ":/resources/icon/blazer.png");
     momentItem->setPixmapScale(0.68);
     addItem(momentItem);
 
     auto aiChat = new ApplicationBarItem(
-            QPixmap(":/resources/icon/unselected_aichat.png"),
-            QPixmap(":/resources/icon/aichat.png"));
+            ":/resources/icon/unselected_aichat.png",
+            ":/resources/icon/aichat.png");
     aiChat->setPixmapScale(0.77);
     addItem(aiChat);
 
     auto notItem = new ApplicationBarItem(
-            QPixmap(":/resources/icon/unselected_nether.png"),
-            QPixmap(":/resources/icon/nether.png"));
+            ":/resources/icon/unselected_nether.png",
+            ":/resources/icon/nether.png");
     notItem->setPixmapScale(0.72);
     addItem(notItem);
 
-    auto menuItem = new ApplicationBarItem(QPixmap(":/resources/icon/menu.png"));
+    auto menuItem = new ApplicationBarItem(":/resources/icon/menu.png");
     menuItem->setPixmapScale(0.57);
     addBottomItem(menuItem);
 
-    auto starItem = new ApplicationBarItem(QPixmap(":/resources/icon/bookmark.png"));
+    auto starItem = new ApplicationBarItem(":/resources/icon/bookmark.png");
     starItem->setPixmapScale(0.57);
     addBottomItem(starItem);
 
-    auto folderItem = new ApplicationBarItem(QPixmap(":/resources/icon/folder.png"));
+    auto folderItem = new ApplicationBarItem(":/resources/icon/folder.png");
     folderItem->setPixmapScale(0.57);
     addBottomItem(folderItem);
 
@@ -88,17 +89,14 @@ void ApplicationBar::paintEvent(QPaintEvent*) {
         painter.restore();
     }
 
-    if (!avatarPixmap.isNull()) {
+    if (!avatarSource.isEmpty()) {
         painter.save();
         int x = (w - avatarSize) / 2;
         int y = topInset + marginTop + spacing;
-        QPainterPath circlePath;
-        circlePath.addEllipse(x, y, avatarSize, avatarSize);
-        painter.setClipPath(circlePath);
-        painter.drawPixmap(x, y, avatarSize, avatarSize,
-                           avatarPixmap.scaled(avatarSize, avatarSize,
-                                               Qt::KeepAspectRatioByExpanding,
-                                               Qt::SmoothTransformation));
+        const QPixmap avatarPixmap = ImageService::instance().circularAvatar(avatarSource,
+                                                                             avatarSize,
+                                                                             painter.device()->devicePixelRatioF());
+        painter.drawPixmap(x, y, avatarSize, avatarSize, avatarPixmap);
         painter.restore();
     }
 }
@@ -111,11 +109,9 @@ void ApplicationBar::addItem(ApplicationBarItem* item)
     layoutItems();
 }
 
-void ApplicationBar::setAvatar(QPixmap pix)
+void ApplicationBar::setAvatarSource(const QString& source)
 {
-    if (!pix.isNull()) {
-        avatarPixmap = pix;
-    }
+    avatarSource = source;
     layoutItems();
 }
 

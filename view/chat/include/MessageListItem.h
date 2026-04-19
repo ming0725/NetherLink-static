@@ -2,25 +2,14 @@
 #pragma once
 #include <QWidget>
 #include <QLabel>
-#include <QPixmap>
 #include <QDateTime>
 #include "NotificationBadge.h"
-
-struct MessageItemContent {
-    QString name;
-    QString text;
-    QDateTime timestamp;
-    int     unreadCount;
-    bool    doNotDisturb;
-    QString avatarPath;
-    QString id;
-    bool isGroup = false;
-};
+#include "RepositoryTypes.h"
 
 class MessageListItem : public QWidget {
     Q_OBJECT
 public:
-    explicit MessageListItem(const MessageItemContent& data, QWidget* parent = nullptr);
+    explicit MessageListItem(const ConversationSummary& data, QWidget* parent = nullptr);
     QSize sizeHint() const Q_DECL_OVERRIDE;
     void setSelected(bool select);
     bool isSelected();
@@ -42,7 +31,7 @@ signals:
     void itemClicked(MessageListItem* item);
 
 private:
-    void setupUI(const MessageItemContent& data);
+    void setupUI(const ConversationSummary& data);
     QLabel*   avatarLabel;
     QString   fullName;
     QString   fullText;

@@ -1,5 +1,6 @@
 // NotificationBadge.cpp
 #include "NotificationBadge.h"
+#include "ImageService.h"
 #include <QPainter>
 #include <QFontMetrics>
 #include <QFont>
@@ -9,8 +10,6 @@ NotificationBadge::NotificationBadge(QWidget *parent)
 {
     m_bgColor = QColor(0xf74c30);
     m_textColor = QColor(0xffffff);
-    m_dndIcon = QPixmap(":/resources/icon/notification.png");
-    m_dndSelectedIcon = QPixmap(":/resources/icon/selected_notification.png");
     setAttribute(Qt::WA_TransparentForMouseEvents);
     setAttribute(Qt::WA_NoSystemBackground);
 }
@@ -31,11 +30,6 @@ void NotificationBadge::setDoNotDisturb(bool dnd) {
         m_bgColor = QColor(0xf74c30);
         m_textColor = QColor(0xffffff);
     }
-    update();
-}
-
-void NotificationBadge::setDndIcon(const QPixmap &pix) {
-    m_dndIcon = pix;
     update();
 }
 
@@ -79,19 +73,14 @@ void NotificationBadge::paintEvent(QPaintEvent *) {
     p.setRenderHint(QPainter::SmoothPixmapTransform);
 
     if (m_dnd && m_count == 0) {
-        // 缩放图标并绘制
-        if (!m_selected)
-            p.drawPixmap(0, 0,
-                     m_singleSize, m_singleSize,
-                     m_dndIcon.scaled(m_singleSize, m_singleSize,
-                                      Qt::KeepAspectRatio,
-                                      Qt::SmoothTransformation));
-        else
-            p.drawPixmap(0, 0,
-                         m_singleSize, m_singleSize,
-                         m_dndSelectedIcon.scaled(m_singleSize, m_singleSize,
-                                          Qt::KeepAspectRatio,
-                                          Qt::SmoothTransformation));
+        const QString iconPath = m_selected
+                ? QStringLiteral(":/resources/icon/selected_notification.png")
+                : QStringLiteral(":/resources/icon/notification.png");
+        const QPixmap icon = ImageService::instance().scaled(iconPath,
+                                                             QSize(m_singleSize, m_singleSize),
+                                                             Qt::KeepAspectRatio,
+                                                             p.device()->devicePixelRatioF());
+        p.drawPixmap(0, 0, m_singleSize, m_singleSize, icon);
         return;
     }
     if (m_count <= 0) return;

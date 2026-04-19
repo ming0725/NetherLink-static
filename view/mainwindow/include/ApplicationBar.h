@@ -1,6 +1,7 @@
 #pragma once
 #include <QWidget>
 #include <QPropertyAnimation>
+#include <QString>
 
 class ApplicationBarItem;
 class ApplicationBar : public QWidget {
@@ -9,7 +10,7 @@ public:
     ApplicationBar(QWidget* parent = nullptr);
     void addItem(ApplicationBarItem*);
     void addBottomItem(ApplicationBarItem*);
-    void setAvatar(QPixmap);
+    void setAvatarSource(const QString& source);
     void setTopInset(int inset);
     int topItemsCount() const { return topItems.size(); }
     int indexOfTopItem(ApplicationBarItem* item) const {
@@ -25,7 +26,7 @@ signals:
 private:
     void layoutItems();
     ApplicationBarItem* selectedItem = nullptr;
-    QPixmap avatarPixmap;
+    QString avatarSource;
     QVector<ApplicationBarItem*> topItems;
     QVector<ApplicationBarItem*> bottomItems;
     const int marginTop     = 20;

@@ -8,9 +8,7 @@
 PostFeedPage::PostFeedPage(QWidget* parent)
         : CustomScrollArea(parent)
 {
-    // 1. 读取 avatar 目录下所有图片文件
-    auto samplePosts = PostRepository::instance().getAllPosts();
-    setPosts(samplePosts);
+    setPosts(PostRepository::instance().requestPostFeed());
 
     connect(this, &CustomScrollArea::reachedBottom, this, [this]() {
         QTimer::singleShot(100, this, &PostFeedPage::loadMore);
@@ -19,7 +17,7 @@ PostFeedPage::PostFeedPage(QWidget* parent)
     setStyleSheet("border-width:0px;border-style:solid;");
 }
 
-void PostFeedPage::setPosts(const QVector<Post>& posts)
+void PostFeedPage::setPosts(const QVector<PostSummary>& posts)
 {
     qDeleteAll(m_items);
     m_items.clear();
@@ -27,9 +25,7 @@ void PostFeedPage::setPosts(const QVector<Post>& posts)
 
     for (int i = 0; i < m_data.size(); ++i) {
         const auto& pd = m_data[i];
-        // 传入 title 字段
-        auto *item = new PostPreviewItem(pd,
-                                         contentWidget);
+        auto *item = new PostPreviewItem(pd, contentWidget);
         connect(item, &PostPreviewItem::viewPostWithGeometry, this, &PostFeedPage::postClickedWithGeometry);
         m_items.append(item);
     }
@@ -59,4 +55,3 @@ void PostFeedPage::showEvent(QShowEvent *event) {
     layoutContent();
     QWidget::showEvent(event);
 }
-

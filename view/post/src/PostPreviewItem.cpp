@@ -1,15 +1,11 @@
 // PostPreviewItem.cpp
 #include "PostPreviewItem.h"
 #include "ClickableLabel.h"
+#include "ImageService.h"
 #include <QResizeEvent>
 #include <QFontMetrics>
-#include <QPainter>
-#include <QPainterPath>
-#include <QPixmapCache>
-#include "PostRepository.h"
-#include "UserRepository.h"
 
-PostPreviewItem::PostPreviewItem(const Post& post,
+PostPreviewItem::PostPreviewItem(const PostSummary& post,
                                  QWidget* parent)
         : QWidget(parent)
         , m_post(post)
@@ -21,7 +17,7 @@ PostPreviewItem::PostPreviewItem(const Post& post,
     m_authorLabel     = new ClickableLabel(this);
     m_likeIconLabel   = new ClickableLabel(this);
     m_likeCountLabel  = new ClickableLabel(this);
-    m_authorName = UserRepository::instance().getName(m_post.authorID);
+    m_authorName = m_post.authorName;
 
     m_titleLabel->setWordWrap(true);
     m_titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
@@ -37,7 +33,7 @@ PostPreviewItem::PostPreviewItem(const Post& post,
     m_likeIconLabel->setFixedSize(20,20);
     onClickLike();
     // 初始裁切
-    setupUI(post.picturesPath[0]);
+    setupUI(post.coverImagePath);
     // —— 其它信号槽连接 —— //
     connect(m_imageLabel, &ClickableLabel::clicked, this, &PostPreviewItem::onViewPost);
     connect(m_imageLabel, &ClickableLabel::clicked, this, &PostPreviewItem::onViewPost);
@@ -49,59 +45,40 @@ PostPreviewItem::PostPreviewItem(const Post& post,
 }
 
 void PostPreviewItem::setupUI(const QString& firstImagePath) {
-    QPixmap origPostImage(firstImagePath);
-    m_originalImage = origPostImage;
-    int w0 = MinWidth;
-    double ratio = double(origPostImage.width()) / double(origPostImage.height());
-    int h0 = int(w0 / ratio);
-    QPixmap tmp = origPostImage.scaled(w0,
-                                       h0,
-                                       Qt::IgnoreAspectRatio,
-                                       Qt::SmoothTransformation);
-    if (h0 > MaxImgH) {
-        // 中心裁掉上下
-        int yoff = (h0 - MaxImgH) / 2;
-        m_croppedPostImage = tmp.copy(0, yoff, w0, MaxImgH);
+    const QSize sourceSize = ImageService::instance().sourceSize(firstImagePath);
+    if (sourceSize.isValid() && sourceSize.height() > 0) {
+        imageBaseHeight = int(double(MinWidth) * double(sourceSize.height()) / double(sourceSize.width()));
     } else {
-        m_croppedPostImage = tmp;
+        imageBaseHeight = MinWidth;
     }
+    imageBaseHeight = qMin(imageBaseHeight, MaxImgH);
 
-    m_imageLabel->setRoundedPixmap(m_croppedPostImage, 12);
-    // 头像
-    QPixmap pix = UserRepository::instance().getAvatar(m_post.authorID)
-            .scaled(AvatarR,
-                                     AvatarR,
-                                     Qt::KeepAspectRatioByExpanding,
-                                     Qt::SmoothTransformation);
-    QPixmap circularPixmap(AvatarR, AvatarR);
-    circularPixmap.fill(Qt::transparent);
-    QPainter p(&circularPixmap);
-    p.setRenderHint(QPainter::Antialiasing);
-    QPainterPath path;
-    path.addEllipse(0, 0, AvatarR, AvatarR);
-    p.setClipPath(path);
-    p.drawPixmap(0, 0, pix);
-    m_avatarLabel->setPixmap(circularPixmap);
+    m_imageLabel->setRoundedPixmap(ImageService::instance().centerCrop(firstImagePath,
+                                                                       QSize(MinWidth, imageBaseHeight),
+                                                                       12),
+                                   12);
+    m_avatarLabel->setPixmap(ImageService::instance().circularAvatar(
+            m_post.authorAvatarPath,
+            AvatarR));
     m_avatarLabel->setFixedSize(AvatarR, AvatarR);
     // 文本
     m_authorLabel->setText(m_authorName);
-    m_likeCountLabel->setText(QString::number(m_post.likes));
+    m_likeCountLabel->setText(QString::number(m_post.likeCount));
     m_titleLabel->setText(m_post.title);
 }
 
 void PostPreviewItem::resizeEvent(QResizeEvent* ev) {
     QWidget::resizeEvent(ev);
-    if (m_croppedPostImage.isNull()) {
+    if (m_post.coverImagePath.isEmpty() || imageBaseHeight <= 0) {
         return;
     }
     int W = width();
-    // 1) 图片等比例放大到全宽
-    double r = double(m_croppedPostImage.width()) / double(m_croppedPostImage.height());
-    int imgH = int(W / r);
+    int imgH = qMin(int(double(W) * double(imageBaseHeight) / double(imageBaseWidth)), MaxImgH);
     m_imageLabel->setGeometry(0, 0, W, imgH);
-    m_imageLabel->setRoundedPixmap(m_croppedPostImage.scaled(W, imgH,
-                                                      Qt::KeepAspectRatio,
-                                                      Qt::SmoothTransformation), 12);
+    m_imageLabel->setRoundedPixmap(ImageService::instance().centerCrop(m_post.coverImagePath,
+                                                                       QSize(W, imgH),
+                                                                       12),
+                                   12);
 
     // 2) 计算标题占用高度 (1~2行)
     QFontMetrics fm(m_titleLabel->font());
@@ -156,7 +133,7 @@ int PostPreviewItem::scaledHeightFor(double itemW) {
 
 void PostPreviewItem::onViewPost() {
     QRect globalGeometry = QRect(mapToGlobal(QPoint(0, 0)), size());
-    emit viewPostWithGeometry(m_post, globalGeometry, m_originalImage);
+    emit viewPostWithGeometry(m_post.postId, globalGeometry);
 }
 
 void PostPreviewItem::onViewAuthor() {
@@ -165,34 +142,21 @@ void PostPreviewItem::onViewAuthor() {
 
 void PostPreviewItem::onClickLike() {
     // 点赞图标
-    QPixmap fullHeart, emptyHeart;
-    if (!QPixmapCache::find("full_heart", &fullHeart)) {
-        fullHeart = QPixmap(":/resources/icon/full_heart.png")
-                .scaled(20,
-                        20,
-                        Qt::KeepAspectRatio,
-                        Qt::SmoothTransformation);
-        QPixmapCache::insert("full_heart", fullHeart);
-    }
-    if (!QPixmapCache::find("empty_heart", &emptyHeart)) {
-        emptyHeart = QPixmap(":/resources/icon/heart.png")
-                .scaled(20,
-                        20,
-                        Qt::KeepAspectRatio,
-                        Qt::SmoothTransformation);
-        QPixmapCache::insert("empty_heart", emptyHeart);
-    }
+    const QPixmap fullHeart = ImageService::instance().scaled(":/resources/icon/full_heart.png",
+                                                              QSize(20, 20));
+    const QPixmap emptyHeart = ImageService::instance().scaled(":/resources/icon/heart.png",
+                                                               QSize(20, 20));
     m_likeIconLabel->setRadius(-2);
     if (m_post.isLiked) {
         m_likeIconLabel->setPixmap(emptyHeart);
-        m_post.likes--;
-        m_likeCountLabel->setText(QString::number(m_post.likes));
+        m_post.likeCount--;
+        m_likeCountLabel->setText(QString::number(m_post.likeCount));
         m_post.isLiked = false;
     }
     else {
         m_likeIconLabel->setPixmap(fullHeart);
-        m_post.likes++;
-        m_likeCountLabel->setText(QString::number(m_post.likes));
+        m_post.likeCount++;
+        m_likeCountLabel->setText(QString::number(m_post.likeCount));
         m_post.isLiked = true;
     }
     resizeEvent(nullptr);

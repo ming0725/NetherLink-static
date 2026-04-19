@@ -1,7 +1,6 @@
 // NotificationBadge.h
 #pragma once
 #include <QWidget>
-#include <QPixmap>
 #include <QColor>
 
 class NotificationBadge : public QWidget {
@@ -11,7 +10,6 @@ public:
 
     void setCount(int count);
     void setDoNotDisturb(bool dnd);
-    void setDndIcon(const QPixmap& pix);
 
     void setSingleSize(int d);
     void setTwoDigitWidth(int w);
@@ -27,8 +25,6 @@ private:
     int     m_count           = 0;
     bool    m_dnd             = false;
     bool    m_selected = false;
-    QPixmap m_dndIcon;
-    QPixmap m_dndSelectedIcon;
     QColor  m_bgColor;
     QColor  m_textColor;
 

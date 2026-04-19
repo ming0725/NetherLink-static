@@ -8,7 +8,7 @@
 #include <QScrollArea>
 #include <QVBoxLayout>
 #include <QTimeLine>
-#include "User.h"
+#include "RepositoryTypes.h"
 
 class ScrollAreaNoWheel;
 class ScrollBarThumb;
@@ -19,7 +19,7 @@ public:
     explicit FriendListWidget(QWidget *parent = nullptr);
     ~FriendListWidget();
 
-    void addItem(const User& user);
+    void addItem(const FriendSummary& user);
     void removeItemAt(int index);
 protected:
     void resizeEvent(QResizeEvent *event) override;

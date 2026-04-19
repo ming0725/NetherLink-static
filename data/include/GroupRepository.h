@@ -3,6 +3,7 @@
 #include <QMap>
 #include <QVector>
 #include <QMutex>
+#include "RepositoryTypes.h"
 #include "Group.h"
 
 class GroupRepository : public QObject{
@@ -10,19 +11,18 @@ class GroupRepository : public QObject{
 public:
     static GroupRepository& instance();
 
-    Group getGroup(const QString& groupID);
-    QVector<Group> getAllGroup();
+    QVector<Group> requestGroupList() const;
+    Group requestGroupDetail(const GroupDetailRequest& query) const;
+    QString requestGroupAvatarPath(const QString& groupId) const;
+    bool contains(const QString& groupId) const;
 
-    // 可选添加：用户插入、删除接口
-    void insertGroup(const Group& group);
+    void saveGroup(const Group& group);
     void removeGroup(const QString& groupID);
-    bool isGroup(QString& id);
 
 private:
     explicit GroupRepository(QObject* parent = nullptr);
     Q_DISABLE_COPY(GroupRepository)
 
     QMap<QString, Group> groupMap;
-    QMutex mutex; // 用于线程安全
+    mutable QMutex mutex; // 用于线程安全
 };
-

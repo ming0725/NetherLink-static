@@ -1,7 +1,7 @@
 #pragma once
 
 #include <QWidget>
-#include <QPixmap>
+#include <QString>
 
 
 class DefaultPage : public QWidget
@@ -15,6 +15,6 @@ protected:
     void paintEvent(QPaintEvent *event) override;
 
 private:
-    QPixmap m_pixmap;
+    QString m_imageSource;
     QSize m_displaySize;  // 固定显示区域大小
 };

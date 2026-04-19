@@ -1,12 +1,30 @@
 #include "ApplicationBarItem.h"
+#include "ImageService.h"
 #include <QPainter>
 #include <QMouseEvent>
 #include <QPainterPath>
 
-ApplicationBarItem::ApplicationBarItem(QPixmap normal, QPixmap selected, QWidget* parent)
+namespace {
+
+QSize logicalPixmapSize(const QPixmap& pixmap)
+{
+    if (pixmap.isNull()) {
+        return {};
+    }
+
+    const qreal dpr = pixmap.devicePixelRatio();
+    return QSize(qRound(pixmap.width() / dpr),
+                 qRound(pixmap.height() / dpr));
+}
+
+}
+
+ApplicationBarItem::ApplicationBarItem(const QString& normalSource,
+                                       const QString& selectedSource,
+                                       QWidget* parent)
     : QWidget(parent)
-    , normalPixmap(normal)
-    , selectedPixmap(selected)
+    , selectedSource(selectedSource)
+    , normalSource(normalSource)
 {
     rippleAnim = new QVariantAnimation(this);
     rippleAnim->setDuration(700);
@@ -17,8 +35,8 @@ ApplicationBarItem::ApplicationBarItem(QPixmap normal, QPixmap selected, QWidget
     });
 }
 
-ApplicationBarItem::ApplicationBarItem(QPixmap normal, QWidget* parent)
-    : ApplicationBarItem(normal, normal, parent)
+ApplicationBarItem::ApplicationBarItem(const QString& normalSource, QWidget* parent)
+    : ApplicationBarItem(normalSource, normalSource, parent)
 {
 }
 
@@ -51,15 +69,18 @@ void ApplicationBarItem::paintEvent(QPaintEvent*)
     }
 
     // 2) 正常状态下的图标（按 pixmapScale 缩放并居中）
-    const QPixmap& base = normalPixmap;
     QSizeF tgtF = QSizeF(width(), height()) * pixmapScale;
-    QPixmap normalScaled = base.scaled(
-            tgtF.toSize(),
-            Qt::KeepAspectRatio,
-            Qt::SmoothTransformation);
-    int x0 = qFloor((width()  - normalScaled.width())  / 2.0);
-    int y0 = qFloor((height() - normalScaled.height()) / 2.0);
-    painter.drawPixmap(x0, y0, normalScaled);
+    QPixmap normalScaled = ImageService::instance().scaled(normalSource,
+                                                           tgtF.toSize(),
+                                                           Qt::KeepAspectRatio,
+                                                           painter.device()->devicePixelRatioF());
+    const QSize normalLogicalSize = logicalPixmapSize(normalScaled);
+    int x0 = qFloor((width()  - normalLogicalSize.width())  / 2.0);
+    int y0 = qFloor((height() - normalLogicalSize.height()) / 2.0);
+    painter.drawPixmap(QRect(x0, y0,
+                             normalLogicalSize.width(),
+                             normalLogicalSize.height()),
+                       normalScaled);
 
     // 3) 如果已选中且正在 ripple 动画中，则“揭露”selectedPixmap
     if (selected && rippleRadius > 0.0) {
@@ -76,11 +97,17 @@ void ApplicationBarItem::paintEvent(QPaintEvent*)
         );
         painter.setClipPath(clipPath);
         // 在剪裁区域内绘制被选中状态的图标
-        QPixmap selScaled = selectedPixmap.scaled(
-                tgtF.toSize(),
-                Qt::KeepAspectRatio,
-                Qt::SmoothTransformation);
-        painter.drawPixmap(x0, y0, selScaled);
+        QPixmap selScaled = ImageService::instance().scaled(selectedSource,
+                                                            tgtF.toSize(),
+                                                            Qt::KeepAspectRatio,
+                                                            painter.device()->devicePixelRatioF());
+        const QSize selectedLogicalSize = logicalPixmapSize(selScaled);
+        const int sx = qFloor((width()  - selectedLogicalSize.width())  / 2.0);
+        const int sy = qFloor((height() - selectedLogicalSize.height()) / 2.0);
+        painter.drawPixmap(QRect(sx, sy,
+                                 selectedLogicalSize.width(),
+                                 selectedLogicalSize.height()),
+                           selScaled);
         painter.restore();
     }
 }

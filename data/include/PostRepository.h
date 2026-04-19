@@ -4,14 +4,15 @@
 #include <QVector>
 #include <QMutex>
 #include <QMap>
+#include "RepositoryTypes.h"
 #include "Post.h"
 
 class PostRepository : public QObject {
     Q_OBJECT
 public:
     static PostRepository& instance();
-    QVector<Post> getAllPosts() const;
-    Post getPost(const QString& postID) const;
+    QVector<PostSummary> requestPostFeed(const PostFeedRequest& query = {}) const;
+    PostDetailData requestPostDetail(const PostDetailRequest& query) const;
 
 private:
     explicit PostRepository(QObject* parent = nullptr);

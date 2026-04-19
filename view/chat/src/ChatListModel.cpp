@@ -1,6 +1,7 @@
 #include "ChatListModel.h"
 #include <QDateTime>
 #include <QDebug>
+#include <QSize>
 
 Q_DECLARE_METATYPE(TimeHeader*)
 Q_DECLARE_METATYPE(ChatMessage*)

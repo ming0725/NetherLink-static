@@ -4,6 +4,7 @@
 #include "UserRepository.h"
 #include "MessageRepository.h"
 #include "CurrentUser.h"
+#include "ImageService.h"
 #include <QVBoxLayout>
 #include <QScrollBar>
 #include <QTimer>
@@ -249,8 +250,18 @@ void ChatArea::addTextMessage(QSharedPointer<TextMessage> message,
     }
 }
 
-void ChatArea::setGroupMode(bool mode) {
-    isGroupMode = mode;
+void ChatArea::setConversationMeta(const ConversationMeta& meta) {
+    isGroupMode = meta.isGroup;
+    if (meta.isGroup) {
+        statusIcon->hide();
+        nameLabel->setText(QString("%1（%2）").arg(meta.title, QString::number(meta.memberCount)));
+        return;
+    }
+
+    statusIcon->show();
+    statusIcon->setPixmap(ImageService::instance().scaled(statusIconPath(meta.status),
+                                                          QSize(12, 12)));
+    nameLabel->setText(meta.title);
 }
 
 void ChatArea::updateInputBarPosition() {
@@ -271,10 +282,9 @@ void ChatArea::updateInputBarPosition() {
 
 void ChatArea::onSendImage(const QString &path)
 {
-    QPixmap image(path);
-    if (!image.isNull()) {
+    if (ImageService::instance().sourceSize(path).isValid()) {
         auto ptr =
-                QSharedPointer<ImageMessage>::create(image,
+                QSharedPointer<ImageMessage>::create(path,
                                                true,
                                                CurrentUser::instance().getUserId(),
                                                isGroupMode,
@@ -304,19 +314,6 @@ void ChatArea::clearAll() {
 
 void ChatArea::setMessageId(QString id) {
     messageId = id;
-    if (isGroupMode) {
-        auto group = GroupRepository::instance().getGroup(id);
-        statusIcon->hide();
-        QString fullName("%1（%2）");
-        nameLabel->setText(fullName.arg(group.groupName, QString::number(group.memberNum)));
-    }
-    else {
-        auto user = UserRepository::instance().getUser(id);
-        statusIcon->show();
-        QPixmap pixmap(QPixmap(statusIconPath(user.status)));
-        statusIcon->setPixmap(pixmap.scaled(12, 12, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-        nameLabel->setText(user.nick);
-    }
 }
 
 void ChatArea::initMessage(QVector<ChatArea::ChatMessagePtr>& messages) {
@@ -326,4 +323,3 @@ void ChatArea::initMessage(QVector<ChatArea::ChatMessagePtr>& messages) {
     }
     adjustBottomSpace();
 }
-

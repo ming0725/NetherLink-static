@@ -1,8 +1,6 @@
 // MessageListWidget.cpp
 #include "MessageListWidget.h"
 #include "MessageRepository.h"
-#include "UserRepository.h"
-#include "GroupRepository.h"
 #include <QEvent>
 #include <algorithm>
 
@@ -11,49 +9,10 @@ MessageListWidget::MessageListWidget(QWidget* parent)
 {
     installEventFilter(this);
     setMouseTracking(true);
-    auto& mr = MessageRepository::instance();
-    auto& gr = GroupRepository::instance();
-    auto& ur = UserRepository::instance();
-    auto groups = GroupRepository::instance().getAllGroup();
-    for (auto& group : groups) {
-        auto lastMsg = mr.getLastMessage(group.groupId);
-        auto lastContent = lastMsg->getSenderName() + "：" + lastMsg->getContent();
-        auto lastTime = lastMsg->getTimestamp();
-        int unreadCount = mr.getMessages(group.groupId).count();
-        bool isDnd = gr.getGroup(group.groupId).isDnd;
-        auto name = QString("%1（%2）").arg(group.groupName, QString::number(group.memberNum));
-        MessageItemContent mic{
-                name,
-                lastContent,
-                lastTime,
-                unreadCount,
-                isDnd,
-                group.groupAvatarPath,
-                group.groupId,
-                true
-        };
-        addMessage(mic);
-    }
-
-    // 单聊初始消息
-    auto users = UserRepository::instance().getAllUser();
-    for (auto user : users) {
-        auto lastMsg = mr.getLastMessage(user.id);
-        auto lastContent = lastMsg->getContent();
-        auto lastTime = lastMsg->getTimestamp();
-        int unreadCount = mr.getMessages(user.id).count();
-        bool isDnd = ur.getUser(user.id).isDnd;
-        auto name = user.nick;
-        MessageItemContent mic{
-                name,
-                lastContent,
-                lastTime,
-                unreadCount,
-                isDnd,
-                user.avatarPath,
-                user.id
-        };
-        addMessage(mic);
+    const QVector<ConversationSummary> conversations =
+            MessageRepository::instance().requestConversationList();
+    for (const ConversationSummary& conversation : conversations) {
+        addMessage(conversation);
     }
     std::sort(m_items.begin(), m_items.end(),
           [](MessageListItem* a, MessageListItem* b) {
@@ -61,7 +20,7 @@ MessageListWidget::MessageListWidget(QWidget* parent)
     });
 }
 
-void MessageListWidget::addMessage(const MessageItemContent& data) {
+void MessageListWidget::addMessage(const ConversationSummary& data) {
     auto *it = new MessageListItem(data, contentWidget);
     connect(it, &MessageListItem::itemClicked,
             this, &MessageListWidget::onItemClicked);

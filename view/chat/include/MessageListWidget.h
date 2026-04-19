@@ -9,7 +9,7 @@ class MessageListWidget : public CustomScrollArea {
     using CustomScrollArea::contentWidget;
 public:
     explicit MessageListWidget(QWidget* parent = nullptr);
-    void addMessage(const MessageItemContent& data);
+    void addMessage(const ConversationSummary& data);
     void clearMessages();
     MessageListItem* getSelectedItem() const { return selectItem; }
 signals:

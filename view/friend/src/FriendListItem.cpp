@@ -1,4 +1,5 @@
 #include "FriendListItem.h"
+#include "ImageService.h"
 #include "UserRepository.h"
 #include <QPainter>
 #include <QPainterPath>
@@ -8,10 +9,10 @@
 #include <QRandomGenerator>
 #include <QPushButton>
 
-FriendListItem::FriendListItem(const User& user, QWidget* parent)
+FriendListItem::FriendListItem(const FriendSummary& user, QWidget* parent)
     : QWidget(parent)
     , avatarLabel(new QLabel(this))
-    , fullNameText(user.nick)
+    , fullNameText(user.displayName)
     , status(user.status)
 {
     fullStatusAndSignText = QString("[%1] %2").arg(statusText(user.status), user.signature);
@@ -20,11 +21,11 @@ FriendListItem::FriendListItem(const User& user, QWidget* parent)
     setContextMenuPolicy(Qt::CustomContextMenu);
 }
 
-void FriendListItem::setupUI(const User& user)
+void FriendListItem::setupUI(const FriendSummary& user)
 {
     const int avatarSize = 48;
     avatarLabel->setFixedSize(avatarSize, avatarSize);
-    avatarLabel->setPixmap(UserRepository::instance().getAvatar(user.id));
+    avatarLabel->setPixmap(ImageService::instance().circularAvatar(user.avatarPath, avatarSize));
     nameLabel = new QLabel(fullNameText, this);
     nameLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     QFont font;
@@ -35,8 +36,8 @@ void FriendListItem::setupUI(const User& user)
 
     const int statusIconSize = 13;
     statusIconLabel = new QLabel(this);
-    statusIconLabel->setPixmap(QPixmap(statusIconPath(user.status))
-                                       .scaled(statusIconSize, statusIconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    statusIconLabel->setPixmap(ImageService::instance().scaled(statusIconPath(user.status),
+                                                               QSize(statusIconSize, statusIconSize)));
     statusIconLabel->setFixedSize(statusIconSize + 2, statusIconSize + 2);
 
     statusTextLabel = new QLabel(this);

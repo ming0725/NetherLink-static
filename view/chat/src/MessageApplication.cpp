@@ -1,7 +1,6 @@
 // MessageApplication.cpp
 #include "MessageApplication.h"
 #include "MessageRepository.h"
-#include "GroupRepository.h"
 #include <QLayout>
 #include <QResizeEvent>
 #include <QPainter>
@@ -78,11 +77,10 @@ void MessageApplication::onMessageClicked(MessageListItem *item)
     m_chatArea->clearAll();
     m_rightStack->setCurrentWidget(m_chatArea);
     auto& mr = MessageRepository::instance();
-    auto& gr = GroupRepository::instance();
-    auto msgs = mr.getMessages(item->getChatID());
-    auto id = item->getChatID();
-    bool isGroup = gr.isGroup(id);
-    m_chatArea->setGroupMode(isGroup);
+    const QString id = item->getChatID();
+    auto msgs = mr.requestConversationMessages({id});
+    auto meta = mr.requestConversationMeta({id});
+    m_chatArea->setConversationMeta(meta);
     m_chatArea->setMessageId(id);
     m_chatArea->initMessage(msgs);
 }
