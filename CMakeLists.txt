@@ -48,7 +48,7 @@ file(GLOB VIEW_MAINWINDOW_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/view/mainwindow/s
 set(PLATFORM_SOURCES)
 if(APPLE)
     list(APPEND PLATFORM_SOURCES
-        ${CMAKE_CURRENT_SOURCE_DIR}/utils/src/MacWindowEffects.mm
+        ${CMAKE_CURRENT_SOURCE_DIR}/utils/src/MacWindowBridge.mm
     )
 endif()
 

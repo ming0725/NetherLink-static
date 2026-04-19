@@ -104,7 +104,7 @@ void ApplicationBar::paintEvent(QPaintEvent*) {
     if (!avatarPixmap.isNull()) {
         painter.restore();
         int x = (w - avatarSize) / 2;
-        int y = marginTop + spacing;
+        int y = topInset + marginTop + spacing;
         QPainterPath circlePath;
         circlePath.addEllipse(x, y, avatarSize, avatarSize);
         painter.setClipPath(circlePath);
@@ -132,9 +132,21 @@ void ApplicationBar::setAvatar(QPixmap pix)
     layoutItems();
 }
 
+void ApplicationBar::setTopInset(int inset)
+{
+    const int clampedInset = qMax(0, inset);
+    if (topInset == clampedInset) {
+        return;
+    }
+
+    topInset = clampedInset;
+    layoutItems();
+    update();
+}
+
 
 void ApplicationBar::layoutItems() {
-    int y = marginTop + spacing + avatarSize + avatarAndItemDist;
+    int y = topInset + marginTop + spacing + avatarSize + avatarAndItemDist;
     int w = width();
 
     for (auto* item : topItems) {
@@ -147,6 +159,10 @@ void ApplicationBar::layoutItems() {
         int x = (w - iconSize) / 2;
         item->setGeometry(x, yb, iconSize, iconSize);
         yb -= (iconSize + spacing);
+    }
+
+    if (selectedItem && highlightAnim->state() != QAbstractAnimation::Running) {
+        highlightPosY = selectedItem->y();
     }
 }
 

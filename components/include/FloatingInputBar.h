@@ -5,7 +5,7 @@
 #include <QTextEdit>
 #include <QLabel>
 #include <QPropertyAnimation>
-#include "customtooltip.h"
+#include "CustomTooltip.h"
 
 class FloatingInputBar : public QWidget
 {

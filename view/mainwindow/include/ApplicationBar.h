@@ -10,6 +10,7 @@ public:
     void addItem(ApplicationBarItem*);
     void addBottomItem(ApplicationBarItem*);
     void setAvatar(QPixmap);
+    void setTopInset(int inset);
     int topItemsCount() const { return topItems.size(); }
     int indexOfTopItem(ApplicationBarItem* item) const {
         return topItems.indexOf(item);
@@ -35,5 +36,6 @@ private:
     int avatarAndItemDist   = 22;
     int avatarSize          = 35;
     int highlightPosY       = 0;
+    int topInset            = 0;
     QVariantAnimation* highlightAnim = nullptr;
 };

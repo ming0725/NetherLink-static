@@ -1,23 +1,30 @@
 #include "MainWindow.h"
-#include "WindowEffect.h"
 #include "MessageApplication.h"
 #include "AiChatApplication.h"
 #include "PostApplication.h"
 #include "CurrentUser.h"
+#include "LineEditComponent.h"
+#include <QHBoxLayout>
+#include <QLineEdit>
+#include <QPushButton>
 #include <QScreen>
 #include <QGuiApplication>
-#include <QPainterPath>
 #include <QShowEvent>
+#include <QApplication>
 
 MainWindow::MainWindow(QWidget* parent)
-    : FramelessWindow(parent)
+    : SystemWindow(parent)
     , stack(new QStackedWidget(this))
+    , btnMinimize(nullptr)
+    , btnMaximize(nullptr)
+    , btnClose(nullptr)
 {
     // 窗口基础设置
     resize(950, 650);
     setMinimumHeight(525);
     setMinimumWidth(685);
     setAttribute(Qt::WA_TranslucentBackground);
+    setBackdropColor(QColor(248, 248, 252, 92));
 
     CurrentUser::instance().setMainWindow(this);
     appBar = new ApplicationBar(this);
@@ -25,22 +32,24 @@ MainWindow::MainWindow(QWidget* parent)
 
     titleBar = new QWidget(this);
     titleBar->setFixedHeight(32);
-    // 窗口控制按钮
+    titleBar->setAttribute(Qt::WA_StyledBackground, false);
+
+#ifndef Q_OS_MACOS
     btnMinimize = new QPushButton(titleBar);
     btnMaximize = new QPushButton(titleBar);
-    btnClose    = new QPushButton(titleBar);
-    iconClose       = QIcon(":/resources/icon/close.png");
-    iconCloseHover  = QIcon(":/resources/icon/hovered_close.png");
+    btnClose = new QPushButton(titleBar);
+    iconClose = QIcon(":/resources/icon/close.png");
+    iconCloseHover = QIcon(":/resources/icon/hovered_close.png");
     btnMinimize->setIcon(QIcon(":/resources/icon/minimize.png"));
     btnMaximize->setIcon(QIcon(":/resources/icon/maximize.png"));
 
     btnMinimize->setIconSize(QSize(16, 16));
     btnMaximize->setIconSize(QSize(16, 16));
-    btnClose   ->setIconSize(QSize(16, 16));
+    btnClose->setIconSize(QSize(16, 16));
 
     btnMinimize->setFixedSize(32, 32);
     btnMaximize->setFixedSize(32, 32);
-    btnClose   ->setFixedSize(32, 32);
+    btnClose->setFixedSize(32, 32);
 
     auto btnStyle = R"(
         QPushButton {
@@ -65,19 +74,28 @@ MainWindow::MainWindow(QWidget* parent)
     }
     )");
 
-    // 方便换图标 hover 效果依旧装事件过滤器
     btnClose->installEventFilter(this);
 
     auto hl = new QHBoxLayout(titleBar);
     hl->setContentsMargins(0,0,0,0);
-    hl->addStretch();            // 左侧空白
+    hl->addStretch();
     hl->addWidget(btnMinimize);
     hl->addWidget(btnMaximize);
     hl->addWidget(btnClose);
     hl->setSpacing(0);
 
-    // 3) 告诉 FramelessWindow：这是标题栏
-    setTitleBar(titleBar);
+    connect(btnMinimize, &QPushButton::clicked, this, &QWidget::showMinimized);
+    connect(btnMaximize, &QPushButton::clicked, this, [this]() {
+        if (isMaximized()) {
+            showNormal();
+        } else {
+            showMaximized();
+        }
+    });
+    connect(btnClose, &QPushButton::clicked, this, &QWidget::close);
+#endif
+
+    setDragTitleBar(titleBar);
 
 
     stack->addWidget(new MessageApplication(this));
@@ -92,14 +110,6 @@ MainWindow::MainWindow(QWidget* parent)
     connect(appBar, &ApplicationBar::applicationClicked,
             this, &MainWindow::onBarItemClicked);
 
-    // 信号连接
-    connect(btnMinimize, &QPushButton::clicked, this, &QWidget::showMinimized);
-    connect(btnMaximize, &QPushButton::clicked, this, [=](){
-        if (isMaximized()) showNormal();
-        else showMaximized();
-    });
-    connect(btnClose, &QPushButton::clicked, this, &QWidget::close);
-
     QScreen* screen = QGuiApplication::primaryScreen();
     QRect   sg     = screen->geometry();
     int     cx     = (sg.width()  - width())  / 2;
@@ -109,29 +119,23 @@ MainWindow::MainWindow(QWidget* parent)
 
 void MainWindow::showEvent(QShowEvent* event)
 {
-    FramelessWindow::showEvent(event);
-
-    if (m_windowEffectInitialized) {
-        return;
-    }
-
-    WindowEffect effect;
-    effect.setAcrylicEffect(this, QColor(248, 248, 252, 92));
-    m_windowEffectInitialized = true;
+    SystemWindow::showEvent(event);
+    layoutWindow();
 }
 
 
 void MainWindow::resizeEvent(QResizeEvent* event)
 {
-    FramelessWindow::resizeEvent(event);
-    int w = width();
-    int h = height();
-    // 把左侧应用栏和中央 stack 摆好
-    int barW = appBar->width();
-    appBar->setGeometry(0, 0, barW, h);
-    stack->setGeometry(barW, 0, w-barW, h);
-    // 把 titleBar 铺满顶部
-    titleBar->setGeometry(barW, 0, w-barW, titleBar->height());
+    SystemWindow::resizeEvent(event);
+    layoutWindow();
+}
+
+void MainWindow::moveEvent(QMoveEvent* event)
+{
+    SystemWindow::moveEvent(event);
+#ifdef Q_OS_MACOS
+    layoutWindow();
+#endif
 }
 
 
@@ -142,7 +146,7 @@ void MainWindow::mousePressEvent(QMouseEvent* event)
         || qobject_cast<QLineEdit*>(fw)) {
         fw->clearFocus();
     }
-    FramelessWindow::mousePressEvent(event);
+    SystemWindow::mousePressEvent(event);
 }
 
 
@@ -155,7 +159,7 @@ void MainWindow::onBarItemClicked(ApplicationBarItem *item)
 }
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *ev) {
-    if (watched == btnClose) {
+    if (btnClose && watched == btnClose) {
         if (ev->type() == QEvent::Enter) {
             btnClose->setIcon(iconCloseHover);
         }
@@ -163,5 +167,28 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *ev) {
             btnClose->setIcon(iconClose);
         }
     }
-    return FramelessWindow::eventFilter(watched, ev);
+    return SystemWindow::eventFilter(watched, ev);
+}
+
+void MainWindow::layoutWindow()
+{
+    const int w = width();
+    const int h = height();
+    const bool useSystemTitleButtons = usesSystemTitleButtons();
+    const int titleInset = useSystemTitleButtons ? topInset() : 0;
+    const int titleBarHeight = qMax(32, titleInset);
+    const int barW = useSystemTitleButtons ? qMax(54, leadingInset()) : 54;
+    const int titleBarX = useSystemTitleButtons ? 0 : barW;
+    const int titleBarW = useSystemTitleButtons ? w : w - barW;
+
+    if (titleBar->height() != titleBarHeight) {
+        titleBar->setFixedHeight(titleBarHeight);
+    }
+
+    appBar->setFixedWidth(barW);
+    appBar->setTopInset(titleInset);
+    appBar->setGeometry(0, 0, barW, h);
+    stack->setGeometry(barW, 0, w - barW, h);
+    titleBar->setGeometry(titleBarX, 0, titleBarW, titleBar->height());
+    titleBar->raise();
 }
