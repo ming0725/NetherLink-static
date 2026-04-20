@@ -1,27 +1,36 @@
-// MessageListWidget.h
 #pragma once
-#include "CustomScrollArea.h"
-#include "MessageListItem.h"
-#include <QVector>
 
-class MessageListWidget : public CustomScrollArea {
+#include "OverlayScrollListView.h"
+#include "RepositoryTypes.h"
+
+class MessageListDelegate;
+class MessageListModel;
+
+class MessageListWidget : public OverlayScrollListView
+{
     Q_OBJECT
-    using CustomScrollArea::contentWidget;
+
 public:
     explicit MessageListWidget(QWidget* parent = nullptr);
-    void addMessage(const ConversationSummary& data);
-    void clearMessages();
-    MessageListItem* getSelectedItem() const { return selectItem; }
+
+    QString selectedConversationId() const;
+    ConversationSummary selectedConversation() const;
+
 signals:
-    void itemClicked(MessageListItem* item);
-protected:
-    void layoutContent() override;
-private slots:
-    void onItemClicked(MessageListItem*);
+    void conversationActivated(const QString& conversationId);
+
 public slots:
-    void onLastMessageUpdated(const QString& chatId, const QString& text, const QDateTime& timestamp);
+    void onLastMessageUpdated(const QString& chatId,
+                              const QString& text,
+                              const QDateTime& timestamp);
+
+private slots:
+    void onCurrentChanged(const QModelIndex& current, const QModelIndex& previous);
+
 private:
-    MessageListItem* findItemById(const QString& id);
-    QVector<MessageListItem*> m_items;
-    MessageListItem* selectItem = nullptr;
+    void restoreSelection(const QString& conversationId);
+
+    MessageListModel* m_model;
+    MessageListDelegate* m_delegate;
+    bool m_restoringSelection = false;
 };

@@ -13,11 +13,14 @@ SmoothScrollBar::SmoothScrollBar(QWidget *parent)
 {
     setFixedWidth(8);  // 设置滚动条宽度
     setAttribute(Qt::WA_TranslucentBackground);
-    setAttribute(Qt::WA_TransparentForMouseEvents, false);  // 确保可以接收鼠标事件
-    
+    hide();
+
     // 初始化淡入淡出动画
     m_fadeAnimation = new QPropertyAnimation(this, "opacity", this);
     m_fadeAnimation->setDuration(200);  // 加快动画速度
+    connect(m_fadeAnimation, &QPropertyAnimation::finished, this, [this]() {
+        updateVisibility();
+    });
     
     // 初始化淡出计时器
     m_fadeOutTimer = new QTimer(this);
@@ -29,6 +32,11 @@ void SmoothScrollBar::setRange(int min, int max)
 {
     m_minimum = min;
     m_maximum = max;
+    if (!needsDisplay()) {
+        m_value = min;
+        m_opacity = 0.0;
+        hide();
+    }
     update();
 }
 
@@ -52,6 +60,7 @@ void SmoothScrollBar::setOpacity(qreal opacity)
 {
     if (m_opacity != opacity) {
         m_opacity = opacity;
+        updateVisibility();
         update();
     }
 }
@@ -59,7 +68,7 @@ void SmoothScrollBar::setOpacity(qreal opacity)
 void SmoothScrollBar::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
-    if (m_maximum <= m_minimum) return;
+    if (!needsDisplay()) return;
 
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
@@ -73,7 +82,7 @@ void SmoothScrollBar::paintEvent(QPaintEvent *event)
 
 QRect SmoothScrollBar::getHandleRect() const
 {
-    if (m_maximum <= m_minimum) return QRect();
+    if (!needsDisplay()) return QRect();
 
     qreal visibleRatio = qreal(m_pageStep) / (m_maximum - m_minimum + m_pageStep);
     int handleHeight = qMax(static_cast<int>(height() * visibleRatio), 30);
@@ -86,7 +95,7 @@ QRect SmoothScrollBar::getHandleRect() const
 
 void SmoothScrollBar::mousePressEvent(QMouseEvent *event)
 {
-    if (event->button() == Qt::LeftButton) {
+    if (event->button() == Qt::LeftButton && needsDisplay()) {
         m_isDragging = true;
         m_dragStartPosition = event->pos();
         m_dragStartValue = m_value;
@@ -127,7 +136,7 @@ void SmoothScrollBar::leaveEvent(QEvent *event)
 
 void SmoothScrollBar::updateValue(const QPoint &pos)
 {
-    if (m_maximum <= m_minimum) return;
+    if (!needsDisplay()) return;
 
     QRect handleRect = getHandleRect();
     int handleHeight = handleRect.height();
@@ -138,6 +147,12 @@ void SmoothScrollBar::updateValue(const QPoint &pos)
 
 void SmoothScrollBar::showScrollBar()
 {
+    if (!needsDisplay()) {
+        hide();
+        return;
+    }
+
+    show();
     m_fadeOutTimer->stop();
     m_fadeAnimation->stop();
     m_fadeAnimation->setStartValue(m_opacity);
@@ -153,4 +168,11 @@ void SmoothScrollBar::startFadeOut()
         m_fadeAnimation->setEndValue(0.0);
         m_fadeAnimation->start();
     }
-} 
+}
+
+void SmoothScrollBar::updateVisibility()
+{
+    const bool visible = needsDisplay() && (m_opacity > 0.0 || m_isDragging);
+    setAttribute(Qt::WA_TransparentForMouseEvents, !visible);
+    setVisible(visible);
+}

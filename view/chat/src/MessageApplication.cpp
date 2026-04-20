@@ -16,7 +16,7 @@ MessageApplication::MessageApplication(QWidget* parent)
     m_topSearch = new TopSearchWidget(leftPane);
     m_msgList   = new MessageListWidget(leftPane);
     m_msgList->setStyleSheet("border-width:0px;border-style:solid;");
-    connect(m_msgList, &MessageListWidget::itemClicked,
+    connect(m_msgList, &MessageListWidget::conversationActivated,
             this, &MessageApplication::onMessageClicked);
 
     QVBoxLayout* leftLayout = new QVBoxLayout(leftPane);
@@ -70,17 +70,16 @@ void MessageApplication::paintEvent(QPaintEvent*)
     p.drawRect(rect());
 }
 
-void MessageApplication::onMessageClicked(MessageListItem *item)
+void MessageApplication::onMessageClicked(const QString& conversationId)
 {
-    if (!item)
+    if (conversationId.isEmpty())
         return;
     m_chatArea->clearAll();
     m_rightStack->setCurrentWidget(m_chatArea);
     auto& mr = MessageRepository::instance();
-    const QString id = item->getChatID();
-    auto msgs = mr.requestConversationMessages({id});
-    auto meta = mr.requestConversationMeta({id});
+    auto msgs = mr.requestConversationMessages({conversationId});
+    auto meta = mr.requestConversationMeta({conversationId});
     m_chatArea->setConversationMeta(meta);
-    m_chatArea->setMessageId(id);
+    m_chatArea->setMessageId(conversationId);
     m_chatArea->initMessage(msgs);
 }

@@ -18,6 +18,8 @@ public:
     void setPageStep(int step);
     int value() const { return m_value; }
     qreal opacity() const { return m_opacity; }
+    bool needsDisplay() const { return m_maximum > m_minimum; }
+    bool isDragging() const { return m_isDragging; }
 
 public slots:
     void setValue(int value);
@@ -50,6 +52,7 @@ private:
     QTimer *m_fadeOutTimer;
 
     QRect getHandleRect() const;
+    void updateVisibility();
 
     void updateValue(const QPoint &pos);
 };

@@ -15,7 +15,7 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
 private slots:
-    void onMessageClicked(MessageListItem* item);
+    void onMessageClicked(const QString& conversationId);
 private:
     QSplitter*          m_splitter;
     TopSearchWidget*    m_topSearch;

@@ -1,98 +1,86 @@
-// MessageListWidget.cpp
 #include "MessageListWidget.h"
+
+#include <QItemSelectionModel>
+
+#include "MessageListDelegate.h"
+#include "MessageListModel.h"
 #include "MessageRepository.h"
-#include <QEvent>
-#include <algorithm>
 
 MessageListWidget::MessageListWidget(QWidget* parent)
-    : CustomScrollArea(parent)
+    : OverlayScrollListView(parent)
+    , m_model(new MessageListModel(this))
+    , m_delegate(new MessageListDelegate(this))
 {
-    installEventFilter(this);
-    setMouseTracking(true);
-    const QVector<ConversationSummary> conversations =
-            MessageRepository::instance().requestConversationList();
-    for (const ConversationSummary& conversation : conversations) {
-        addMessage(conversation);
-    }
-    std::sort(m_items.begin(), m_items.end(),
-          [](MessageListItem* a, MessageListItem* b) {
-              return a->getLastTime() > b->getLastTime();
-    });
+    setModel(m_model);
+    setItemDelegate(m_delegate);
+    setSelectionMode(QAbstractItemView::SingleSelection);
+    setSelectionBehavior(QAbstractItemView::SelectRows);
+    setUniformItemSizes(true);
+    setSpacing(0);
+    setEditTriggers(QAbstractItemView::NoEditTriggers);
+    setStyleSheet("border-width:0px;border-style:solid;background:#ffffff;");
+    setWheelStepPixels(64);
+    setScrollBarInsets(8, 4);
+
+    m_model->setConversations(MessageRepository::instance().requestConversationList());
+
+    connect(selectionModel(), &QItemSelectionModel::currentChanged,
+            this, &MessageListWidget::onCurrentChanged);
 }
 
-void MessageListWidget::addMessage(const ConversationSummary& data) {
-    auto *it = new MessageListItem(data, contentWidget);
-    connect(it, &MessageListItem::itemClicked,
-            this, &MessageListWidget::onItemClicked);
-    m_items.append(it);
+QString MessageListWidget::selectedConversationId() const
+{
+    return m_model->conversationIdAt(currentIndex());
 }
 
-void MessageListWidget::clearMessages() {
-    for (auto *it : m_items) {
-        delete it;
-    }
-    m_items.clear();
-}
-
-void MessageListWidget::layoutContent() {
-    if (!std::is_sorted(m_items.begin(), m_items.end(),
-    [](MessageListItem* a, MessageListItem* b) { return a->getLastTime() > b->getLastTime(); }))
-    {
-        std::sort(m_items.begin(), m_items.end(),
-              [](MessageListItem* a, MessageListItem* b) {
-                  return a->getLastTime() > b->getLastTime();
-        });
-    }
-    int y = 0;
-    int w = contentWidget->width();
-    for (auto *it : m_items) {
-        int h = it->sizeHint().height();
-        it->setGeometry(0, y, w, h);
-        y += h;
-    }
-    // 最后调整 contentWidget 的高度，让基类能正确计算滚动范围
-    contentWidget->resize(w, y);
-}
-
-void MessageListWidget::onItemClicked(MessageListItem* item) {
-    if (!item) return;
-    if (item != selectItem) {
-        emit itemClicked(item);
-    }
-    if (selectItem) {
-        selectItem->setSelected(false);
-        item->setSelected(true);
-        selectItem = item;
-    }
-    else {
-        selectItem = item;
-        selectItem->setSelected(true);
-    }
+ConversationSummary MessageListWidget::selectedConversation() const
+{
+    return m_model->conversationAt(currentIndex());
 }
 
 void MessageListWidget::onLastMessageUpdated(const QString& chatId,
                                              const QString& text,
                                              const QDateTime& timestamp)
 {
-    MessageListItem* item = findItemById(chatId);
-    if (item) {
-        item->setLastTime(timestamp);
-        item->setLastText(text);
-    }
-    // 按时间排序
-    std::sort(m_items.begin(), m_items.end(),
-              [](MessageListItem* a, MessageListItem* b) {
-                  return a->getLastTime() > b->getLastTime();
-              });
-    layoutContent();
+    const QString selectedId = selectedConversationId();
+    m_model->updateConversationPreview(chatId, text, timestamp);
+    restoreSelection(selectedId);
 }
 
-MessageListItem* MessageListWidget::findItemById(const QString& id)
+void MessageListWidget::onCurrentChanged(const QModelIndex& current, const QModelIndex& previous)
 {
-    for (auto item : m_items) {
-        if (item->getChatID() == id) {
-            return item;
-        }
+    if (!current.isValid()) {
+        return;
     }
-    return nullptr;
+
+    const QString conversationId = m_model->conversationIdAt(current);
+    if (conversationId.isEmpty()) {
+        return;
+    }
+
+    m_model->markConversationRead(conversationId);
+    update(current);
+
+    if (!m_restoringSelection && conversationId != m_model->conversationIdAt(previous)) {
+        emit conversationActivated(conversationId);
+    }
+}
+
+void MessageListWidget::restoreSelection(const QString& conversationId)
+{
+    if (conversationId.isEmpty()) {
+        clearSelection();
+        return;
+    }
+
+    const int row = m_model->indexOfConversation(conversationId);
+    if (row < 0) {
+        clearSelection();
+        return;
+    }
+
+    const QModelIndex index = m_model->index(row, 0);
+    m_restoringSelection = true;
+    selectionModel()->setCurrentIndex(index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+    m_restoringSelection = false;
 }
