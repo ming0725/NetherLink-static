@@ -17,10 +17,11 @@ protected:
 private slots:
     void onMessageClicked(const QString& conversationId);
 private:
+    void ensureChatArea();
     QSplitter*          m_splitter;
     TopSearchWidget*    m_topSearch;
     MessageListWidget*  m_msgList;
     QStackedWidget*     m_rightStack;
     DefaultPage*        m_defaultPage;
-    ChatArea*           m_chatArea;
+    ChatArea*           m_chatArea = nullptr;
 };

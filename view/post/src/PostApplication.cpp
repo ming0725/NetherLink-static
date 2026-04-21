@@ -14,6 +14,7 @@
 #include <QPropertyAnimation>
 #include <QPainter>
 #include <QResizeEvent>
+#include <QTimer>
 
 namespace {
 
@@ -123,19 +124,12 @@ PostApplication::PostApplication(QWidget* parent)
         , m_bar(new PostApplicationBar(this))
         , m_stack(new QStackedWidget(this))
         , m_detailView(nullptr)
-        , m_createPage(new PostCreatePage(this))
 {
     m_bar->enableBlur(false);
-    auto* postFeedPage = new PostFeedPage(this);
-    auto* followFeedPage = new PostFeedPage(this);
-    m_stack->addWidget(postFeedPage);
-    m_stack->addWidget(followFeedPage);
-    m_stack->addWidget(m_createPage);  // 添加创建页面到堆栈
+    m_stack->addWidget(createPlaceholderPage());
+    m_stack->addWidget(createPlaceholderPage());
+    m_stack->addWidget(createPlaceholderPage());
     m_stack->setCurrentIndex(0);
-    connect(postFeedPage, &PostFeedPage::postClickedWithGeometry,
-            this, &PostApplication::onPostClickedWithGeometry);
-    connect(followFeedPage, &PostFeedPage::postClickedWithGeometry,
-            this, &PostApplication::onPostClickedWithGeometry);
     connect(m_bar, &PostApplicationBar::pageClicked, this, &PostApplication::onPageChanged);
     connect(&PostRepository::instance(), &PostRepository::postDetailReady,
             this, &PostApplication::onPostDetailReady);
@@ -157,6 +151,18 @@ PostApplication::PostApplication(QWidget* parent)
     m_overlay->setGeometry(rect());
     m_overlay->lower();
     updateLayerOrder();
+
+    if (!m_initialPageLoadScheduled) {
+        m_initialPageLoadScheduled = true;
+        QTimer::singleShot(0, this, [this]() {
+            ensurePageLoaded(0);
+        });
+    }
+}
+
+void PostApplication::showEvent(QShowEvent* event)
+{
+    QWidget::showEvent(event);
 }
 
 void PostApplication::resizeEvent(QResizeEvent* ev)
@@ -309,12 +315,72 @@ void PostApplication::onPostDetailReady(const QString& requestId, const PostDeta
 
 void PostApplication::onPageChanged(int index)
 {
-    if (index == 2) { // 发表页面
-        m_stack->setCurrentWidget(m_createPage);
-    } else if (index == 1) { // 关注页面
-        m_stack->setCurrentIndex(1);
-    } else if (index == 0) { // 首页
-        m_stack->setCurrentIndex(0);
+    if (index < 0 || index >= m_stack->count()) {
+        return;
+    }
+
+    ensurePageLoaded(index);
+    m_stack->setCurrentIndex(index);
+}
+
+QWidget* PostApplication::createPlaceholderPage() const
+{
+    auto* page = new QWidget(m_stack);
+    page->setAttribute(Qt::WA_StyledBackground, true);
+    page->setStyleSheet("background:transparent;border:none;");
+    return page;
+}
+
+void PostApplication::replaceStackPage(int index, QWidget* page)
+{
+    if (!page || index < 0 || index >= m_stack->count()) {
+        return;
+    }
+
+    QWidget* existing = m_stack->widget(index);
+    if (existing == page) {
+        return;
+    }
+
+    const bool wasCurrent = (m_stack->currentIndex() == index);
+
+    m_stack->removeWidget(existing);
+    m_stack->insertWidget(index, page);
+    if (wasCurrent) {
+        m_stack->setCurrentWidget(page);
+    }
+    existing->deleteLater();
+}
+
+void PostApplication::ensurePageLoaded(int index)
+{
+    switch (index) {
+    case 0:
+        if (!m_homeFeedPage) {
+            m_homeFeedPage = new PostFeedPage(this);
+            connect(m_homeFeedPage, &PostFeedPage::postClickedWithGeometry,
+                    this, &PostApplication::onPostClickedWithGeometry);
+            m_homeFeedPage->ensureInitialized();
+            replaceStackPage(index, m_homeFeedPage);
+        }
+        break;
+    case 1:
+        if (!m_followFeedPage) {
+            m_followFeedPage = new PostFeedPage(this);
+            connect(m_followFeedPage, &PostFeedPage::postClickedWithGeometry,
+                    this, &PostApplication::onPostClickedWithGeometry);
+            m_followFeedPage->ensureInitialized();
+            replaceStackPage(index, m_followFeedPage);
+        }
+        break;
+    case 2:
+        if (!m_createPage) {
+            m_createPage = new PostCreatePage(this);
+            replaceStackPage(index, m_createPage);
+        }
+        break;
+    default:
+        break;
     }
 }
 

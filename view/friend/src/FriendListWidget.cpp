@@ -22,7 +22,15 @@ FriendListWidget::FriendListWidget(QWidget* parent)
     setStyleSheet("border-width:0px;border-style:solid;background:#ffffff;");
     setWheelStepPixels(64);
     setScrollBarInsets(8, 4);
+}
 
+void FriendListWidget::ensureInitialized()
+{
+    if (m_initialized) {
+        return;
+    }
+
+    m_initialized = true;
     m_model->setFriends(UserRepository::instance().requestFriendList());
 }
 
@@ -34,6 +42,12 @@ QString FriendListWidget::selectedFriendId() const
 FriendSummary FriendListWidget::selectedFriend() const
 {
     return m_model->friendAt(currentIndex());
+}
+
+void FriendListWidget::showEvent(QShowEvent* event)
+{
+    OverlayScrollListView::showEvent(event);
+    ensureInitialized();
 }
 
 void FriendListWidget::mousePressEvent(QMouseEvent* event)

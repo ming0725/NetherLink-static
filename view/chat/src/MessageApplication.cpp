@@ -33,8 +33,6 @@ MessageApplication::MessageApplication(QWidget* parent)
 
     m_rightStack->addWidget(m_defaultPage);
     m_rightStack->setCurrentWidget(m_defaultPage);
-    m_chatArea = new ChatArea(this);
-    m_rightStack->addWidget(m_chatArea);
 
     // 整体分割
     m_splitter = new QSplitter(Qt::Horizontal, this);
@@ -54,7 +52,6 @@ MessageApplication::MessageApplication(QWidget* parent)
     mainLayout->addWidget(m_splitter);
 
     setWindowFlag(Qt::FramelessWindowHint);
-    connect(m_chatArea, &ChatArea::sendMessage, m_msgList, &MessageListWidget::onLastMessageUpdated);
     m_msgList->clearCurrentConversationSelection();
     m_rightStack->setCurrentWidget(m_defaultPage);
 }
@@ -77,6 +74,7 @@ void MessageApplication::onMessageClicked(const QString& conversationId)
 {
     if (conversationId.isEmpty())
         return;
+    ensureChatArea();
     m_chatArea->clearAll();
     m_rightStack->setCurrentWidget(m_chatArea);
     auto& mr = MessageRepository::instance();
@@ -85,4 +83,16 @@ void MessageApplication::onMessageClicked(const QString& conversationId)
     m_chatArea->setConversationMeta(meta);
     m_chatArea->setMessageId(conversationId);
     m_chatArea->initMessage(msgs);
+}
+
+void MessageApplication::ensureChatArea()
+{
+    if (m_chatArea) {
+        return;
+    }
+
+    m_chatArea = new ChatArea(this);
+    m_rightStack->addWidget(m_chatArea);
+    connect(m_chatArea, &ChatArea::sendMessage,
+            m_msgList, &MessageListWidget::onLastMessageUpdated);
 }

@@ -17,10 +17,12 @@ class AiChatListWidget : public OverlayScrollListView
 {
 public:
     explicit AiChatListWidget(QWidget* parent = nullptr);
+    void ensureInitialized();
 
 protected:
     void mousePressEvent(QMouseEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
+    void showEvent(QShowEvent* event) override;
 
 private:
     void reloadEntries(const QString& selectedConversationId = {});
@@ -47,4 +49,5 @@ private:
     qreal m_stickyTransitionProgress = 1.0;
     bool m_stickyVisible = false;
     int m_stickyOffsetY = 0;
+    bool m_initialized = false;
 };

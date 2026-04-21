@@ -14,7 +14,6 @@ PostFeedPage::PostFeedPage(QWidget* parent)
     setStyleSheet("border-width:0px;border-style:solid;background:transparent;");
     setModel(m_model);
     setCardDelegate(m_delegate);
-    loadMore();
 
     connect(this, &PostMasonryView::reachedBottom, this, [this]() {
         QTimer::singleShot(100, this, &PostFeedPage::loadMore);
@@ -27,8 +26,19 @@ PostFeedPage::PostFeedPage(QWidget* parent)
             this, &PostFeedPage::onRepositoryPostUpdated);
 }
 
+void PostFeedPage::ensureInitialized()
+{
+    if (m_initialized) {
+        return;
+    }
+
+    m_initialized = true;
+    loadMore();
+}
+
 void PostFeedPage::setPosts(const QVector<PostSummary>& posts)
 {
+    m_initialized = true;
     m_model->setPosts(posts);
     m_nextOffset = posts.size();
     m_hasMore = posts.size() >= kPageSize;

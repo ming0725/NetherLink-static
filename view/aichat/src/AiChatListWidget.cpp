@@ -59,6 +59,16 @@ AiChatListWidget::AiChatListWidget(QWidget* parent)
             this, [this](const QModelIndex&, const QModelIndex&, const QVector<int>&) {
                 updateStickyHeader();
             });
+    updateStickyHeader();
+}
+
+void AiChatListWidget::ensureInitialized()
+{
+    if (m_initialized) {
+        return;
+    }
+
+    m_initialized = true;
     reloadEntries();
     updateStickyHeader();
 }
@@ -111,6 +121,12 @@ void AiChatListWidget::paintEvent(QPaintEvent* event)
 {
     OverlayScrollListView::paintEvent(event);
     drawStickyHeader();
+}
+
+void AiChatListWidget::showEvent(QShowEvent* event)
+{
+    OverlayScrollListView::showEvent(event);
+    ensureInitialized();
 }
 
 void AiChatListWidget::onCurrentChanged(const QModelIndex& current, const QModelIndex& previous)

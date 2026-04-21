@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "MessageApplication.h"
+#include "FriendApplication.h"
 #include "AiChatApplication.h"
 #include "PostApplication.h"
 #include "CurrentUser.h"
@@ -98,13 +99,13 @@ MainWindow::MainWindow(QWidget* parent)
 
     setDragTitleBar(titleBar);
 
-
-    stack->addWidget(new MessageApplication(this));
-    stack->addWidget(new FriendApplication(this));
-    stack->addWidget(new PostApplication(this));
-    stack->addWidget(new AiChatApplication(this));
-    stack->addWidget(new DefaultPage(this));
-    // 默认选中第一个
+    m_messageApp = new MessageApplication(this);
+    stack->addWidget(m_messageApp);
+    stack->addWidget(createPlaceholderPage());
+    stack->addWidget(createPlaceholderPage());
+    stack->addWidget(createPlaceholderPage());
+    m_defaultPage = new DefaultPage(this);
+    stack->addWidget(m_defaultPage);
     stack->setCurrentIndex(0);
 
     // 绑定点击信号，切换栈页
@@ -155,7 +156,64 @@ void MainWindow::onBarItemClicked(ApplicationBarItem *item)
 {
     int idx = appBar->indexOfTopItem(item);
     if (idx >= 0 && idx < stack->count()) {
+        ensureApplicationLoaded(idx);
         stack->setCurrentIndex(idx);
+    }
+}
+
+QWidget* MainWindow::createPlaceholderPage() const
+{
+    auto* page = new QWidget(stack);
+    page->setAttribute(Qt::WA_StyledBackground, true);
+    page->setStyleSheet("background:#ffffff;border:none;");
+    return page;
+}
+
+void MainWindow::replaceStackPage(int index, QWidget* widget)
+{
+    if (!widget || index < 0 || index >= stack->count()) {
+        return;
+    }
+
+    QWidget* existing = stack->widget(index);
+    if (existing == widget) {
+        return;
+    }
+
+    stack->removeWidget(existing);
+    stack->insertWidget(index, widget);
+    existing->deleteLater();
+}
+
+void MainWindow::ensureApplicationLoaded(int index)
+{
+    switch (index) {
+    case 0:
+        if (!m_messageApp) {
+            m_messageApp = new MessageApplication(this);
+            replaceStackPage(index, m_messageApp);
+        }
+        break;
+    case 1:
+        if (!m_friendApp) {
+            m_friendApp = new FriendApplication(this);
+            replaceStackPage(index, m_friendApp);
+        }
+        break;
+    case 2:
+        if (!m_postApp) {
+            m_postApp = new PostApplication(this);
+            replaceStackPage(index, m_postApp);
+        }
+        break;
+    case 3:
+        if (!m_aiChatApp) {
+            m_aiChatApp = new AiChatApplication(this);
+            replaceStackPage(index, m_aiChatApp);
+        }
+        break;
+    default:
+        break;
     }
 }
 

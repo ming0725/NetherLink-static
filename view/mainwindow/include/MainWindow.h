@@ -2,13 +2,16 @@
 
 #include "DefaultPage.h"
 #include "ApplicationBar.h"
-#include "FriendApplication.h"
 #include "SystemWindow.h"
 #include <QMouseEvent>
 #include <QMoveEvent>
 #include <QStackedWidget>
 
 class QPushButton;
+class MessageApplication;
+class FriendApplication;
+class PostApplication;
+class AiChatApplication;
 
 class MainWindow : public SystemWindow {
 public:
@@ -22,6 +25,9 @@ protected:
 private slots:
     void onBarItemClicked(ApplicationBarItem* item);
 private:
+    QWidget* createPlaceholderPage() const;
+    void replaceStackPage(int index, QWidget* widget);
+    void ensureApplicationLoaded(int index);
     void layoutWindow();
 
     ApplicationBar *appBar;
@@ -31,4 +37,9 @@ private:
     QPushButton *btnClose;
     QIcon        iconClose, iconCloseHover;
     QStackedWidget* stack;
+    MessageApplication* m_messageApp = nullptr;
+    FriendApplication* m_friendApp = nullptr;
+    PostApplication* m_postApp = nullptr;
+    AiChatApplication* m_aiChatApp = nullptr;
+    DefaultPage* m_defaultPage = nullptr;
 };

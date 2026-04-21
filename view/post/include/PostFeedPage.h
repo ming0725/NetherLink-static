@@ -12,6 +12,7 @@ class PostFeedPage : public PostMasonryView
 
 public:
     explicit PostFeedPage(QWidget* parent = nullptr);
+    void ensureInitialized();
     void setPosts(const QVector<PostSummary>& posts);
 
 signals:
@@ -29,6 +30,7 @@ private:
     PostCardDelegate* m_delegate;
     int m_nextOffset = 0;
     bool m_hasMore = true;
+    bool m_initialized = false;
 
     static constexpr int kPageSize = 12;
 };
