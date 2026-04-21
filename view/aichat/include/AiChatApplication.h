@@ -3,6 +3,8 @@
 #include "DefaultPage.h"
 #include <QSplitter>
 #include <QWidget>
+#include <QLabel>
+#include <QPushButton>
 
 class AiChatApplication : public QWidget {
     Q_OBJECT

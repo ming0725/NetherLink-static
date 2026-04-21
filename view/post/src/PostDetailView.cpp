@@ -78,19 +78,27 @@ void PostDetailScrollArea::addCommentWidget(QWidget* commentWidget)
 
     commentWidget->setParent(contentWidget);
     m_commentWidgets.append(commentWidget);
-    layoutContent();
+    refreshContentLayout();
 }
 
 PostDetailScrollArea::PostDetailScrollArea(QWidget* parent)
-    : CustomScrollArea(parent)
+    : OverlayScrollArea(parent)
 {
     contentWidget->setObjectName("PostDetailContentWidget");
+    setWheelStepPixels(64);
+    setScrollBarInsets(8, 4);
 }
 
 void PostDetailScrollArea::setLabels(QLabel* titleLabel, QLabel* contentLabel)
 {
     m_titleLabel = titleLabel;
     m_contentLabel = contentLabel;
+    refreshContentLayout();
+}
+
+void PostDetailScrollArea::relayout()
+{
+    refreshContentLayout();
 }
 
 PostDetailView::PostDetailView(QWidget* parent)
@@ -147,14 +155,15 @@ void PostDetailView::setupUI()
 
     m_contentLabel = new QLabel(m_contentWidget);
     m_contentLabel->setWordWrap(true);
+    m_contentLabel->setTextFormat(Qt::PlainText);
+    m_contentLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
     m_contentLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     QFont contentFont;
     contentFont.setStyleStrategy(QFont::PreferAntialias);
     contentFont.setPointSize(13);
     m_contentLabel->setFont(contentFont);
 
-    static_cast<PostDetailScrollArea*>(m_contentArea)->m_titleLabel = m_titleLabel;
-    static_cast<PostDetailScrollArea*>(m_contentArea)->m_contentLabel = m_contentLabel;
+    static_cast<PostDetailScrollArea*>(m_contentArea)->setLabels(m_titleLabel, m_contentLabel);
 
     m_likeBtn = new QPushButton(this);
     m_likeBtn->setFixedSize(32, 32);
@@ -343,6 +352,7 @@ void PostDetailView::setPreviewSummary(const PostSummary& summary)
     m_likeCount->setText(QString::number(m_likes));
     m_commentCount->setText(QString::number(m_comments));
 
+    static_cast<PostDetailScrollArea*>(m_contentArea)->relayout();
     updateLayout();
     update();
 }
@@ -381,6 +391,7 @@ void PostDetailView::setPostData(const PostDetailData& data)
     });
     imageFade->start(QAbstractAnimation::DeleteWhenStopped);
 
+    static_cast<PostDetailScrollArea*>(m_contentArea)->relayout();
     updateLayout();
     update();
 }

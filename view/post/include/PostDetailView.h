@@ -4,10 +4,10 @@
 #include <QPushButton>
 #include <QJsonObject>
 #include "LineEditComponent.h"
-#include "CustomScrollArea.h"
+#include "OverlayScrollArea.h"
 #include "RepositoryTypes.h"
 
-class PostDetailScrollArea : public CustomScrollArea {
+class PostDetailScrollArea : public OverlayScrollArea {
     Q_OBJECT
 protected:
     void layoutContent() override;
@@ -15,6 +15,7 @@ public:
     explicit PostDetailScrollArea(QWidget* parent = nullptr);
     void setLabels(QLabel* titleLabel, QLabel* contentLabel);
     void addCommentWidget(QWidget* commentWidget);
+    void relayout();
     QLabel* m_titleLabel = nullptr;
     QLabel* m_contentLabel = nullptr;
 private:
@@ -56,7 +57,7 @@ private:
     QLabel* m_authorAvatar;
     QLabel* m_authorName;
     QPushButton* m_followBtn;
-    CustomScrollArea* m_contentArea;
+    OverlayScrollArea* m_contentArea;
     QWidget* m_contentWidget;
     QLabel* m_titleLabel;
     QLabel* m_contentLabel;
