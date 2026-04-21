@@ -15,6 +15,7 @@ public:
 
     QString selectedConversationId() const;
     ConversationSummary selectedConversation() const;
+    void clearCurrentConversationSelection();
 
 signals:
     void conversationActivated(const QString& conversationId);

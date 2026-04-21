@@ -23,7 +23,7 @@ protected:
     void paintEvent(QPaintEvent* event) override;
 
 private:
-    void addChatItem(const QString& title, const QDateTime& time);
+    void reloadEntries(const QString& selectedConversationId = {});
     void onCurrentChanged(const QModelIndex& current, const QModelIndex& previous);
     void updateStickyHeader();
     struct StickyHeaderState {

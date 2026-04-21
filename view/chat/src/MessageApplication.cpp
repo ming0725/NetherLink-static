@@ -41,6 +41,7 @@ MessageApplication::MessageApplication(QWidget* parent)
     m_splitter->addWidget(leftPane);
     m_splitter->addWidget(m_rightStack);
     m_splitter->setHandleWidth(0);
+    m_splitter->setStyleSheet("QSplitter::handle { background: transparent; border: none; }");
     m_splitter->setChildrenCollapsible(false);
     m_splitter->setStretchFactor(0, 0);
     m_splitter->setStretchFactor(1, 1);
@@ -54,6 +55,8 @@ MessageApplication::MessageApplication(QWidget* parent)
 
     setWindowFlag(Qt::FramelessWindowHint);
     connect(m_chatArea, &ChatArea::sendMessage, m_msgList, &MessageListWidget::onLastMessageUpdated);
+    m_msgList->clearCurrentConversationSelection();
+    m_rightStack->setCurrentWidget(m_defaultPage);
 }
 
 void MessageApplication::resizeEvent(QResizeEvent*)

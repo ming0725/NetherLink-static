@@ -8,12 +8,11 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
-#include <QRandomGenerator>
 #include <QScrollBar>
 #include <QStyleOptionViewItem>
-#include <QStringList>
 #include <QVariantAnimation>
 
+#include "AiChatRepository.h"
 #include "AiChatListDelegate.h"
 #include "AiChatListModel.h"
 
@@ -60,39 +59,35 @@ AiChatListWidget::AiChatListWidget(QWidget* parent)
             this, [this](const QModelIndex&, const QModelIndex&, const QVector<int>&) {
                 updateStickyHeader();
             });
-
-    const QStringList sampleTitles = {
-        QStringLiteral("深度研究助理"),
-        QStringLiteral("界面重构草案"),
-        QStringLiteral("插件调试记录"),
-        QStringLiteral("多代理协作实验"),
-        QStringLiteral("日报自动整理"),
-        QStringLiteral("提示词优化备份"),
-        QStringLiteral("模型切换对照"),
-        QStringLiteral("前端交互验证")
-    };
-
-    const QDateTime now = QDateTime::currentDateTime();
-    for (int i = 0; i < 40; ++i) {
-        const int offsetDays = QRandomGenerator::global()->bounded(0, 18);
-        const int offsetMinutes = QRandomGenerator::global()->bounded(0, 24 * 60);
-
-        addChatItem(QStringLiteral("%1 %2")
-                            .arg(sampleTitles.at(i % sampleTitles.size()))
-                            .arg(i + 1),
-                    now.addDays(-offsetDays).addSecs(-offsetMinutes * 60));
-    }
-
+    reloadEntries();
     updateStickyHeader();
 }
 
-void AiChatListWidget::addChatItem(const QString& title, const QDateTime& time)
+void AiChatListWidget::reloadEntries(const QString& selectedConversationId)
 {
-    if (title.isEmpty() || !time.isValid()) {
+    m_model->setEntries(AiChatRepository::instance().requestAiChatList());
+
+    if (selectedConversationId.isEmpty()) {
+        clearSelection();
+        if (selectionModel()) {
+            selectionModel()->clearCurrentIndex();
+        }
+        setCurrentIndex(QModelIndex());
         return;
     }
 
-    m_model->addEntry({title, time});
+    const int row = m_model->rowOfConversation(selectedConversationId);
+    if (row < 0) {
+        clearSelection();
+        if (selectionModel()) {
+            selectionModel()->clearCurrentIndex();
+        }
+        setCurrentIndex(QModelIndex());
+        return;
+    }
+
+    selectionModel()->setCurrentIndex(m_model->index(row, 0),
+                                      QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
 }
 
 void AiChatListWidget::mousePressEvent(QMouseEvent* event)
@@ -248,7 +243,9 @@ void AiChatListWidget::renameItem(const QModelIndex& index)
         return;
     }
 
-    m_model->updateTitle(index.row(), newTitle);
+    if (AiChatRepository::instance().renameAiChatConversation(entry.conversationId, newTitle)) {
+        reloadEntries(entry.conversationId);
+    }
 }
 
 void AiChatListWidget::deleteItem(const QModelIndex& index)
@@ -259,19 +256,23 @@ void AiChatListWidget::deleteItem(const QModelIndex& index)
 
     const int removedRow = index.row();
     const bool wasCurrent = currentIndex() == index;
-
-    m_model->removeRowAt(removedRow);
-
-    if (wasCurrent) {
-        if (m_model->rowCount() > 0) {
-            const int nextRow = qBound(0, removedRow, m_model->rowCount() - 1);
-            selectionModel()->setCurrentIndex(m_model->index(nextRow, 0),
-                                              QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
-        } else {
-            clearSelection();
-            setCurrentIndex(QModelIndex());
+    const QString removedId = index.data(AiChatListModel::ConversationIdRole).toString();
+    QString nextSelectionId;
+    if (m_model->rowCount() > 1) {
+        const int nextRow = qBound(0, removedRow, m_model->rowCount() - 2);
+        const QModelIndex nextIndex = m_model->index(nextRow, 0);
+        nextSelectionId = nextIndex.data(AiChatListModel::ConversationIdRole).toString();
+        if (nextSelectionId == removedId && removedRow > 0) {
+            nextSelectionId = m_model->index(removedRow - 1, 0).data(AiChatListModel::ConversationIdRole).toString();
         }
     }
+
+    if (!AiChatRepository::instance().removeAiChatConversation(removedId)) {
+        return;
+    }
+
+    reloadEntries(wasCurrent ? nextSelectionId
+                             : currentIndex().data(AiChatListModel::ConversationIdRole).toString());
 }
 
 void AiChatListWidget::drawStickyHeader() const

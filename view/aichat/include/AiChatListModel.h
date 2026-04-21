@@ -1,20 +1,15 @@
 #pragma once
 
 #include <QAbstractListModel>
-#include <QDateTime>
-#include <QString>
-#include <QVector>
 
-struct AiChatListEntry {
-    QString title;
-    QDateTime time;
-};
+#include "RepositoryTypes.h"
 
 class AiChatListModel : public QAbstractListModel
 {
 public:
     enum Role {
-        TitleRole = Qt::UserRole + 1,
+        ConversationIdRole = Qt::UserRole + 1,
+        TitleRole,
         TimeRole,
         SectionTitleRole,
         IsSectionStartRole
@@ -26,11 +21,10 @@ public:
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     Qt::ItemFlags flags(const QModelIndex& index) const override;
 
-    void addEntry(AiChatListEntry entry);
-    void updateTitle(int row, const QString& title);
-    void removeRowAt(int row);
+    void setEntries(QVector<AiChatListEntry> entries);
 
     AiChatListEntry entryAt(const QModelIndex& index) const;
+    int rowOfConversation(const QString& conversationId) const;
     bool isSectionStart(int row) const;
     QString sectionTitleAt(int row) const;
     int sectionStartRowForRow(int row) const;

@@ -28,9 +28,13 @@ void DefaultPage::paintEvent(QPaintEvent*)
         if (scaled.isNull()) {
             return;
         }
-        // 居中位置
-        int x = (width()  - scaled.width())  / 2;
-        int y = (height() - scaled.height()) / 2;
-        painter.drawPixmap(x, y, scaled);
+        const qreal dpr = scaled.devicePixelRatio();
+        const QSize logicalSize(qRound(scaled.width() / dpr),
+                                qRound(scaled.height() / dpr));
+        const QRect targetRect((width() - logicalSize.width()) / 2,
+                               (height() - logicalSize.height()) / 2,
+                               logicalSize.width(),
+                               logicalSize.height());
+        painter.drawPixmap(targetRect, scaled);
     }
 }

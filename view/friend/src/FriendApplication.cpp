@@ -16,6 +16,7 @@ FriendApplication::FriendApplication(QWidget* parent)
     m_splitter->addWidget(m_leftPane);
     m_splitter->addWidget(m_defaultPage);
     m_splitter->setHandleWidth(0);               // >0，允许拖拽
+    m_splitter->setStyleSheet("QSplitter::handle { background: transparent; border: none; }");
     m_splitter->setChildrenCollapsible(false);
     m_splitter->setStretchFactor(0, 0);          // 左侧不自动扩展
     m_splitter->setStretchFactor(1, 1);          // 右侧占满剩余

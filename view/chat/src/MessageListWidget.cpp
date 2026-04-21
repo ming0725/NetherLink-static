@@ -1,6 +1,7 @@
 #include "MessageListWidget.h"
 
 #include <QItemSelectionModel>
+#include <QTimer>
 
 #include "MessageListDelegate.h"
 #include "MessageListModel.h"
@@ -26,6 +27,7 @@ MessageListWidget::MessageListWidget(QWidget* parent)
 
     connect(selectionModel(), &QItemSelectionModel::currentChanged,
             this, &MessageListWidget::onCurrentChanged);
+    QTimer::singleShot(0, this, [this]() { clearCurrentConversationSelection(); });
 }
 
 QString MessageListWidget::selectedConversationId() const
@@ -36,6 +38,20 @@ QString MessageListWidget::selectedConversationId() const
 ConversationSummary MessageListWidget::selectedConversation() const
 {
     return m_model->conversationAt(currentIndex());
+}
+
+void MessageListWidget::clearCurrentConversationSelection()
+{
+    if (!selectionModel()) {
+        return;
+    }
+
+    m_restoringSelection = true;
+    clearSelection();
+    selectionModel()->clearCurrentIndex();
+    setCurrentIndex(QModelIndex());
+    m_restoringSelection = false;
+    viewport()->update();
 }
 
 void MessageListWidget::onLastMessageUpdated(const QString& chatId,
@@ -69,13 +85,13 @@ void MessageListWidget::onCurrentChanged(const QModelIndex& current, const QMode
 void MessageListWidget::restoreSelection(const QString& conversationId)
 {
     if (conversationId.isEmpty()) {
-        clearSelection();
+        clearCurrentConversationSelection();
         return;
     }
 
     const int row = m_model->indexOfConversation(conversationId);
     if (row < 0) {
-        clearSelection();
+        clearCurrentConversationSelection();
         return;
     }
 

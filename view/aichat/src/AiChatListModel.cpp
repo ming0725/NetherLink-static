@@ -17,11 +17,13 @@ int AiChatListModel::rowCount(const QModelIndex& parent) const
 QVariant AiChatListModel::data(const QModelIndex& index, int role) const
 {
     const AiChatListEntry entry = entryAt(index);
-    if (!entry.time.isValid() && entry.title.isEmpty()) {
+    if (!entry.time.isValid() && entry.title.isEmpty() && entry.conversationId.isEmpty()) {
         return {};
     }
 
     switch (role) {
+    case ConversationIdRole:
+        return entry.conversationId;
     case Qt::DisplayRole:
     case TitleRole:
         return entry.title;
@@ -46,37 +48,11 @@ Qt::ItemFlags AiChatListModel::flags(const QModelIndex& index) const
     return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
 }
 
-void AiChatListModel::addEntry(AiChatListEntry entry)
+void AiChatListModel::setEntries(QVector<AiChatListEntry> entries)
 {
-    if (!entry.time.isValid()) {
-        return;
-    }
-
     beginResetModel();
-    m_entries.append(std::move(entry));
+    m_entries = std::move(entries);
     sortEntries();
-    endResetModel();
-}
-
-void AiChatListModel::updateTitle(int row, const QString& title)
-{
-    if (row < 0 || row >= m_entries.size()) {
-        return;
-    }
-
-    m_entries[row].title = title;
-    const QModelIndex modelIndex = index(row, 0);
-    emit dataChanged(modelIndex, modelIndex, {Qt::DisplayRole, TitleRole});
-}
-
-void AiChatListModel::removeRowAt(int row)
-{
-    if (row < 0 || row >= m_entries.size()) {
-        return;
-    }
-
-    beginResetModel();
-    m_entries.removeAt(row);
     endResetModel();
 }
 
@@ -86,6 +62,20 @@ AiChatListEntry AiChatListModel::entryAt(const QModelIndex& index) const
         return {};
     }
     return m_entries.at(index.row());
+}
+
+int AiChatListModel::rowOfConversation(const QString& conversationId) const
+{
+    if (conversationId.isEmpty()) {
+        return -1;
+    }
+
+    for (int row = 0; row < m_entries.size(); ++row) {
+        if (m_entries.at(row).conversationId == conversationId) {
+            return row;
+        }
+    }
+    return -1;
 }
 
 bool AiChatListModel::isSectionStart(int row) const

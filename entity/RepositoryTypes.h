@@ -35,6 +35,9 @@ struct ConversationMetaRequest {
     QString conversationId;
 };
 
+struct AiChatListRequest {
+};
+
 struct PostFeedRequest {
     int offset = 0;
     int limit = 20;
@@ -74,6 +77,12 @@ struct ConversationMeta {
     int memberCount = 0;
     UserStatus status = Offline;
     bool isDoNotDisturb = false;
+};
+
+struct AiChatListEntry {
+    QString conversationId;
+    QString title;
+    QDateTime time;
 };
 
 struct PostSummary {

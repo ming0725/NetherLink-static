@@ -1,24 +1,27 @@
 #include "PostApplicationBar.h"
-#include <QPainter>
-#include <QPainterPath>
-#include <QVariantAnimation>
-#include <QMouseEvent>
+
+#include <QFontMetrics>
+#include <QGraphicsBlurEffect>
 #include <QGraphicsDropShadowEffect>
-#include <QGraphicsScene>
 #include <QGraphicsPixmapItem>
-#include <QTimer>
-#include <QStackedWidget>
+#include <QGraphicsScene>
+#include <QMouseEvent>
+#include <QPainter>
+#include <QPixmap>
 
 PostApplicationBar::PostApplicationBar(QWidget* parent)
-        : QWidget(parent)
-        , m_parent(parent)
+    : QWidget(parent)
+    , m_parent(parent)
 {
     setAttribute(Qt::WA_TranslucentBackground);
-    auto *shadow = new QGraphicsDropShadowEffect(this);
+    setMouseTracking(true);
+
+    auto* shadow = new QGraphicsDropShadowEffect(this);
     shadow->setBlurRadius(30);
     shadow->setOffset(0, 0);
     shadow->setColor(QColor(150, 150, 150, 220));
     setGraphicsEffect(shadow);
+
     highlightAnim = new QVariantAnimation(this);
     highlightAnim->setDuration(300);
     highlightAnim->setEasingCurve(QEasingCurve::OutCubic);
@@ -26,29 +29,13 @@ PostApplicationBar::PostApplicationBar(QWidget* parent)
             this, &PostApplicationBar::onHighlightValueChanged);
 
     initItems();
-    int n = items.size();
-    int totalW = 0;
-    for (auto* it : items) {
-        totalW += it->width();
-    }
-    int totalSpacing = spacing * (n - 1);
-    int totalMargins = margin * 2;
-    int w = totalW + totalSpacing + totalMargins;
-    int h = itemHeight + margin * 2;
-    resize(w, h);
+    resize(sizeHint());
     layoutItems();
+
     m_updateTimer = new QTimer(this);
     connect(m_updateTimer, &QTimer::timeout, this, &PostApplicationBar::updateBlurBackground);
     m_updateTimer->start(16);
-    resizeEvent(nullptr);
-    QTimer::singleShot(50, this, [this]() {
-        int w = items[selectedItem->index]->width();
-        highlightX = items[selectedItem->index]->x();
-        selectedRect.setRect(highlightX,
-                             height() - itemHeight - margin,
-                             w, itemHeight);
-    });
-    preSize = parent->size();
+    preSize = parent ? parent->size() : QSize();
 }
 
 void PostApplicationBar::enableBlur(bool enabled)
@@ -69,78 +56,186 @@ void PostApplicationBar::enableBlur(bool enabled)
     }
 }
 
-void PostApplicationBar::initItems() {
-    QStringList labels = {"首页", "关注", "发表", "消息", "我"};
-    for (int i = 0; i < labels.size(); ++i) {
-        auto* item = new TextBarItem(labels[i], i, this);
-        item->setFixedHeight(itemHeight);
-        connect(item, &TextBarItem::clicked,
-                this, [this, i]() { onItemClicked(i); });
-        items.append(item);
+void PostApplicationBar::initItems()
+{
+    static const QStringList labels = {
+        QStringLiteral("首页"),
+        QStringLiteral("关注"),
+        QStringLiteral("发表"),
+        QStringLiteral("消息"),
+        QStringLiteral("我")
+    };
+
+    const QFontMetrics metrics(font());
+    items.clear();
+    items.reserve(labels.size());
+    for (const QString& label : labels) {
+        TabItem item;
+        item.label = label;
+        item.widthHint = qMax(minItemWidth, metrics.horizontalAdvance(label) + 28);
+        items.push_back(item);
     }
-    selectedItem = items[0];
+
+    selectedIndex = items.isEmpty() ? -1 : 0;
+    hoveredIndex = -1;
 }
 
-void PostApplicationBar::resizeEvent(QResizeEvent*) {
+void PostApplicationBar::resizeEvent(QResizeEvent* event)
+{
+    QWidget::resizeEvent(event);
     layoutItems();
 }
 
-QSize PostApplicationBar::minimumSizeHint() const {
+QSize PostApplicationBar::minimumSizeHint() const
+{
     return sizeHint();
 }
 
-void PostApplicationBar::layoutItems() {
-    int startX = margin;
-    int y = height() - itemHeight - margin;
-
+QSize PostApplicationBar::sizeHint() const
+{
+    int totalWidth = margin * 2;
     for (int i = 0; i < items.size(); ++i) {
-        int w = items[i]->width();    // 各自宽度
-        items[i]->setGeometry(startX,
-                              y,
-                              w,
-                              itemHeight);
-        startX += w + spacing;
+        totalWidth += items.at(i).widthHint;
+        if (i + 1 < items.size()) {
+            totalWidth += spacing;
+        }
     }
+    return QSize(totalWidth, itemHeight + margin * 2);
 }
 
-void PostApplicationBar::paintEvent(QPaintEvent*) {
+void PostApplicationBar::layoutItems()
+{
+    int startX = margin;
+    const int y = height() - itemHeight - margin;
+    for (TabItem& item : items) {
+        item.rect = QRect(startX, y, item.widthHint, itemHeight);
+        startX += item.widthHint + spacing;
+    }
+
+    if (selectedIndex >= 0 && selectedIndex < items.size()) {
+        highlightX = items.at(selectedIndex).rect.x();
+    } else {
+        highlightX = 0;
+    }
+    updateSelectedRect();
+}
+
+void PostApplicationBar::updateSelectedRect()
+{
+    if (selectedIndex < 0 || selectedIndex >= items.size()) {
+        selectedRect = {};
+        return;
+    }
+
+    selectedRect = QRect(highlightX,
+                         height() - itemHeight - margin,
+                         items.at(selectedIndex).widthHint,
+                         itemHeight);
+}
+
+int PostApplicationBar::indexAtPosition(const QPoint& pos) const
+{
+    for (int index = 0; index < items.size(); ++index) {
+        if (items.at(index).rect.contains(pos)) {
+            return index;
+        }
+    }
+    return -1;
+}
+
+void PostApplicationBar::paintEvent(QPaintEvent*)
+{
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setPen(Qt::NoPen);
 
-    // —— 画模糊背景 和 半透明白底 —— //
+    const QRectF contentRect = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+    const qreal outerRadius = 15.0;
+
     if (!m_blurredBackground.isNull()) {
         QPainterPath clipPath;
-        clipPath.addRoundedRect(rect(), 15, 15);
+        clipPath.addRoundedRect(contentRect, outerRadius, outerRadius);
         painter.setClipPath(clipPath);
         painter.drawImage(rect(), m_blurredBackground);
+        painter.setClipping(false);
     }
+
     painter.setBrush(QColor(255, 255, 255, 100));
-    painter.drawRoundedRect(rect(), 15, 15);
+    painter.drawRoundedRect(contentRect, outerRadius, outerRadius);
 
-    // —— 高亮选中区域 —— //
-    painter.setBrush(QColor(192, 192, 192, 192));
-    painter.setPen(Qt::NoPen);
-    painter.drawRoundedRect(selectedRect, 10, 10);
+    if (!selectedRect.isEmpty()) {
+        painter.setBrush(QColor(192, 192, 192, 192));
+        painter.drawRoundedRect(selectedRect, 10, 10);
+    }
 
-    // —— 在外层圆角区域画描边 —— //
-    QPen pen(QColor(0x0099ff));
-    pen.setWidth(4);
+    painter.setPen(Qt::black);
+    for (const TabItem& item : items) {
+        painter.drawText(item.rect, Qt::AlignCenter, item.label);
+    }
+
+    const qreal borderWidth = 2.0;
+    const qreal inset = borderWidth / 2.0;
+    const QRectF borderRect = rect().adjusted(inset, inset, -inset, -inset);
+    QPen pen(QColor(0x00, 0x99, 0xff));
+    pen.setWidthF(borderWidth);
+    pen.setJoinStyle(Qt::RoundJoin);
+    pen.setCapStyle(Qt::RoundCap);
     painter.setPen(pen);
     painter.setBrush(Qt::NoBrush);
-    painter.drawRoundedRect(rect(), 15, 15);
+    painter.drawRoundedRect(borderRect, outerRadius - inset, outerRadius - inset);
 }
 
-void PostApplicationBar::onItemClicked(int index) {
-    if (selectedItem->index == index) return;
+void PostApplicationBar::mouseMoveEvent(QMouseEvent* event)
+{
+    const int index = indexAtPosition(event->pos());
+    if (hoveredIndex != index) {
+        hoveredIndex = index;
+        if (hoveredIndex >= 0) {
+            setCursor(Qt::PointingHandCursor);
+        } else {
+            unsetCursor();
+        }
+    }
+    QWidget::mouseMoveEvent(event);
+}
 
-    int startX = highlightX;
-    int endX = items[index]->x();
+void PostApplicationBar::leaveEvent(QEvent* event)
+{
+    hoveredIndex = -1;
+    unsetCursor();
+    QWidget::leaveEvent(event);
+}
+
+void PostApplicationBar::mousePressEvent(QMouseEvent* event)
+{
+    if (event->button() != Qt::LeftButton) {
+        QWidget::mousePressEvent(event);
+        return;
+    }
+
+    const int index = indexAtPosition(event->pos());
+    if (index >= 0) {
+        onItemClicked(index);
+        event->accept();
+        return;
+    }
+
+    QWidget::mousePressEvent(event);
+}
+
+void PostApplicationBar::onItemClicked(int index)
+{
+    if (index < 0 || index >= items.size() || selectedIndex == index) {
+        return;
+    }
+
+    const int startX = highlightX;
+    const int endX = items.at(index).rect.x();
     highlightAnim->stop();
+    selectedIndex = index;
     highlightAnim->setStartValue(startX);
     highlightAnim->setEndValue(endX);
     highlightAnim->start();
-    selectedItem = items[index];
     emit pageClicked(index);
     update();
 }
@@ -152,66 +247,47 @@ void PostApplicationBar::setCurrentIndex(int index)
     }
 }
 
-void PostApplicationBar::onHighlightValueChanged(const QVariant &value) {
+void PostApplicationBar::onHighlightValueChanged(const QVariant& value)
+{
     highlightX = value.toInt();
-    int w = items[selectedItem->index]->width();
-
-    selectedRect.setRect(highlightX,
-                         height() - itemHeight - margin,
-                         w, itemHeight);
+    updateSelectedRect();
     update();
 }
 
-QSize PostApplicationBar::sizeHint() const {
-    int n = items.size();
-    int totalW = 0;
-    for (auto* it : items) {
-        totalW += it->width();
+void PostApplicationBar::updateBlurBackground()
+{
+    if (!m_parent || !isVisible() || !isEnableBlur) {
+        return;
     }
-    int totalSpacing = spacing * (n - 1);
-    int totalMargins = margin * 2;
-    int w = totalW + totalSpacing + totalMargins;
-    int h = itemHeight + margin * 2;
-    return QSize(w, h);
-}
 
-void PostApplicationBar::updateBlurBackground() {
-    if (!m_parent || !isVisible() || !isEnableBlur) return;
-
-    // 获取父窗口
     QWidget* postApp = m_parent;
     if (m_parent->size() != preSize) {
-        // 解决拖动窗口大小频闪问题，不要乱动这个代码
         preSize = m_parent->size();
         m_blurredBackground = QImage(size(), QImage::Format_ARGB32);
         m_blurredBackground.fill(Qt::transparent);
         return;
     }
-    // 直接获取PostApplication的背景
-    // 创建一个临时的QPixmap来保存父窗口的截图
+
     QPixmap appShot(postApp->size());
     appShot.fill(Qt::transparent);
-    // 临时保存自己的可见性并隐藏自己
-    bool wasVisible = isVisible();
+    const bool wasVisible = isVisible();
     hide();
-    // 渲染父窗口到pixmap
     postApp->render(&appShot);
-    // 恢复可见性
     if (wasVisible) {
         show();
     }
-    // 获取当前控件在父窗口中的相对位置
-    QRect myRect = geometry();
-    // 从父窗口截图中裁剪出我们位置下的背景部分
-    QPixmap backgroundShot = appShot.copy(myRect);
-    // 应用模糊效果
+
+    const QRect myRect = geometry();
+    const QPixmap backgroundShot = appShot.copy(myRect);
+
     QGraphicsScene scene;
     QGraphicsPixmapItem item;
     item.setPixmap(backgroundShot);
-    auto blurEffect = new QGraphicsBlurEffect;
+    auto* blurEffect = new QGraphicsBlurEffect;
     blurEffect->setBlurRadius(10);
     item.setGraphicsEffect(blurEffect);
     scene.addItem(&item);
+
     m_blurredBackground = QImage(size(), QImage::Format_ARGB32);
     m_blurredBackground.fill(Qt::transparent);
     QPainter painter(&m_blurredBackground);
