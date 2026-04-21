@@ -16,62 +16,30 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
 
-include_directories(${PROJECT_SOURCE_DIR}/components/include)
-include_directories(${PROJECT_SOURCE_DIR}/utils/include)
-include_directories(${PROJECT_SOURCE_DIR}/view/mainwindow/include)
-include_directories(${PROJECT_SOURCE_DIR}/view/aichat/include)
-include_directories(${PROJECT_SOURCE_DIR}/view/chat/include)
-include_directories(${PROJECT_SOURCE_DIR}/view/post/include)
-include_directories(${PROJECT_SOURCE_DIR}/view/friend/include)
-include_directories(${PROJECT_SOURCE_DIR}/data/include)
-include_directories(${PROJECT_SOURCE_DIR}/entity)
-
-file(GLOB COMPONENTS_SOURCES  "${CMAKE_CURRENT_SOURCE_DIR}/components/src/*.cpp")
-file(GLOB COMPONENTS_HEADERS  "${CMAKE_CURRENT_SOURCE_DIR}/components/include/*.h")
-file(GLOB UTILS_SOURCES       "${CMAKE_CURRENT_SOURCE_DIR}/utils/src/*.cpp")
-file(GLOB UTILS_HEADERS       "${CMAKE_CURRENT_SOURCE_DIR}/utils/include/*.h")
-file(GLOB ENTITY_HEADERS      "${CMAKE_CURRENT_SOURCE_DIR}/entity/*.h")
-file(GLOB DATA_HEADERS        "${CMAKE_CURRENT_SOURCE_DIR}/data/include/*.h")
-file(GLOB DATA_SOURCES        "${CMAKE_CURRENT_SOURCE_DIR}/data/src/*.cpp")
-
-file(GLOB VIEW_AICHAT_HEADERS     "${CMAKE_CURRENT_SOURCE_DIR}/view/aichat/include/*.h")
-file(GLOB VIEW_AICHAT_SOURCES     "${CMAKE_CURRENT_SOURCE_DIR}/view/aichat/src/*.cpp")
-file(GLOB VIEW_CHAT_HEADERS       "${CMAKE_CURRENT_SOURCE_DIR}/view/chat/include/*.h")
-file(GLOB VIEW_CHAT_SOURCES       "${CMAKE_CURRENT_SOURCE_DIR}/view/chat/src/*.cpp")
-file(GLOB VIEW_FRIEND_HEADERS     "${CMAKE_CURRENT_SOURCE_DIR}/view/friend/include/*.h")
-file(GLOB VIEW_FRIEND_SOURCES     "${CMAKE_CURRENT_SOURCE_DIR}/view/friend/src/*.cpp")
-file(GLOB VIEW_POST_HEADERS       "${CMAKE_CURRENT_SOURCE_DIR}/view/post/include/*.h")
-file(GLOB VIEW_POST_SOURCES       "${CMAKE_CURRENT_SOURCE_DIR}/view/post/src/*.cpp")
-file(GLOB VIEW_MAINWINDOW_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/view/mainwindow/include/*.h")
-file(GLOB VIEW_MAINWINDOW_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/view/mainwindow/src/*.cpp")
-
-set(PLATFORM_SOURCES)
-if(APPLE)
-    list(APPEND PLATFORM_SOURCES
-        ${CMAKE_CURRENT_SOURCE_DIR}/utils/src/MacWindowBridge.mm
-    )
-endif()
+file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/app/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/app/*.h"
+)
+file(GLOB_RECURSE FEATURE_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/features/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/features/*.h"
+)
+file(GLOB_RECURSE SHARED_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/shared/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shared/*.h"
+)
+file(GLOB_RECURSE PLATFORM_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/platform/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/platform/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/platform/*.mm"
+)
 
 set(PROJECT_SOURCES
     main.cpp
     resources.qrc
-    ${COMPONENTS_HEADERS}
-    ${COMPONENTS_SOURCES}
-    ${UTILS_SOURCES}
-    ${UTILS_HEADERS}
-    ${ENTITY_HEADERS}
-    ${DATA_HEADERS}
-    ${DATA_SOURCES}
-    ${VIEW_AICHAT_HEADERS}
-    ${VIEW_AICHAT_SOURCES}
-    ${VIEW_CHAT_HEADERS}
-    ${VIEW_CHAT_SOURCES}
-    ${VIEW_FRIEND_HEADERS}
-    ${VIEW_FRIEND_SOURCES}
-    ${VIEW_POST_HEADERS}
-    ${VIEW_POST_SOURCES}
-    ${VIEW_MAINWINDOW_HEADERS}
-    ${VIEW_MAINWINDOW_SOURCES}
+    ${APP_SOURCES}
+    ${FEATURE_SOURCES}
+    ${SHARED_SOURCES}
     ${PLATFORM_SOURCES}
 )
 
@@ -97,6 +65,10 @@ else()
         )
     endif()
 endif()
+
+target_include_directories(NetherLink-static PRIVATE
+    ${PROJECT_SOURCE_DIR}
+)
 
 target_link_libraries(NetherLink-static PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
 
