@@ -1,59 +1,84 @@
 // PostDetailView.cpp
-#include <QPainter>
-#include <QVBoxLayout>
-#include <QJsonArray>
-#include <QScrollBar>
-#include <QFontMetrics>
-#include <QPainterPath>
-#include <QPropertyAnimation>
 #include <QDateTime>
-#include "ImageService.h"
-#include "UserRepository.h"
-#include "PostDetailView.h"
-#include "CurrentUser.h"
+#include <QFontMetrics>
+#include <QPainter>
+#include <QPainterPath>
+#include <QVariantAnimation>
 
-void PostDetailScrollArea::layoutContent() {
-    if (!contentWidget || !m_titleLabel || !m_contentLabel) return;
-    
+#include "CurrentUser.h"
+#include "ImageService.h"
+#include "PostDetailView.h"
+#include "UserRepository.h"
+
+namespace {
+
+const QColor kDetailImagePlaceholder(0xF2, 0xF2, 0xF2);
+constexpr int kPreferredSidePanelWidth = 380;
+constexpr int kMinSidePanelWidth = 340;
+constexpr int kMinImageWidth = 220;
+constexpr int kFallbackImageWidth = 3;
+constexpr int kFallbackImageHeight = 4;
+
+QSize normalizedImageSize(const QSize& size)
+{
+    if (size.isValid() && size.width() > 0 && size.height() > 0) {
+        return size;
+    }
+    return QSize(kFallbackImageWidth, kFallbackImageHeight);
+}
+
+int sidePanelWidthForTotalWidth(int totalWidth)
+{
+    return qMin(kPreferredSidePanelWidth,
+                qMax(kMinSidePanelWidth, totalWidth - kMinImageWidth));
+}
+
+} // namespace
+
+void PostDetailScrollArea::layoutContent()
+{
+    if (!contentWidget || !m_titleLabel || !m_contentLabel) {
+        return;
+    }
+
     const int margin = 20;
     const int spacing = 20;
     int currentY = margin;
-    
-    // 设置标题
+
     QFontMetrics titleMetrics(m_titleLabel->font());
-    int titleWidth = viewport()->width() - 2 * margin;
-    int titleHeight = titleMetrics.boundingRect(0, 0, titleWidth, 0, 
-        Qt::TextWordWrap, m_titleLabel->text()).height();
+    const int titleWidth = viewport()->width() - 2 * margin;
+    const int titleHeight = titleMetrics.boundingRect(0, 0, titleWidth, 0,
+                                                      Qt::TextWordWrap, m_titleLabel->text()).height();
     m_titleLabel->setGeometry(margin, currentY, titleWidth, titleHeight);
     currentY += titleHeight + spacing;
-    
-    // 设置内容
+
     QFontMetrics contentMetrics(m_contentLabel->font());
-    int contentWidth = viewport()->width() - 2 * margin;
-    int contentHeight = contentMetrics.boundingRect(0, 0, contentWidth, 0, 
-        Qt::TextWordWrap, m_contentLabel->text()).height();
+    const int contentWidth = viewport()->width() - 2 * margin;
+    const int contentHeight = contentMetrics.boundingRect(0, 0, contentWidth, 0,
+                                                          Qt::TextWordWrap, m_contentLabel->text()).height();
     m_contentLabel->setGeometry(margin, currentY, contentWidth, contentHeight);
     currentY += contentHeight + spacing;
 
-    // 设置评论
     for (QWidget* commentWidget : m_commentWidgets) {
         if (commentWidget && commentWidget->parent() == contentWidget) {
             commentWidget->setGeometry(margin, currentY, viewport()->width() - 2 * margin, 80);
-            commentWidget->show();  // 确保评论控件可见
+            commentWidget->show();
             currentY += 80 + spacing;
         }
     }
-    
-    // 设置内容区域大小
+
     contentWidget->setFixedSize(viewport()->width(), currentY);
 }
 
-void PostDetailScrollArea::addCommentWidget(QWidget* commentWidget) {
-    if (commentWidget) {
-        commentWidget->setParent(contentWidget);  // 确保父窗口设置正确
-        m_commentWidgets.append(commentWidget);
-        layoutContent();
+void PostDetailScrollArea::addCommentWidget(QWidget* commentWidget)
+{
+    if (!commentWidget) {
+        return;
     }
+
+    commentWidget->setParent(contentWidget);
+    m_commentWidgets.append(commentWidget);
+    layoutContent();
 }
 
 PostDetailScrollArea::PostDetailScrollArea(QWidget* parent)
@@ -62,20 +87,31 @@ PostDetailScrollArea::PostDetailScrollArea(QWidget* parent)
     contentWidget->setObjectName("PostDetailContentWidget");
 }
 
-void PostDetailScrollArea::setLabels(QLabel* titleLabel, QLabel* contentLabel) {
+void PostDetailScrollArea::setLabels(QLabel* titleLabel, QLabel* contentLabel)
+{
     m_titleLabel = titleLabel;
     m_contentLabel = contentLabel;
 }
 
 PostDetailView::PostDetailView(QWidget* parent)
-        : QWidget(parent)
+    : QWidget(parent)
 {
     setupUI();
     setAttribute(Qt::WA_TranslucentBackground);
 }
 
-void PostDetailView::setupUI() {
-    // 1. 创建所有控件
+QRect PostDetailView::fittedImageRect(const QRect& bounds, const QSize& imageSize) const
+{
+    const QSize normalized = normalizedImageSize(imageSize);
+    const QSize fitted = normalized.scaled(bounds.size(), Qt::KeepAspectRatio);
+    return QRect(bounds.x() + (bounds.width() - fitted.width()) / 2,
+                 bounds.y() + (bounds.height() - fitted.height()) / 2,
+                 fitted.width(),
+                 fitted.height());
+}
+
+void PostDetailView::setupUI()
+{
     m_authorAvatar = new QLabel(this);
     m_authorAvatar->setFixedSize({40, 40});
 
@@ -83,6 +119,7 @@ void PostDetailView::setupUI() {
     commentLineEdit->setIcon(ImageService::instance().scaled(":/resources/icon/selected_message.png",
                                                              QSize(20, 20)));
     commentLineEdit->getLineEdit()->setPlaceholderText("说点什么吧...");
+
     m_authorName = new QLabel(this);
     QFont nameFont;
     nameFont.setStyleStrategy(QFont::PreferAntialias);
@@ -104,21 +141,18 @@ void PostDetailView::setupUI() {
     m_titleLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     QFont titleFont;
     titleFont.setStyleStrategy(QFont::PreferAntialias);
-    titleFont.setPointSize(14);
-
+    titleFont.setPointSize(16);
     titleFont.setBold(true);
     m_titleLabel->setFont(titleFont);
 
     m_contentLabel = new QLabel(m_contentWidget);
     m_contentLabel->setWordWrap(true);
     m_contentLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-
     QFont contentFont;
     contentFont.setStyleStrategy(QFont::PreferAntialias);
     contentFont.setPointSize(13);
     m_contentLabel->setFont(contentFont);
 
-    // 设置 PostDetailScrollArea 的标签引用
     static_cast<PostDetailScrollArea*>(m_contentArea)->m_titleLabel = m_titleLabel;
     static_cast<PostDetailScrollArea*>(m_contentArea)->m_contentLabel = m_contentLabel;
 
@@ -131,8 +165,7 @@ void PostDetailView::setupUI() {
             "QPushButton:pressed {"
             "  background: none;"
             "  border: none;"
-            "}"
-    ));
+            "}"));
 
     m_likeCount = new QLabel("666", this);
 
@@ -145,12 +178,10 @@ void PostDetailView::setupUI() {
             "QPushButton:pressed {"
             "  background: none;"
             "  border: none;"
-            "}"
-    ));
+            "}"));
 
     m_commentCount = new QLabel("0", this);
 
-    // 3. 连接信号槽
     connect(m_followBtn, &QPushButton::clicked, this, [this]() {
         m_isFollowed = !m_isFollowed;
         m_followBtn->setText(m_isFollowed ? "已关注" : "关注");
@@ -167,10 +198,8 @@ void PostDetailView::setupUI() {
     });
 
     connect(m_commentBtn, &QPushButton::clicked, this, &PostDetailView::commentClicked);
-
-    // 连接评论输入框的回车信号
     connect(commentLineEdit->getLineEdit(), &QLineEdit::returnPressed, this, [this]() {
-        QString content = commentLineEdit->getLineEdit()->text().trimmed();
+        const QString content = commentLineEdit->getLineEdit()->text().trimmed();
         if (!content.isEmpty()) {
             addComment(content);
             commentLineEdit->getLineEdit()->clear();
@@ -178,77 +207,102 @@ void PostDetailView::setupUI() {
     });
 }
 
-void PostDetailView::resizeEvent(QResizeEvent* ev) {
+void PostDetailView::resizeEvent(QResizeEvent* ev)
+{
     QWidget::resizeEvent(ev);
     updateLayout();
 }
 
-void PostDetailView::paintEvent(QPaintEvent*) {
+QSize PostDetailView::preferredSize(const QSize& availableBounds) const
+{
+    return availableBounds;
+}
+
+QRect PostDetailView::imageRect() const
+{
+    const int sideWidth = sidePanelWidthForTotalWidth(width());
+    return QRect(0, 0, qMax(0, width() - sideWidth), height());
+}
+
+QRect PostDetailView::paintedImageRect() const
+{
+    return fittedImageRect(imageRect(),
+                           m_fullImageSource.isEmpty() ? m_previewImageSize : m_fullImageSize);
+}
+
+void PostDetailView::setImageVisible(bool visible)
+{
+    if (m_imageVisible == visible) {
+        return;
+    }
+    m_imageVisible = visible;
+    update(imageRect());
+}
+
+QPixmap PostDetailView::transitionPixmap() const
+{
+    const QString source = m_fullImageSource.isEmpty() ? m_previewImageSource : m_fullImageSource;
+    if (source.isEmpty()) {
+        return {};
+    }
+
+    return ImageService::instance().pixmap(source);
+}
+
+void PostDetailView::paintEvent(QPaintEvent*)
+{
     QPainter p(this);
     p.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
 
-    // 圆角白色背景
-    QPainterPath path;
-    path.addRoundedRect(rect(), 12, 12);
-    p.fillPath(path, Qt::white);
+    QPainterPath outerPath;
+    outerPath.addRoundedRect(rect(), 12, 12);
+    p.fillPath(outerPath, Qt::white);
+    p.setClipPath(outerPath);
 
-    // 左侧图片区域
-    int w = width();
-    int h = height();
-    int imgW = w * 0.6;
-    QRect imageRect(0, 0, imgW, h);
+    const QRect detailImageRect = imageRect();
+    p.fillRect(detailImageRect, kDetailImagePlaceholder);
 
-    QPainterPath imgPath;
-    imgPath.addRoundedRect(imageRect, 12, 12);
-    p.setClipPath(imgPath);
-
-    if (!m_imageSource.isEmpty()) {
-        const QPixmap image = ImageService::instance().scaled(m_imageSource,
-                                                              imageRect.size(),
-                                                              Qt::KeepAspectRatio,
-                                                              p.device()->devicePixelRatioF());
-        if (!image.isNull()) {
-        // 保持图片比例并居中绘制
-        QSize scaledSize = image.size();
-        scaledSize.scale(imgW, h, Qt::KeepAspectRatio);
-
-        int x = (imgW - scaledSize.width()) / 2;
-        int y = (h - scaledSize.height()) / 2;
-
-        // 先补灰底
-        p.fillRect(imageRect, QColor(0xf5f5f5));
-        // 再画图
-        p.drawPixmap(x, y, image);
-        } else {
-            p.fillRect(imageRect, QColor(0xf5f5f5));
+    const qreal dpr = p.device()->devicePixelRatioF();
+    if (m_imageVisible && !m_previewImageSource.isEmpty()) {
+        const QRect previewRect = fittedImageRect(detailImageRect, m_previewImageSize);
+        const QPixmap preview = ImageService::instance().scaled(m_previewImageSource,
+                                                                previewRect.size(),
+                                                                Qt::KeepAspectRatio,
+                                                                dpr);
+        if (!preview.isNull()) {
+            p.drawPixmap(previewRect, preview);
         }
-    } else {
-        // 没有图片时补灰色背景
-        p.fillRect(imageRect, QColor(0xf5f5f5));
+    }
+
+    if (m_imageVisible && !m_fullImageSource.isEmpty()) {
+        const QRect fullRect = fittedImageRect(detailImageRect, m_fullImageSize);
+        const QPixmap fullImage = ImageService::instance().scaled(m_fullImageSource,
+                                                                  fullRect.size(),
+                                                                  Qt::KeepAspectRatio,
+                                                                  dpr);
+        if (!fullImage.isNull() && m_fullImageOpacity > 0.0) {
+            p.save();
+            p.setOpacity(m_fullImageOpacity);
+            p.drawPixmap(fullRect, fullImage);
+            p.restore();
+        }
     }
 }
 
-void PostDetailView::updateLayout() {
-    const int w = width();
+void PostDetailView::updateLayout()
+{
+    const QRect detailImageRect = imageRect();
+    const int rightX = detailImageRect.right() + 1;
+    const int rightW = qMax(0, width() - rightX);
     const int h = height();
-    const int imgW = w * 0.6;  // 图片区域占60%宽度
 
-    // 1. 左侧图片区域
-    m_authorAvatar->setGeometry(0, 0, imgW, h);
-
-    // 2. 右侧区域
-    const int rightX = imgW;
-    const int rightW = w - imgW;
-
-    // 2.1 顶部作者信息区域
     const int topH = 60;
     const int avatarX = rightX + 20;
     const int avatarY = 10;
     m_authorAvatar->setGeometry(avatarX, avatarY, 40, 40);
-    m_authorName->setGeometry(avatarX + 50, avatarY, 200, 40);
+    m_authorName->setGeometry(avatarX + 50, avatarY, qMax(120, rightW - 170), 40);
     m_followBtn->setGeometry(rightX + rightW - 100, avatarY + 4, 80, 32);
 
-    // 2.2 底部操作区域
     const int bottomH = 60;
     const int bottomY = h - bottomH;
     const int btnY = bottomY + (bottomH - 32) / 2;
@@ -266,107 +320,106 @@ void PostDetailView::updateLayout() {
     m_contentArea->setGeometry(rightX, topH, rightW, h - topH - bottomH);
 }
 
-void PostDetailView::setPostData(const PostDetailData& data) {
-    m_postId = data.postId;
+void PostDetailView::setPreviewSummary(const PostSummary& summary)
+{
+    m_postId = summary.postId;
+    m_authorId = summary.authorId;
+    m_previewImageSource = summary.thumbnailImagePath;
+    m_previewImageSize = summary.thumbnailImageSize;
+    m_fullImageSource.clear();
+    m_fullImageSize = {};
+    m_fullImageOpacity = 0.0;
 
-    // 1. 更新作者信息
-    m_authorId = data.authorId;
-    m_imageSource = data.imagePaths.isEmpty() ? QString() : data.imagePaths.first();
-    m_authorName->setText(data.authorName);
-    m_authorAvatar->setPixmap(ImageService::instance().circularAvatar(
-            data.authorAvatarPath,
-            32));
+    m_authorName->setText(summary.authorName);
+    m_authorAvatar->setPixmap(ImageService::instance().circularAvatar(summary.authorAvatarPath, 32));
+    m_titleLabel->setText(summary.title);
+    m_contentLabel->setText(QStringLiteral("加载中..."));
 
-    // 2. 更新内容
-    m_titleLabel->setText(data.title);
-    m_contentLabel->setText(data.content);
-
-    // 3. 更新状态
-    m_isLiked = data.isLiked;
-    m_likes = data.likeCount;
-    m_comments = data.commentCount;
-
+    m_isLiked = summary.isLiked;
+    m_likes = summary.likeCount;
+    m_comments = summary.commentCount;
     m_likeBtn->setIcon(QIcon(m_isLiked ? ":/resources/icon/full_heart.png"
                                        : ":/resources/icon/heart.png"));
     m_likeCount->setText(QString::number(m_likes));
     m_commentCount->setText(QString::number(m_comments));
 
-    // 4. 更新布局
     updateLayout();
     update();
 }
 
-void PostDetailView::showEvent(QShowEvent* event) {
-    if (m_isFirstShow && !m_initialGeometry.isNull()) {
-        // 设置初始位置和大小
-        setGeometry(m_initialGeometry);
-        
-        // 创建动画
-        QPropertyAnimation* animation = new QPropertyAnimation(this, "geometry");
-        animation->setDuration(300);  // 300毫秒的动画
-        animation->setStartValue(m_initialGeometry);
-        
-        // 计算最终位置（居中）
-        QRect finalGeometry;
-        if (QWidget* parentWidget = this->parentWidget()) {
-            int finalWidth = parentWidget->width() * 0.8;  // 80%的父窗口宽度
-            int finalHeight = parentWidget->height() * 0.8;  // 80%的父窗口高度
-            int x = (parentWidget->width() - finalWidth) / 2;
-            int y = (parentWidget->height() - finalHeight) / 2;
-            finalGeometry = QRect(x, y, finalWidth, finalHeight);
-        }
-        
-        animation->setEndValue(finalGeometry);
-        animation->setEasingCurve(QEasingCurve::OutCubic);  // 使用缓出曲线使动画更自然
-        
-        // 开始动画
-        animation->start(QAbstractAnimation::DeleteWhenStopped);
-        m_isFirstShow = false;
+void PostDetailView::setPostData(const PostDetailData& data)
+{
+    m_postId = data.postId;
+    m_authorId = data.authorId;
+
+    if (!data.imagePaths.isEmpty()) {
+        m_fullImageSource = data.imagePaths.first();
+        m_fullImageSize = ImageService::instance().sourceSize(m_fullImageSource);
     }
-    QWidget::showEvent(event);
+
+    m_authorName->setText(data.authorName);
+    m_authorAvatar->setPixmap(ImageService::instance().circularAvatar(data.authorAvatarPath, 32));
+    m_titleLabel->setText(data.title);
+    m_contentLabel->setText(data.content);
+
+    m_isLiked = data.isLiked;
+    m_likes = data.likeCount;
+    m_comments = data.commentCount;
+    m_likeBtn->setIcon(QIcon(m_isLiked ? ":/resources/icon/full_heart.png"
+                                       : ":/resources/icon/heart.png"));
+    m_likeCount->setText(QString::number(m_likes));
+    m_commentCount->setText(QString::number(m_comments));
+
+    auto* imageFade = new QVariantAnimation(this);
+    imageFade->setDuration(180);
+    imageFade->setStartValue(m_fullImageOpacity);
+    imageFade->setEndValue(1.0);
+    imageFade->setEasingCurve(QEasingCurve::OutCubic);
+    connect(imageFade, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
+        m_fullImageOpacity = value.toReal();
+        update(imageRect());
+    });
+    imageFade->start(QAbstractAnimation::DeleteWhenStopped);
+
+    updateLayout();
+    update();
 }
 
-QWidget* PostDetailView::createCommentWidget(const QString& userName, const QString& content) {
+QWidget* PostDetailView::createCommentWidget(const QString& userName, const QString& content)
+{
     QWidget* commentWidget = new QWidget(m_contentWidget);
     commentWidget->setObjectName("CommentWidget");
-    commentWidget->setFixedHeight(80);  // 设置固定高度
-    commentWidget->setStyleSheet("background-color: white;");  // 添加背景色以便于调试
+    commentWidget->setFixedHeight(80);
+    commentWidget->setStyleSheet("background-color: white;");
 
-    // 创建头像
     QLabel* avatar = new QLabel(commentWidget);
     avatar->setFixedSize(32, 32);
-
     avatar->setPixmap(ImageService::instance().circularAvatar(
             UserRepository::instance().requestUserAvatarPath(CurrentUser::instance().getUserId()),
             32));
 
-    // 创建用户名
     QLabel* nameLabel = new QLabel(userName, commentWidget);
     QFont nameFont;
     nameFont.setPointSize(12);
     nameFont.setBold(true);
     nameLabel->setFont(nameFont);
 
-    // 创建评论内容
     QLabel* contentLabel = new QLabel(content, commentWidget);
     contentLabel->setWordWrap(true);
     QFont contentFont;
     contentFont.setPointSize(12);
     contentLabel->setFont(contentFont);
 
-    // 创建时间标签
     QLabel* timeLabel = new QLabel(QDateTime::currentDateTime().toString("hh:mm"), commentWidget);
     QFont timeFont;
     timeFont.setPointSize(10);
     timeLabel->setFont(timeFont);
 
-    // 设置布局
     avatar->setGeometry(0, 0, 32, 32);
     nameLabel->setGeometry(40, 0, 200, 20);
     contentLabel->setGeometry(40, 20, commentWidget->width() - 50, 40);
     timeLabel->setGeometry(40, 60, 200, 20);
 
-    // 确保所有子控件都可见
     avatar->show();
     nameLabel->show();
     contentLabel->show();
@@ -376,15 +429,16 @@ QWidget* PostDetailView::createCommentWidget(const QString& userName, const QStr
     return commentWidget;
 }
 
-void PostDetailView::addComment(const QString& content) {
-    QString userName = CurrentUser::instance().getUserName();
-    
+void PostDetailView::addComment(const QString& content)
+{
+    const QString userName = CurrentUser::instance().getUserName();
+
     QWidget* commentWidget = createCommentWidget(userName, content);
-    if (commentWidget) {
-        static_cast<PostDetailScrollArea*>(m_contentArea)->addCommentWidget(commentWidget);
-        
-        // 更新评论数
-        m_comments++;
-        m_commentCount->setText(QString::number(m_comments));
+    if (!commentWidget) {
+        return;
     }
+
+    static_cast<PostDetailScrollArea*>(m_contentArea)->addCommentWidget(commentWidget);
+    ++m_comments;
+    m_commentCount->setText(QString::number(m_comments));
 }

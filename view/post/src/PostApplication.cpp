@@ -6,9 +6,102 @@
 #include "CurrentUser.h"
 #include "PostDetailView.h"
 #include "PostCreatePage.h"
+#include "PostOverlay.h"
 #include "PostRepository.h"
+#include "ImageService.h"
+#include <QGraphicsOpacityEffect>
+#include <QParallelAnimationGroup>
+#include <QPropertyAnimation>
+#include <QPainter>
 #include <QResizeEvent>
-#include <QRandomGenerator>
+
+namespace {
+
+class TransitionImageWidget final : public QWidget
+{
+public:
+    explicit TransitionImageWidget(QWidget* parent = nullptr)
+        : QWidget(parent)
+    {
+        setAttribute(Qt::WA_TransparentForMouseEvents);
+        setAttribute(Qt::WA_TranslucentBackground);
+    }
+
+    void setPixmap(const QPixmap& pixmap)
+    {
+        m_pixmap = pixmap;
+        update();
+    }
+
+    void setRevealProgress(qreal progress)
+    {
+        const qreal bounded = qBound(0.0, progress, 1.0);
+        if (!qFuzzyCompare(m_revealProgress, bounded)) {
+            m_revealProgress = bounded;
+            update();
+        }
+    }
+
+protected:
+    void paintEvent(QPaintEvent* event) override
+    {
+        Q_UNUSED(event);
+        if (m_pixmap.isNull()) {
+            return;
+        }
+
+        QPainter painter(this);
+        painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
+        const QSizeF sourceSize = QSizeF(m_pixmap.width() / m_pixmap.devicePixelRatio(),
+                                         m_pixmap.height() / m_pixmap.devicePixelRatio());
+        const QRectF bounds = rect();
+
+        const QSizeF fitted = sourceSize.scaled(bounds.size(), Qt::KeepAspectRatio);
+        const QRectF fitTarget((bounds.width() - fitted.width()) / 2.0,
+                               (bounds.height() - fitted.height()) / 2.0,
+                               fitted.width(),
+                               fitted.height());
+
+        QRectF cropSource(QPointF(0, 0), sourceSize);
+        if (bounds.width() > 0.0 && bounds.height() > 0.0 &&
+            sourceSize.width() > 0.0 && sourceSize.height() > 0.0) {
+            const qreal sourceAspect = sourceSize.width() / sourceSize.height();
+            const qreal targetAspect = bounds.width() / bounds.height();
+            if (sourceAspect > targetAspect) {
+                const qreal croppedWidth = sourceSize.height() * targetAspect;
+                cropSource = QRectF((sourceSize.width() - croppedWidth) / 2.0,
+                                    0.0,
+                                    croppedWidth,
+                                    sourceSize.height());
+            } else {
+                const qreal croppedHeight = sourceSize.width() / targetAspect;
+                cropSource = QRectF(0.0,
+                                    (sourceSize.height() - croppedHeight) / 2.0,
+                                    sourceSize.width(),
+                                    croppedHeight);
+            }
+        }
+
+        const auto lerp = [this](qreal a, qreal b) {
+            return a + (b - a) * m_revealProgress;
+        };
+        const QRectF drawSource(lerp(cropSource.x(), 0.0),
+                                lerp(cropSource.y(), 0.0),
+                                lerp(cropSource.width(), sourceSize.width()),
+                                lerp(cropSource.height(), sourceSize.height()));
+        const QRectF drawTarget(lerp(0.0, fitTarget.x()),
+                                lerp(0.0, fitTarget.y()),
+                                lerp(bounds.width(), fitTarget.width()),
+                                lerp(bounds.height(), fitTarget.height()));
+        painter.drawPixmap(drawTarget, m_pixmap, drawSource);
+    }
+
+private:
+    QPixmap m_pixmap;
+    qreal m_revealProgress = 0.0;
+};
+
+} // namespace
 
 PostApplication::PostApplication(QWidget* parent)
         : QWidget(parent)
@@ -17,38 +110,37 @@ PostApplication::PostApplication(QWidget* parent)
         , m_detailView(nullptr)
         , m_createPage(new PostCreatePage(this))
 {
-    m_bar->enableBlur();
+    m_bar->enableBlur(false);
     auto* postFeedPage = new PostFeedPage(this);
     auto* followFeedPage = new PostFeedPage(this);
     m_stack->addWidget(postFeedPage);
     m_stack->addWidget(followFeedPage);
     m_stack->addWidget(m_createPage);  // 添加创建页面到堆栈
     m_stack->setCurrentIndex(0);
-    m_stack->setStyleSheet("background: rgba(0,0,0,0);");
     connect(postFeedPage, &PostFeedPage::postClickedWithGeometry,
             this, &PostApplication::onPostClickedWithGeometry);
     connect(followFeedPage, &PostFeedPage::postClickedWithGeometry,
             this, &PostApplication::onPostClickedWithGeometry);
     connect(m_bar, &PostApplicationBar::pageClicked, this, &PostApplication::onPageChanged);
+    connect(&PostRepository::instance(), &PostRepository::postDetailReady,
+            this, &PostApplication::onPostDetailReady);
 
     if (!m_overlay) {
-        m_overlay = new QWidget(this);
-        m_overlay->setStyleSheet("background: rgba(0,0,0,100);");
+        m_overlay = new PostOverlay(this);
+        m_overlay->setOverlayOpacity(0.0);
         m_overlay->hide();
         m_overlay->installEventFilter(this);
+        m_overlayFadeAnimation = new QVariantAnimation(this);
+        m_overlayFadeAnimation->setDuration(220);
+        m_overlayFadeAnimation->setEasingCurve(QEasingCurve::InOutQuad);
+        connect(m_overlayFadeAnimation, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
+            if (m_overlay) {
+                m_overlay->setOverlayOpacity(value.toReal());
+            }
+        });
     }
     m_overlay->setGeometry(rect());
     m_overlay->lower();
-
-    noiseTexture = QImage(100, 100, QImage::Format_ARGB32);
-    auto *rng = QRandomGenerator::global();  // 获取全局随机数生成器
-    for (int x = 0; x < noiseTexture.width(); ++x) {
-        for (int y = 0; y < noiseTexture.height(); ++y) {
-            int gray = rng->bounded(56) + 200;   // 200~255
-            int alpha = rng->bounded(51) + 30;   // 30~80
-            noiseTexture.setPixelColor(x, y, QColor(gray, gray, gray, alpha));
-        }
-    }
 }
 
 void PostApplication::resizeEvent(QResizeEvent* ev)
@@ -57,7 +149,7 @@ void PostApplication::resizeEvent(QResizeEvent* ev)
     const int w = width();
     const int h = height();
     // 1. 让 stack 铺满整个区域
-    m_stack->setGeometry(0, 32, w, h);
+    m_stack->setGeometry(0, kContentTopInset, w, h - kContentTopInset);
     // 2. 计算 bar 的居中底部位置
     const int barW = m_bar->width();
     const int barH = m_bar->height();
@@ -68,99 +160,135 @@ void PostApplication::resizeEvent(QResizeEvent* ev)
     m_bar->raise();
     m_overlay->setGeometry(rect());
 
-    // 3. 更新详情视图位置
     if (m_detailView) {
-        const int margin = 40;
-        const int detailW = w - margin * 2;
-        const int detailH = h - margin * 2;
-        m_detailView->setGeometry((w - detailW) / 2, (h - detailH) / 2, detailW, detailH);
+        m_detailView->setGeometry(detailRectForCurrentPost());
         m_detailView->raise();
     }
-}
-
-void PostApplication::paintEvent(QPaintEvent *) {
-    QPainter painter(this);
-    painter.setRenderHints(QPainter::Antialiasing |
-                           QPainter::SmoothPixmapTransform);
-    painter.fillRect(rect(), QColor(255, 255, 255, 64));
-    painter.setOpacity(0.5);  // 调整噪声层透明度
-    painter.drawTiledPixmap(rect(), QPixmap::fromImage(noiseTexture));
+    if (m_transitionImage && m_detailView) {
+        m_transitionImage->setGeometry(QRect(detailRectForCurrentPost().topLeft() + m_detailView->paintedImageRect().topLeft(),
+                                             m_detailView->paintedImageRect().size()));
+    }
 }
 
 bool PostApplication::eventFilter(QObject *obj, QEvent *ev) {
     if (obj == m_overlay && ev->type() == QEvent::MouseButtonPress) {
         if (m_detailView) {
-            // 创建一个动画，从当前位置返回到原始位置
-            auto *anim = new QPropertyAnimation(m_detailView, "geometry", this);
-            anim->setDuration(250);  // 300毫秒的动画
-            anim->setStartValue(m_detailView->geometry());
-            anim->setEndValue(m_detailView->initialGeometry());  // 使用保存的原始位置
-            anim->setEasingCurve(QEasingCurve::InOutQuad);  // 使用平滑的缓动曲线
-
-            // 动画结束后才 deleteLater 并隐藏 overlay
-            connect(anim, &QAbstractAnimation::finished, this, [this]() {
-                if (m_detailView) {
-                    m_detailView->deleteLater();
-                    m_detailView = nullptr;
-                }
-                m_overlay->hide();
-            });
-
-            anim->start(QAbstractAnimation::DeleteWhenStopped);
+            startCloseAnimation();
         } else {
-            // 如果 detailView 已经不存在，直接隐藏 overlay
-            m_overlay->hide();
+            fadeOverlay(m_overlay ? m_overlay->overlayOpacity() : 1.0, 0.0, true);
         }
         return true;
     }
     return QWidget::eventFilter(obj, ev);
 }
 
-void PostApplication::onPostClickedWithGeometry(const QString& postId, const QRect& sourceGeometry) {
-    const PostDetailData post = PostRepository::instance().requestPostDetail({postId});
+void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, const QRect& sourceGeometry)
+{
+    m_openPostId = summary.postId;
+    m_openDetailRequestId.clear();
+    m_openSourceGeometry = QRect(mapFromGlobal(sourceGeometry.topLeft()), sourceGeometry.size());
+    removeTransitionImage();
+    if (m_detailView) {
+        m_detailView->deleteLater();
+        m_detailView = nullptr;
+        m_detailOpacityEffect = nullptr;
+    }
 
     m_overlay->setGeometry(rect());
     m_overlay->lower();
     m_overlay->show();
     m_overlay->raise();
+    fadeOverlay(m_overlay ? m_overlay->overlayOpacity() : 0.0, 1.0, false);
 
-    // 创建并显示详情视图
-    if (!m_detailView) {
-        m_detailView = new PostDetailView(this);
-        m_detailView->setPostData(post);
-        m_detailView->hide();  // 先隐藏，等动画准备好再 show()
+    m_detailView = new PostDetailView(this);
+    m_detailView->setPreviewSummary(summary);
+    m_detailView->setImageVisible(false);
+    connect(m_detailView, &PostDetailView::likeClicked, this, [this](bool liked) {
+        if (!m_openPostId.isEmpty()) {
+            PostRepository::instance().setPostLiked(m_openPostId, liked);
+        }
+    });
+    m_detailView->setGeometry(detailRectForCurrentPost());
 
-        // 1. 计算最终要显示的矩形（正常大小）
-        const int margin = 40;
-        const int finalW = width() - margin * 2;
-        const int finalH = height() - margin * 2;
-        QRect finalRect((width() - finalW) / 2,
-                        (height() - finalH) / 2,
-                        finalW, finalH);
+    m_detailOpacityEffect = new QGraphicsOpacityEffect(m_detailView);
+    m_detailOpacityEffect->setOpacity(0.0);
+    m_detailView->setGraphicsEffect(m_detailOpacityEffect);
+    m_detailView->show();
+    m_detailView->raise();
 
-        // 2. 将全局坐标转换为PostApplication的局部坐标
-        QRect localSourceGeometry = QRect(mapFromGlobal(sourceGeometry.topLeft()),
-                                          sourceGeometry.size());
+    const QRect targetImageGeometry(m_detailView->geometry().topLeft() + m_detailView->paintedImageRect().topLeft(),
+                                    m_detailView->paintedImageRect().size());
 
-        // 3. 设置初始位置和大小
-        m_detailView->setInitialGeometry(localSourceGeometry);
-        m_detailView->setGeometry(localSourceGeometry);
-        m_detailView->show();
-        m_detailView->raise();
-
-        // 4. 创建动画
-        auto *anim = new QPropertyAnimation(m_detailView, "geometry", this);
-        anim->setDuration(250);
-        anim->setStartValue(localSourceGeometry);
-        anim->setEndValue(finalRect);
-        anim->setEasingCurve(QEasingCurve::OutQuad);
-        anim->start(QAbstractAnimation::DeleteWhenStopped);
-    } else {
-        // 如果已经有 detailView，可以直接更新内容并 show()
-        m_detailView->setPostData(post);
-        m_detailView->show();
-        m_detailView->raise();
+    auto* transitionImage = new TransitionImageWidget(this);
+    QPixmap transitionPixmap = ImageService::instance().pixmap(summary.thumbnailImagePath);
+    if (transitionPixmap.isNull()) {
+        transitionPixmap = ImageService::instance().centerCrop(summary.thumbnailImagePath,
+                                                               m_openSourceGeometry.size(),
+                                                               12,
+                                                               devicePixelRatioF());
     }
+    transitionImage->setPixmap(transitionPixmap);
+    transitionImage->setRevealProgress(0.0);
+    m_transitionImage = transitionImage;
+    m_transitionImage->setGeometry(m_openSourceGeometry);
+    m_transitionImage->show();
+    m_transitionImage->raise();
+
+    auto* group = new QParallelAnimationGroup(this);
+
+    auto* transitionAnim = new QPropertyAnimation(m_transitionImage, "geometry", group);
+    transitionAnim->setDuration(260);
+    transitionAnim->setStartValue(m_openSourceGeometry);
+    transitionAnim->setEndValue(targetImageGeometry);
+    transitionAnim->setEasingCurve(QEasingCurve::OutCubic);
+    group->addAnimation(transitionAnim);
+
+    auto* revealAnim = new QVariantAnimation(group);
+    revealAnim->setDuration(260);
+    revealAnim->setStartValue(0.0);
+    revealAnim->setEndValue(1.0);
+    revealAnim->setEasingCurve(QEasingCurve::OutCubic);
+    connect(revealAnim, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
+        if (auto* transitionImageWidget = dynamic_cast<TransitionImageWidget*>(m_transitionImage)) {
+            transitionImageWidget->setRevealProgress(value.toReal());
+        }
+    });
+    group->addAnimation(revealAnim);
+
+    auto* detailFade = new QVariantAnimation(group);
+    detailFade->setDuration(260);
+    detailFade->setStartValue(0.0);
+    detailFade->setEndValue(1.0);
+    detailFade->setEasingCurve(QEasingCurve::OutCubic);
+    connect(detailFade, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
+        if (m_detailOpacityEffect) {
+            m_detailOpacityEffect->setOpacity(value.toReal());
+        }
+    });
+    group->addAnimation(detailFade);
+
+    connect(group, &QParallelAnimationGroup::finished, this, [this]() {
+        if (m_detailView) {
+            m_detailView->setImageVisible(true);
+        }
+        if (m_detailOpacityEffect) {
+            m_detailOpacityEffect->setOpacity(1.0);
+        }
+        removeTransitionImage();
+    });
+    group->start(QAbstractAnimation::DeleteWhenStopped);
+
+    m_openDetailRequestId = PostRepository::instance().requestPostDetailAsync({summary.postId});
+}
+
+void PostApplication::onPostDetailReady(const QString& requestId, const PostDetailData& detail)
+{
+    if (!m_detailView || requestId != m_openDetailRequestId || detail.postId != m_openPostId) {
+        return;
+    }
+
+    m_detailView->setPostData(detail);
+    m_openDetailRequestId.clear();
 }
 
 void PostApplication::onPageChanged(int index)
@@ -172,4 +300,149 @@ void PostApplication::onPageChanged(int index)
     } else if (index == 0) { // 首页
         m_stack->setCurrentIndex(0);
     }
+}
+
+void PostApplication::fadeOverlay(qreal startOpacity, qreal endOpacity, bool hideAfter)
+{
+    if (!m_overlay || !m_overlayFadeAnimation) {
+        if (hideAfter && m_overlay) {
+            m_overlay->hide();
+        }
+        return;
+    }
+
+    m_overlayFadeAnimation->stop();
+    if (m_overlayFadeFinishedConnection) {
+        disconnect(m_overlayFadeFinishedConnection);
+        m_overlayFadeFinishedConnection = {};
+    }
+
+    m_overlay->setOverlayOpacity(startOpacity);
+    if (!m_overlay->isVisible()) {
+        m_overlay->show();
+    }
+
+    m_overlayFadeAnimation->setStartValue(startOpacity);
+    m_overlayFadeAnimation->setEndValue(endOpacity);
+    if (hideAfter) {
+        m_overlayFadeFinishedConnection = connect(m_overlayFadeAnimation, &QVariantAnimation::finished, this, [this]() {
+            if (m_overlay) {
+                m_overlay->hide();
+                m_overlay->setOverlayOpacity(0.0);
+            }
+        });
+    }
+    m_overlayFadeAnimation->start();
+}
+
+QRect PostApplication::detailRectForCurrentPost() const
+{
+    if (!m_detailView) {
+        return {};
+    }
+
+    const int horizontalMargin = 40;
+    const int verticalMargin = 40;
+    const QSize available(qMax(0, width() - horizontalMargin * 2),
+                          qMax(0, height() - verticalMargin * 2));
+    const QSize preferred = m_detailView->preferredSize(available);
+    return QRect((width() - preferred.width()) / 2,
+                 (height() - preferred.height()) / 2,
+                 preferred.width(),
+                 preferred.height());
+}
+
+void PostApplication::removeTransitionImage()
+{
+    if (!m_transitionImage) {
+        return;
+    }
+
+    m_transitionImage->deleteLater();
+    m_transitionImage = nullptr;
+}
+
+void PostApplication::startCloseAnimation()
+{
+    if (!m_detailView) {
+        return;
+    }
+
+    m_openDetailRequestId.clear();
+    removeTransitionImage();
+    m_detailView->setImageVisible(false);
+
+    const QRect startImageGeometry(m_detailView->geometry().topLeft() + m_detailView->paintedImageRect().topLeft(),
+                                   m_detailView->paintedImageRect().size());
+
+    auto* transitionImage = new TransitionImageWidget(this);
+    transitionImage->setPixmap(m_detailView->transitionPixmap());
+    transitionImage->setRevealProgress(1.0);
+    m_transitionImage = transitionImage;
+    m_transitionImage->setGeometry(startImageGeometry);
+    m_transitionImage->show();
+    m_transitionImage->raise();
+
+    auto* group = new QParallelAnimationGroup(this);
+
+    auto* transitionAnim = new QPropertyAnimation(m_transitionImage, "geometry", group);
+    transitionAnim->setDuration(240);
+    transitionAnim->setStartValue(startImageGeometry);
+    transitionAnim->setEndValue(m_openSourceGeometry);
+    transitionAnim->setEasingCurve(QEasingCurve::InOutQuad);
+    group->addAnimation(transitionAnim);
+
+    auto* revealAnim = new QVariantAnimation(group);
+    revealAnim->setDuration(240);
+    revealAnim->setStartValue(1.0);
+    revealAnim->setEndValue(0.0);
+    revealAnim->setEasingCurve(QEasingCurve::InOutQuad);
+    connect(revealAnim, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
+        if (auto* transitionImageWidget = dynamic_cast<TransitionImageWidget*>(m_transitionImage)) {
+            transitionImageWidget->setRevealProgress(value.toReal());
+        }
+    });
+    group->addAnimation(revealAnim);
+
+    if (m_detailOpacityEffect) {
+        auto* detailFade = new QVariantAnimation(group);
+        detailFade->setDuration(200);
+        detailFade->setStartValue(m_detailOpacityEffect->opacity());
+        detailFade->setEndValue(0.0);
+        detailFade->setEasingCurve(QEasingCurve::InOutQuad);
+        connect(detailFade, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
+            if (m_detailOpacityEffect) {
+                m_detailOpacityEffect->setOpacity(value.toReal());
+            }
+        });
+        group->addAnimation(detailFade);
+    }
+
+    if (m_overlay) {
+        m_overlayFadeAnimation->stop();
+        auto* overlayAnim = new QVariantAnimation(group);
+        overlayAnim->setDuration(220);
+        overlayAnim->setStartValue(m_overlay->overlayOpacity());
+        overlayAnim->setEndValue(0.0);
+        overlayAnim->setEasingCurve(QEasingCurve::InOutQuad);
+        connect(overlayAnim, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
+            if (m_overlay) {
+                m_overlay->setOverlayOpacity(value.toReal());
+            }
+        });
+        group->addAnimation(overlayAnim);
+    }
+
+    connect(group, &QAbstractAnimation::finished, this, [this]() {
+        removeTransitionImage();
+        if (m_detailView) {
+            m_detailView->deleteLater();
+            m_detailView = nullptr;
+        }
+        m_detailOpacityEffect = nullptr;
+        m_overlay->hide();
+        m_overlay->setOverlayOpacity(0.0);
+    });
+
+    group->start(QAbstractAnimation::DeleteWhenStopped);
 }

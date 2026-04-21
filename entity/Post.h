@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QDateTime>
+#include <QSize>
 #include <QString>
 #include <QVector>
 
@@ -12,6 +13,8 @@ struct Post {
     int commentCount = 0;
     QString authorID;
     QDateTime createdAt;
+    QString thumbnailPath;
+    QSize thumbnailSize;
     QVector<QString> picturesPath;
     bool isLiked = false;
 };

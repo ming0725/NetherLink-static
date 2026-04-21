@@ -49,7 +49,7 @@ public:
     explicit PostApplicationBar(QWidget* parent = nullptr);
     QSize minimumSizeHint() const Q_DECL_OVERRIDE;
     QSize sizeHint() const Q_DECL_OVERRIDE;
-    void enableBlur(bool enabled = true) { isEnableBlur= enabled; }
+    void enableBlur(bool enabled = true);
     void setCurrentIndex(int index);
 
 signals:

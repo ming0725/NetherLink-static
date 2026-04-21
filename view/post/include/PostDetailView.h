@@ -25,9 +25,13 @@ class PostDetailView : public QWidget {
     Q_OBJECT
 public:
     explicit PostDetailView(QWidget* parent = nullptr);
+    void setPreviewSummary(const PostSummary& summary);
     void setPostData(const PostDetailData& data);
-    void setInitialGeometry(const QRect& geometry) { m_initialGeometry = geometry; }
-    QRect initialGeometry() const { return m_initialGeometry; }
+    void setImageVisible(bool visible);
+    QSize preferredSize(const QSize& availableBounds) const;
+    QRect imageRect() const;
+    QRect paintedImageRect() const;
+    QPixmap transitionPixmap() const;
 
 signals:
     void closed();
@@ -37,16 +41,18 @@ signals:
 protected:
     void resizeEvent(QResizeEvent* ev) override;
     void paintEvent(QPaintEvent*) override;
-    void showEvent(QShowEvent*) override;
 private:
+    QRect fittedImageRect(const QRect& bounds, const QSize& imageSize) const;
     void setupUI();
     void updateLayout();
     void addComment(const QString& content);
     QWidget* createCommentWidget(const QString& userName, const QString& content);
-    QRect m_initialGeometry;
-    bool m_isFirstShow = true;
 private:
-    QString m_imageSource;
+    QString m_previewImageSource;
+    QSize m_previewImageSize;
+    QString m_fullImageSource;
+    QSize m_fullImageSize;
+    qreal m_fullImageOpacity = 0.0;
     QLabel* m_authorAvatar;
     QLabel* m_authorName;
     QPushButton* m_followBtn;
@@ -61,6 +67,7 @@ private:
     QString m_postId;
     QString m_authorId;
     LineEditComponent* commentLineEdit;
+    bool m_imageVisible = true;
     bool m_isFollowed = false;
     bool m_isLiked = false;
     int m_likes = 0;

@@ -51,6 +51,24 @@ PostApplicationBar::PostApplicationBar(QWidget* parent)
     preSize = parent->size();
 }
 
+void PostApplicationBar::enableBlur(bool enabled)
+{
+    isEnableBlur = enabled;
+    if (!m_updateTimer) {
+        return;
+    }
+
+    if (isEnableBlur) {
+        if (!m_updateTimer->isActive()) {
+            m_updateTimer->start(16);
+        }
+    } else {
+        m_updateTimer->stop();
+        m_blurredBackground = QImage();
+        update();
+    }
+}
+
 void PostApplicationBar::initItems() {
     QStringList labels = {"首页", "关注", "发表", "消息", "我"};
     for (int i = 0; i < labels.size(); ++i) {

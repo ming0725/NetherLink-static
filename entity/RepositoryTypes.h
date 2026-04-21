@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QDateTime>
+#include <QSize>
 #include <QSharedPointer>
 #include <QString>
 #include <QVector>
@@ -78,7 +79,8 @@ struct ConversationMeta {
 struct PostSummary {
     QString postId;
     QString title;
-    QString coverImagePath;
+    QString thumbnailImagePath;
+    QSize thumbnailImageSize;
     QString authorId;
     QString authorName;
     QString authorAvatarPath;

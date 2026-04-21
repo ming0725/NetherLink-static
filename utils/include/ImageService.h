@@ -3,10 +3,14 @@
 #include <QCache>
 #include <QImage>
 #include <QMutex>
+#include <QObject>
 #include <QPixmap>
+#include <QSet>
 #include <QString>
 
-class ImageService {
+class ImageService : public QObject {
+    Q_OBJECT
+
 public:
     static ImageService& instance();
 
@@ -23,11 +27,23 @@ public:
                        int radius = 0,
                        qreal devicePixelRatio = 1.0) const;
 
+    QPixmap previewCrop(const QString& source,
+                        const QSize& targetSize,
+                        int radius = 0,
+                        qreal devicePixelRatio = 1.0) const;
+
+    void requestPreviewWarmup(const QString& source,
+                              const QSize& targetSize,
+                              qreal devicePixelRatio = 1.0);
+
     QPixmap circularAvatar(const QString& source,
                            int size,
                            qreal devicePixelRatio = 1.0) const;
 
     void invalidateSource(const QString& source);
+
+signals:
+    void previewReady();
 
 private:
     ImageService();
@@ -45,4 +61,6 @@ private:
 
     mutable QMutex m_mutex;
     mutable QCache<QString, QImage> m_originalCache;
+    mutable QCache<QString, QImage> m_previewCache;
+    mutable QSet<QString> m_pendingPreviewLoads;
 };

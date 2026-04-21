@@ -1,57 +1,72 @@
 #include "PostFeedPage.h"
-#include "PostPreviewItem.h"
-#include "PostRepository.h"
+
 #include <QTimer>
-#include <QRandomGenerator>
-#include <QPainter>
+
+#include "PostCardDelegate.h"
+#include "PostFeedModel.h"
+#include "PostRepository.h"
 
 PostFeedPage::PostFeedPage(QWidget* parent)
-        : CustomScrollArea(parent)
+    : PostMasonryView(parent)
+    , m_model(new PostFeedModel(this))
+    , m_delegate(new PostCardDelegate(this))
 {
-    setPosts(PostRepository::instance().requestPostFeed());
+    setStyleSheet("border-width:0px;border-style:solid;background:transparent;");
+    setModel(m_model);
+    setCardDelegate(m_delegate);
+    loadMore();
 
-    connect(this, &CustomScrollArea::reachedBottom, this, [this]() {
+    connect(this, &PostMasonryView::reachedBottom, this, [this]() {
         QTimer::singleShot(100, this, &PostFeedPage::loadMore);
     });
-
-    setStyleSheet("border-width:0px;border-style:solid;");
+    connect(this, &PostMasonryView::postActivated,
+            this, &PostFeedPage::onPostActivated);
+    connect(this, &PostMasonryView::postLikeRequested,
+            this, &PostFeedPage::onPostLikeRequested);
+    connect(&PostRepository::instance(), &PostRepository::postUpdated,
+            this, &PostFeedPage::onRepositoryPostUpdated);
 }
 
 void PostFeedPage::setPosts(const QVector<PostSummary>& posts)
 {
-    qDeleteAll(m_items);
-    m_items.clear();
-    m_data = posts;
-
-    for (int i = 0; i < m_data.size(); ++i) {
-        const auto& pd = m_data[i];
-        auto *item = new PostPreviewItem(pd, contentWidget);
-        connect(item, &PostPreviewItem::viewPostWithGeometry, this, &PostFeedPage::postClickedWithGeometry);
-        m_items.append(item);
-    }
+    m_model->setPosts(posts);
+    m_nextOffset = posts.size();
+    m_hasMore = posts.size() >= kPageSize;
 }
 
-void PostFeedPage::layoutContent()
+void PostFeedPage::loadMore()
 {
-    int W = viewport()->width();
-    int availableW = W - 2 * margin;
-    int cols = std::max(1, (availableW + hgap) / (minItemW + hgap));
-    double itemW = (availableW - (cols-1) * hgap) / double(cols);
-
-    QVector<int> colH(cols, topMargin);
-    for (auto *it : m_items) {
-        int h = it->scaledHeightFor(itemW);
-        int col = std::min_element(colH.begin(), colH.end()) - colH.begin();
-        int x = margin + col * (itemW + hgap);
-        int y = colH[col];
-        it->setGeometry(x, y, int(itemW), h);
-        colH[col] += h + vgap;
+    if (!m_hasMore) {
+        return;
     }
-    int maxH = *std::max_element(colH.begin(), colH.end());
-    contentWidget->resize(W, maxH + margin);
+
+    const QVector<PostSummary> posts = PostRepository::instance().requestPostFeed({m_nextOffset, kPageSize});
+    if (posts.isEmpty()) {
+        m_hasMore = false;
+        return;
+    }
+
+    if (m_nextOffset == 0) {
+        m_model->setPosts(posts);
+    } else {
+        m_model->appendPosts(posts);
+    }
+    m_nextOffset += posts.size();
+    m_hasMore = posts.size() >= kPageSize;
 }
 
-void PostFeedPage::showEvent(QShowEvent *event) {
-    layoutContent();
-    QWidget::showEvent(event);
+void PostFeedPage::onPostActivated(const PostSummary& summary, const QRect& globalGeometry)
+{
+    emit postClicked(summary.postId);
+    emit postClickedWithGeometry(summary, globalGeometry);
+}
+
+void PostFeedPage::onPostLikeRequested(const QString& postId, bool liked)
+{
+    PostRepository::instance().setPostLiked(postId, liked);
+}
+
+void PostFeedPage::onRepositoryPostUpdated(const PostSummary& summary)
+{
+    m_model->updatePost(summary);
 }

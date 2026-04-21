@@ -1,6 +1,9 @@
 #include "PostRepository.h"
 
+#include <QImageReader>
 #include <QRandomGenerator>
+#include <QTimer>
+#include <QUuid>
 
 #include "RepositoryTemplate.h"
 #include "UserRepository.h"
@@ -28,6 +31,17 @@ const QString kPostContent = QString(
         "\"上帝下班前画的速写\"\n"
         "\"偷看了黄昏的日记本\"\n");
 
+QSize imageSizeForSource(const QString& source)
+{
+    if (source.isEmpty()) {
+        return {};
+    }
+
+    QImageReader reader(source);
+    reader.setAutoTransform(true);
+    return reader.size();
+}
+
 class PostFeedRequestOperation final
     : public RepositoryTemplate<PostFeedRequest, QVector<PostSummary>> {
 public:
@@ -53,7 +67,8 @@ private:
             result.push_back(PostSummary{
                     post.postID,
                     post.title,
-                    post.picturesPath.isEmpty() ? QString() : post.picturesPath.first(),
+                    post.thumbnailPath,
+                    post.thumbnailSize,
                     post.authorID,
                     author.nick,
                     author.avatarPath,
@@ -135,6 +150,48 @@ PostDetailData PostRepository::requestPostDetail(const PostDetailRequest& query)
     return PostDetailRequestOperation(postList).request(query);
 }
 
+QString PostRepository::requestPostDetailAsync(const PostDetailRequest& query, int delayMs)
+{
+    const QString requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    QTimer::singleShot(qMax(0, delayMs), this, [this, requestId, query]() {
+        emit postDetailReady(requestId, requestPostDetail(query));
+    });
+    return requestId;
+}
+
+bool PostRepository::setPostLiked(const QString& postId, bool liked)
+{
+    PostSummary summary;
+    bool updated = false;
+
+    {
+        QMutexLocker locker(&mutex);
+        for (Post& post : postList) {
+            if (post.postID != postId) {
+                continue;
+            }
+
+            if (post.isLiked == liked) {
+                summary = buildSummary(post);
+                updated = true;
+                break;
+            }
+
+            post.isLiked = liked;
+            post.likes += liked ? 1 : -1;
+            post.likes = qMax(0, post.likes);
+            summary = buildSummary(post);
+            updated = true;
+            break;
+        }
+    }
+
+    if (updated) {
+        emit postUpdated(summary);
+    }
+    return updated;
+}
+
 void PostRepository::generateSamplePosts()
 {
     const QStringList authorIDs = {
@@ -153,8 +210,28 @@ void PostRepository::generateSamplePosts()
         post.commentCount = QRandomGenerator::global()->bounded(200);
         post.authorID = authorIDs[QRandomGenerator::global()->bounded(authorIDs.size())];
         post.createdAt = baseTime.addSecs(-i * 1800);
-        post.picturesPath.append(QString(":/resources/post/%1.jpg")
-                                         .arg(QRandomGenerator::global()->bounded(10)));
+        const QString imagePath = QString(":/resources/post/%1.jpg")
+                                          .arg(QRandomGenerator::global()->bounded(10));
+        post.thumbnailPath = imagePath;
+        post.thumbnailSize = imageSizeForSource(imagePath);
+        post.picturesPath.append(imagePath);
         postList.append(post);
     }
+}
+
+PostSummary PostRepository::buildSummary(const Post& post) const
+{
+    const User author = UserRepository::instance().requestUserDetail({post.authorID});
+    return PostSummary{
+            post.postID,
+            post.title,
+            post.thumbnailPath,
+            post.thumbnailSize,
+            post.authorID,
+            author.nick,
+            author.avatarPath,
+            post.likes,
+            post.commentCount,
+            post.isLiked
+    };
 }

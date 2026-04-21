@@ -1,53 +1,25 @@
-// smoothscrollwidget.h
+#pragma once
 
-#ifndef FRIENDLISTWIDGET_H
-#define FRIENDLISTWIDGET_H
-
-#include "FriendListItem.h"
-#include <QWidget>
-#include <QScrollArea>
-#include <QVBoxLayout>
-#include <QTimeLine>
+#include "OverlayScrollListView.h"
 #include "RepositoryTypes.h"
 
-class ScrollAreaNoWheel;
-class ScrollBarThumb;
+class FriendListDelegate;
+class FriendListModel;
 
-class FriendListWidget : public QWidget {
+class FriendListWidget : public OverlayScrollListView
+{
     Q_OBJECT
+
 public:
-    explicit FriendListWidget(QWidget *parent = nullptr);
-    ~FriendListWidget();
+    explicit FriendListWidget(QWidget* parent = nullptr);
 
-    void addItem(const FriendSummary& user);
-    void removeItemAt(int index);
+    QString selectedFriendId() const;
+    FriendSummary selectedFriend() const;
+
 protected:
-    void resizeEvent(QResizeEvent *event) override;
-    void wheelEvent(QWheelEvent *event) override;
-    bool eventFilter(QObject *obj, QEvent *event) override;
-
-private slots:
-    void onItemClicked(FriendListItem*);
+    void mousePressEvent(QMouseEvent* event) override;
 
 private:
-    void animateTo(int targetOffset);
-    void updateScrollBar();
-    void relayoutItems();
-
-    ScrollAreaNoWheel *scrollArea = nullptr;
-    ScrollBarThumb *scrollBarThumb = nullptr;
-    QWidget *contentWidget = nullptr;
-    QList<FriendListItem*> itemList;
-
-    int contentOffset;   // 内容区域的偏移
-    int thumbOffset;     // 滑块的偏移
-
-    bool dragging;
-    int dragStartY;
-    int thumbOffsetAtDragStart;
-
-    QTimeLine *scrollAnimation = nullptr;
-    FriendListItem* selectItem = nullptr;
+    FriendListModel* m_model;
+    FriendListDelegate* m_delegate;
 };
-
-#endif // FRIENDLISTWIDGET_H

@@ -1,33 +1,34 @@
-// PostFeedPage.h
 #pragma once
 
-#include "CustomScrollArea.h"
-#include "PostPreviewItem.h"
+#include "PostMasonryView.h"
 #include "RepositoryTypes.h"
-#include <QVector>
-#include <QWidget>
 
+class PostCardDelegate;
+class PostFeedModel;
 
-class PostFeedPage : public CustomScrollArea {
+class PostFeedPage : public PostMasonryView
+{
     Q_OBJECT
+
 public:
     explicit PostFeedPage(QWidget* parent = nullptr);
-    // 设置数据源
     void setPosts(const QVector<PostSummary>& posts);
+
 signals:
-    void loadMore();
     void postClicked(const QString& postId);
-    void postClickedWithGeometry(const QString& postId, QRect globalGeometry);
-protected:
-    void layoutContent() Q_DECL_OVERRIDE;
-    void showEvent(QShowEvent *event) Q_DECL_OVERRIDE;
+    void postClickedWithGeometry(const PostSummary& summary, QRect globalGeometry);
+
+private slots:
+    void loadMore();
+    void onPostActivated(const PostSummary& summary, const QRect& globalGeometry);
+    void onPostLikeRequested(const QString& postId, bool liked);
+    void onRepositoryPostUpdated(const PostSummary& summary);
+
 private:
-    QVector<PostSummary>        m_data;
-    QVector<PostPreviewItem*>   m_items;
-    // 布局参数
-    const int margin    = 16;
-    const int topMargin = 2;
-    const int hgap      = 12;
-    const int vgap      = 12;
-    const int minItemW  = 200;  // 最小宽度
+    PostFeedModel* m_model;
+    PostCardDelegate* m_delegate;
+    int m_nextOffset = 0;
+    bool m_hasMore = true;
+
+    static constexpr int kPageSize = 12;
 };
