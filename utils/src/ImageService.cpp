@@ -271,7 +271,7 @@ QPixmap ImageService::previewCrop(const QString& source,
     }
     if (image.isNull()) {
         const_cast<ImageService*>(this)->requestPreviewWarmup(source, targetSize, devicePixelRatio);
-        return {};
+        return centerCrop(source, targetSize, radius, devicePixelRatio);
     }
 
     pixmap = renderPixmap(image,

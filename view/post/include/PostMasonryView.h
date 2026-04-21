@@ -2,6 +2,7 @@
 
 #include <QAbstractItemView>
 #include <QPropertyAnimation>
+#include <QTimer>
 #include <QVector>
 
 #include "RepositoryTypes.h"
@@ -58,6 +59,7 @@ private slots:
     void onOverlayScrollBarValueChanged(int value);
     void onVerticalScrollValueChanged(int value);
     void onVerticalScrollRangeChanged(int minimum, int maximum);
+    void onResizeDebounceTimeout();
 
 private:
     struct LayoutItem {
@@ -87,6 +89,7 @@ private:
     SmoothScrollBar* m_overlayScrollBar;
     QPropertyAnimation* m_scrollAnimation;
     QVariantAnimation* m_hoverAnimation;
+    QTimer* m_resizeDebounceTimer;
     int m_animatedScrollValue = 0;
     int m_wheelStepPixels = 56;
     qreal m_precisionScrollScale = 0.72;
@@ -106,4 +109,5 @@ private:
     static constexpr int kMinItemWidth = 200;
     static constexpr int kScrollBarInset = 8;
     static constexpr int kScrollBarRightInset = 4;
+    static constexpr int kResizeDebounceMs = 100;
 };

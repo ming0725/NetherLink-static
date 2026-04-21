@@ -42,6 +42,16 @@ public:
         }
     }
 
+    qreal revealProgress() const
+    {
+        return m_revealProgress;
+    }
+
+    QPixmap pixmap() const
+    {
+        return m_pixmap;
+    }
+
 protected:
     void paintEvent(QPaintEvent* event) override
     {
@@ -101,6 +111,11 @@ private:
     qreal m_revealProgress = 0.0;
 };
 
+TransitionImageWidget* transitionImageWidget(QWidget* widget)
+{
+    return dynamic_cast<TransitionImageWidget*>(widget);
+}
+
 } // namespace
 
 PostApplication::PostApplication(QWidget* parent)
@@ -141,6 +156,7 @@ PostApplication::PostApplication(QWidget* parent)
     }
     m_overlay->setGeometry(rect());
     m_overlay->lower();
+    updateLayerOrder();
 }
 
 void PostApplication::resizeEvent(QResizeEvent* ev)
@@ -157,17 +173,16 @@ void PostApplication::resizeEvent(QResizeEvent* ev)
     const int x = (w - barW) / 2;
     const int y = h - barH - bottomMargin;
     m_bar->setGeometry(x, y, barW, barH);
-    m_bar->raise();
     m_overlay->setGeometry(rect());
 
     if (m_detailView) {
         m_detailView->setGeometry(detailRectForCurrentPost());
-        m_detailView->raise();
     }
-    if (m_transitionImage && m_detailView) {
+    if (m_transitionImage && m_detailView && m_transitionPhase == TransitionPhase::Idle) {
         m_transitionImage->setGeometry(QRect(detailRectForCurrentPost().topLeft() + m_detailView->paintedImageRect().topLeft(),
                                              m_detailView->paintedImageRect().size()));
     }
+    updateLayerOrder();
 }
 
 bool PostApplication::eventFilter(QObject *obj, QEvent *ev) {
@@ -184,20 +199,16 @@ bool PostApplication::eventFilter(QObject *obj, QEvent *ev) {
 
 void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, const QRect& sourceGeometry)
 {
+    stopActiveTransition();
     m_openPostId = summary.postId;
     m_openDetailRequestId.clear();
     m_openSourceGeometry = QRect(mapFromGlobal(sourceGeometry.topLeft()), sourceGeometry.size());
     removeTransitionImage();
-    if (m_detailView) {
-        m_detailView->deleteLater();
-        m_detailView = nullptr;
-        m_detailOpacityEffect = nullptr;
-    }
+    clearDetailView();
 
     m_overlay->setGeometry(rect());
     m_overlay->lower();
     m_overlay->show();
-    m_overlay->raise();
     fadeOverlay(m_overlay ? m_overlay->overlayOpacity() : 0.0, 1.0, false);
 
     m_detailView = new PostDetailView(this);
@@ -214,7 +225,6 @@ void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, cons
     m_detailOpacityEffect->setOpacity(0.0);
     m_detailView->setGraphicsEffect(m_detailOpacityEffect);
     m_detailView->show();
-    m_detailView->raise();
 
     const QRect targetImageGeometry(m_detailView->geometry().topLeft() + m_detailView->paintedImageRect().topLeft(),
                                     m_detailView->paintedImageRect().size());
@@ -232,9 +242,11 @@ void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, cons
     m_transitionImage = transitionImage;
     m_transitionImage->setGeometry(m_openSourceGeometry);
     m_transitionImage->show();
-    m_transitionImage->raise();
+    updateLayerOrder();
 
     auto* group = new QParallelAnimationGroup(this);
+    m_transitionAnimation = group;
+    m_transitionPhase = TransitionPhase::Opening;
 
     auto* transitionAnim = new QPropertyAnimation(m_transitionImage, "geometry", group);
     transitionAnim->setDuration(260);
@@ -249,8 +261,8 @@ void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, cons
     revealAnim->setEndValue(1.0);
     revealAnim->setEasingCurve(QEasingCurve::OutCubic);
     connect(revealAnim, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
-        if (auto* transitionImageWidget = dynamic_cast<TransitionImageWidget*>(m_transitionImage)) {
-            transitionImageWidget->setRevealProgress(value.toReal());
+        if (auto* transitionWidget = transitionImageWidget(m_transitionImage)) {
+            transitionWidget->setRevealProgress(value.toReal());
         }
     });
     group->addAnimation(revealAnim);
@@ -267,7 +279,9 @@ void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, cons
     });
     group->addAnimation(detailFade);
 
-    connect(group, &QParallelAnimationGroup::finished, this, [this]() {
+    connect(group, &QParallelAnimationGroup::finished, this, [this, group]() {
+        m_transitionAnimation = nullptr;
+        m_transitionPhase = TransitionPhase::Idle;
         if (m_detailView) {
             m_detailView->setImageVisible(true);
         }
@@ -275,8 +289,10 @@ void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, cons
             m_detailOpacityEffect->setOpacity(1.0);
         }
         removeTransitionImage();
+        updateLayerOrder();
+        group->deleteLater();
     });
-    group->start(QAbstractAnimation::DeleteWhenStopped);
+    group->start();
 
     m_openDetailRequestId = PostRepository::instance().requestPostDetailAsync({summary.postId});
 }
@@ -352,6 +368,38 @@ QRect PostApplication::detailRectForCurrentPost() const
                  preferred.height());
 }
 
+void PostApplication::updateLayerOrder()
+{
+    if (!m_stack || !m_bar) {
+        return;
+    }
+
+    const bool modalActive = (m_overlay && m_overlay->isVisible()) || m_detailView || m_transitionImage
+            || m_transitionPhase != TransitionPhase::Idle;
+
+    if (!modalActive) {
+        m_stack->lower();
+        m_bar->raise();
+        return;
+    }
+
+    m_stack->lower();
+    m_bar->raise();
+    if (m_overlay) {
+        if (!m_overlay->isVisible()) {
+            m_overlay->show();
+        }
+        m_overlay->raise();
+        m_bar->stackUnder(m_overlay);
+    }
+    if (m_detailView) {
+        m_detailView->raise();
+    }
+    if (m_transitionImage) {
+        m_transitionImage->raise();
+    }
+}
+
 void PostApplication::removeTransitionImage()
 {
     if (!m_transitionImage) {
@@ -362,28 +410,82 @@ void PostApplication::removeTransitionImage()
     m_transitionImage = nullptr;
 }
 
+void PostApplication::stopActiveTransition()
+{
+    m_openDetailRequestId.clear();
+
+    if (m_overlayFadeAnimation) {
+        m_overlayFadeAnimation->stop();
+    }
+    if (m_overlayFadeFinishedConnection) {
+        disconnect(m_overlayFadeFinishedConnection);
+        m_overlayFadeFinishedConnection = {};
+    }
+
+    if (!m_transitionAnimation) {
+        m_transitionPhase = TransitionPhase::Idle;
+        return;
+    }
+
+    QParallelAnimationGroup* animation = m_transitionAnimation;
+    m_transitionAnimation = nullptr;
+    m_transitionPhase = TransitionPhase::Idle;
+    animation->stop();
+    animation->deleteLater();
+}
+
+void PostApplication::clearDetailView()
+{
+    if (!m_detailView) {
+        m_detailOpacityEffect = nullptr;
+        return;
+    }
+
+    m_detailView->deleteLater();
+    m_detailView = nullptr;
+    m_detailOpacityEffect = nullptr;
+    updateLayerOrder();
+}
+
 void PostApplication::startCloseAnimation()
 {
     if (!m_detailView) {
         return;
     }
 
-    m_openDetailRequestId.clear();
-    removeTransitionImage();
+    const QRect startImageGeometry = m_transitionImage
+            ? m_transitionImage->geometry()
+            : QRect(m_detailView->geometry().topLeft() + m_detailView->paintedImageRect().topLeft(),
+                    m_detailView->paintedImageRect().size());
+    const qreal startRevealProgress = transitionImageWidget(m_transitionImage)
+            ? transitionImageWidget(m_transitionImage)->revealProgress()
+            : 1.0;
+    QPixmap transitionPixmap = m_detailView->transitionPixmap();
+    if (transitionPixmap.isNull() && transitionImageWidget(m_transitionImage)) {
+        transitionPixmap = transitionImageWidget(m_transitionImage)->pixmap();
+    }
+    const qreal startDetailOpacity = m_detailOpacityEffect ? m_detailOpacityEffect->opacity() : 1.0;
+    const qreal startOverlayOpacity = m_overlay ? m_overlay->overlayOpacity() : 1.0;
+
+    stopActiveTransition();
     m_detailView->setImageVisible(false);
 
-    const QRect startImageGeometry(m_detailView->geometry().topLeft() + m_detailView->paintedImageRect().topLeft(),
-                                   m_detailView->paintedImageRect().size());
-
-    auto* transitionImage = new TransitionImageWidget(this);
-    transitionImage->setPixmap(m_detailView->transitionPixmap());
-    transitionImage->setRevealProgress(1.0);
-    m_transitionImage = transitionImage;
+    if (!transitionImageWidget(m_transitionImage)) {
+        auto* transitionImage = new TransitionImageWidget(this);
+        transitionImage->setPixmap(transitionPixmap);
+        transitionImage->setRevealProgress(startRevealProgress);
+        m_transitionImage = transitionImage;
+    } else {
+        transitionImageWidget(m_transitionImage)->setPixmap(transitionPixmap);
+        transitionImageWidget(m_transitionImage)->setRevealProgress(startRevealProgress);
+    }
     m_transitionImage->setGeometry(startImageGeometry);
     m_transitionImage->show();
-    m_transitionImage->raise();
+    updateLayerOrder();
 
     auto* group = new QParallelAnimationGroup(this);
+    m_transitionAnimation = group;
+    m_transitionPhase = TransitionPhase::Closing;
 
     auto* transitionAnim = new QPropertyAnimation(m_transitionImage, "geometry", group);
     transitionAnim->setDuration(240);
@@ -394,12 +496,12 @@ void PostApplication::startCloseAnimation()
 
     auto* revealAnim = new QVariantAnimation(group);
     revealAnim->setDuration(240);
-    revealAnim->setStartValue(1.0);
+    revealAnim->setStartValue(startRevealProgress);
     revealAnim->setEndValue(0.0);
     revealAnim->setEasingCurve(QEasingCurve::InOutQuad);
     connect(revealAnim, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
-        if (auto* transitionImageWidget = dynamic_cast<TransitionImageWidget*>(m_transitionImage)) {
-            transitionImageWidget->setRevealProgress(value.toReal());
+        if (auto* transitionWidget = transitionImageWidget(m_transitionImage)) {
+            transitionWidget->setRevealProgress(value.toReal());
         }
     });
     group->addAnimation(revealAnim);
@@ -407,7 +509,7 @@ void PostApplication::startCloseAnimation()
     if (m_detailOpacityEffect) {
         auto* detailFade = new QVariantAnimation(group);
         detailFade->setDuration(200);
-        detailFade->setStartValue(m_detailOpacityEffect->opacity());
+        detailFade->setStartValue(startDetailOpacity);
         detailFade->setEndValue(0.0);
         detailFade->setEasingCurve(QEasingCurve::InOutQuad);
         connect(detailFade, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
@@ -419,10 +521,9 @@ void PostApplication::startCloseAnimation()
     }
 
     if (m_overlay) {
-        m_overlayFadeAnimation->stop();
         auto* overlayAnim = new QVariantAnimation(group);
         overlayAnim->setDuration(220);
-        overlayAnim->setStartValue(m_overlay->overlayOpacity());
+        overlayAnim->setStartValue(startOverlayOpacity);
         overlayAnim->setEndValue(0.0);
         overlayAnim->setEasingCurve(QEasingCurve::InOutQuad);
         connect(overlayAnim, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
@@ -433,16 +534,19 @@ void PostApplication::startCloseAnimation()
         group->addAnimation(overlayAnim);
     }
 
-    connect(group, &QAbstractAnimation::finished, this, [this]() {
+    connect(group, &QAbstractAnimation::finished, this, [this, group]() {
+        m_transitionAnimation = nullptr;
+        m_transitionPhase = TransitionPhase::Idle;
         removeTransitionImage();
-        if (m_detailView) {
-            m_detailView->deleteLater();
-            m_detailView = nullptr;
+        clearDetailView();
+        m_openPostId.clear();
+        if (m_overlay) {
+            m_overlay->hide();
+            m_overlay->setOverlayOpacity(0.0);
         }
-        m_detailOpacityEffect = nullptr;
-        m_overlay->hide();
-        m_overlay->setOverlayOpacity(0.0);
+        updateLayerOrder();
+        group->deleteLater();
     });
 
-    group->start(QAbstractAnimation::DeleteWhenStopped);
+    group->start();
 }

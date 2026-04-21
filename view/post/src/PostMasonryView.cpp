@@ -18,6 +18,7 @@ PostMasonryView::PostMasonryView(QWidget* parent)
     , m_overlayScrollBar(new SmoothScrollBar(this))
     , m_scrollAnimation(new QPropertyAnimation(this, "animatedScrollValue", this))
     , m_hoverAnimation(new QVariantAnimation(this))
+    , m_resizeDebounceTimer(new QTimer(this))
 {
     setAttribute(Qt::WA_TranslucentBackground);
     setMouseTracking(true);
@@ -32,6 +33,8 @@ PostMasonryView::PostMasonryView(QWidget* parent)
     m_overlayScrollBar->hide();
     m_scrollAnimation->setEasingCurve(QEasingCurve::OutCubic);
     m_scrollAnimation->setDuration(180);
+    m_resizeDebounceTimer->setSingleShot(true);
+    m_resizeDebounceTimer->setInterval(kResizeDebounceMs);
     verticalScrollBar()->setSingleStep(28);
     m_hoverAnimation->setDuration(220);
     m_hoverAnimation->setEasingCurve(QEasingCurve::OutCubic);
@@ -62,6 +65,8 @@ PostMasonryView::PostMasonryView(QWidget* parent)
             this, &PostMasonryView::onVerticalScrollRangeChanged);
     connect(&ImageService::instance(), &ImageService::previewReady,
             this, [this]() { viewport()->update(); });
+    connect(m_resizeDebounceTimer, &QTimer::timeout,
+            this, &PostMasonryView::onResizeDebounceTimeout);
 }
 
 void PostMasonryView::setCardDelegate(PostCardDelegate* delegate)
@@ -194,7 +199,9 @@ QRegion PostMasonryView::visualRegionForSelection(const QItemSelection& selectio
 void PostMasonryView::resizeEvent(QResizeEvent* event)
 {
     QAbstractItemView::resizeEvent(event);
-    relayout();
+    updateScrollBarGeometry();
+    updateOverlayScrollBar();
+    m_resizeDebounceTimer->start();
 }
 
 void PostMasonryView::paintEvent(QPaintEvent* event)
@@ -424,6 +431,11 @@ void PostMasonryView::onVerticalScrollRangeChanged(int minimum, int maximum)
     Q_UNUSED(minimum);
     Q_UNUSED(maximum);
     updateOverlayScrollBar();
+}
+
+void PostMasonryView::onResizeDebounceTimeout()
+{
+    relayout();
 }
 
 void PostMasonryView::setAnimatedScrollValue(int value)

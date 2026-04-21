@@ -3,6 +3,7 @@
 
 #include <QWidget>
 #include <QMetaObject>
+#include <QParallelAnimationGroup>
 #include <QStackedWidget>
 #include <QVariantAnimation>
 
@@ -26,14 +27,24 @@ protected:
     void resizeEvent(QResizeEvent* ev) override;
     bool eventFilter(QObject* obj, QEvent* ev) override;
 private:
+    enum class TransitionPhase {
+        Idle,
+        Opening,
+        Closing
+    };
+
     void onPageChanged(int index);
     void fadeOverlay(qreal startOpacity, qreal endOpacity, bool hideAfter);
     QRect detailRectForCurrentPost() const;
+    void updateLayerOrder();
     void removeTransitionImage();
+    void stopActiveTransition();
+    void clearDetailView();
     void startCloseAnimation();
     PostApplicationBar*   m_bar;
     PostOverlay* m_overlay = nullptr;
     QVariantAnimation* m_overlayFadeAnimation = nullptr;
+    QParallelAnimationGroup* m_transitionAnimation = nullptr;
     QMetaObject::Connection m_overlayFadeFinishedConnection;
     QStackedWidget*       m_stack;
     PostDetailView* m_detailView;
@@ -43,6 +54,7 @@ private:
     QString m_openPostId;
     QString m_openDetailRequestId;
     QRect m_openSourceGeometry;
+    TransitionPhase m_transitionPhase = TransitionPhase::Idle;
 #ifdef Q_OS_MACOS
     static constexpr int kContentTopInset = 20;
 #else
