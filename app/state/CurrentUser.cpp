@@ -4,7 +4,6 @@
 CurrentUser::CurrentUser(QObject* parent)
     : QObject(parent)
 {
-    qDebug() << "CurrentUser initialized";
     m_userId = "u007";
     m_userName = "圆头耄耋";
     m_avatarPath = ":/resources/avatar/6.jpg";

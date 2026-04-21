@@ -35,3 +35,4 @@ build/
 .idea/
 cmake-build-debug/
 CMakeLists.txt.user
+.DS_Store
