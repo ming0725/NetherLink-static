@@ -22,6 +22,7 @@ PostMasonryView::PostMasonryView(QWidget* parent)
 {
     setAttribute(Qt::WA_TranslucentBackground);
     setMouseTracking(true);
+    setFocusPolicy(Qt::NoFocus);
     viewport()->setMouseTracking(true);
     viewport()->setAttribute(Qt::WA_TranslucentBackground);
     viewport()->setAutoFillBackground(false);
@@ -178,11 +179,8 @@ bool PostMasonryView::isIndexHidden(const QModelIndex& index) const
 
 void PostMasonryView::setSelection(const QRect& rect, QItemSelectionModel::SelectionFlags command)
 {
+    Q_UNUSED(rect);
     Q_UNUSED(command);
-    const QModelIndex index = indexAt(rect.center());
-    if (index.isValid()) {
-        setCurrentIndex(index);
-    }
 }
 
 QRegion PostMasonryView::visualRegionForSelection(const QItemSelection& selection) const
@@ -300,7 +298,6 @@ void PostMasonryView::mousePressEvent(QMouseEvent* event)
         return;
     }
 
-    setCurrentIndex(index);
     const QStyleOptionViewItem option = viewOptionsForIndex(index);
     const PostCardDelegate::Action action = m_postDelegate->actionAt(option, index, event->pos());
 
