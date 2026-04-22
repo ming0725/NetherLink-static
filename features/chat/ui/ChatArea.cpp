@@ -159,9 +159,8 @@ void ChatArea::onScrollValueChanged(int)
 bool ChatArea::isNearBottom() const
 {
     QScrollBar* scrollBar = chatView->verticalScrollBar();
-    int totalHeight = scrollBar->maximum();
-    int currentBottom = scrollBar->value();
-    return (totalHeight - currentBottom) <= 250;
+    const int threshold = qMax(chatView->viewport()->height(), 180);
+    return (scrollBar->maximum() - scrollBar->value()) <= threshold;
 }
 
 bool ChatArea::isScrollAtBottom() const
@@ -215,8 +214,6 @@ void ChatArea::updateNewMessageNotifierPosition()
 void ChatArea::scrollToBottom()
 {
     chatView->scrollToBottom();
-    
-    isAtBottom = true;
     unreadMessageCount = 0;
     updateNewMessageNotifier();
 }
@@ -310,6 +307,9 @@ void ChatArea::onSendText(const QString &text)
 
 void ChatArea::clearAll() {
     chatModel->clear();
+    unreadMessageCount = 0;
+    isAtBottom = true;
+    newMessageNotifier->hide();
 }
 
 void ChatArea::setMessageId(QString id) {
@@ -322,4 +322,5 @@ void ChatArea::initMessage(QVector<ChatArea::ChatMessagePtr>& messages) {
         chatModel->addMessage(message);
     }
     adjustBottomSpace();
+    QTimer::singleShot(0, chatView, &ChatListView::jumpToBottom);
 }

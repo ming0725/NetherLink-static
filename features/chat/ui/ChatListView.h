@@ -2,6 +2,7 @@
 #define CHATLISTVIEW_H
 
 #include <QMouseEvent>
+#include <QPropertyAnimation>
 
 #include "shared/ui/OverlayScrollListView.h"
 #include "features/chat/model/ChatListModel.h"
@@ -13,6 +14,7 @@ public:
     explicit ChatListView(QWidget *parent = nullptr);
     void setModel(QAbstractItemModel *model) override;
     void scrollToBottom();
+    void jumpToBottom();
 
 protected:
     void mousePressEvent(QMouseEvent* event) override;
@@ -21,7 +23,7 @@ private slots:
     void onModelRowsChanged();
 
 private:
-    static constexpr int kAutoScrollThreshold = 180;
+    QPropertyAnimation* m_scrollAnimation;
 };
 
 #endif // CHATLISTVIEW_H 
