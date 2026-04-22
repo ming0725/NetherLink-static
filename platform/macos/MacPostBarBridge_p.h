@@ -6,10 +6,10 @@ class QWidget;
 
 namespace MacPostBarBridge {
 // Test switch:
-// 1 = LiquidGlass bar
-// 2 = NativeBlur bar
-// 3 = Qt fallback bar
-constexpr int kPostBarTestMode = 1;
+// 1 = prefer LiquidGlass, then NativeBlur, then Qt fallback
+// 2 = prefer NativeBlur, then Qt fallback
+// 3 = force Qt fallback
+constexpr int kPostBarTestMode = 2;
 
 enum class Appearance {
     Unsupported,

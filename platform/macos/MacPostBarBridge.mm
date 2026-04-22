@@ -13,7 +13,6 @@
 #import <objc/runtime.h>
 
 #include <QMetaObject>
-#include <QOperatingSystemVersion>
 #include <QWidget>
 
 @interface NLPostBarTarget : NSObject
@@ -143,49 +142,66 @@ AppearanceStyle styleForAppearance(MacPostBarBridge::Appearance appearance)
     }
 }
 
-MacPostBarBridge::Appearance testAppearanceOverride()
+constexpr int kLiquidGlassMode = 1;
+constexpr int kNativeBlurMode = 2;
+constexpr int kQtFallbackMode = 3;
+
+int normalizedTestMode()
 {
     switch (MacPostBarBridge::kPostBarTestMode) {
-    case 1:
-        return MacPostBarBridge::Appearance::LiquidGlass;
-    case 2:
-        return MacPostBarBridge::Appearance::NativeBlur;
-    case 3:
-        return MacPostBarBridge::Appearance::Unsupported;
+    case kLiquidGlassMode:
+    case kNativeBlurMode:
+    case kQtFallbackMode:
+        return MacPostBarBridge::kPostBarTestMode;
     default:
+        return kLiquidGlassMode;
+    }
+}
+
+bool supportsNativeBlur()
+{
+    return NSClassFromString(@"NSVisualEffectView") != nil
+            && NSClassFromString(@"NSButton") != nil;
+}
+
+bool supportsLiquidGlass()
+{
+    if (!supportsNativeBlur()) {
+        return false;
+    }
+
+#if NETHERLINK_HAS_NS_GLASS_EFFECT_VIEW
+    if (@available(macOS 26.0, *)) {
+        return NSClassFromString(@"NSGlassEffectView") != nil;
+    }
+#endif
+    return false;
+}
+
+MacPostBarBridge::Appearance resolvedAppearanceForMode(int mode)
+{
+    if (mode == kLiquidGlassMode && supportsLiquidGlass()) {
         return MacPostBarBridge::Appearance::LiquidGlass;
+    }
+
+    if (mode == kLiquidGlassMode || mode == kNativeBlurMode) {
+        if (supportsNativeBlur()) {
+            return MacPostBarBridge::Appearance::NativeBlur;
+        }
+    }
+
+    switch (mode) {
+    case kLiquidGlassMode:
+    case kNativeBlurMode:
+    case kQtFallbackMode:
+    default:
+        return MacPostBarBridge::Appearance::Unsupported;
     }
 }
 
 MacPostBarBridge::Appearance currentAppearance()
 {
-    const MacPostBarBridge::Appearance forced = testAppearanceOverride();
-    if (forced == MacPostBarBridge::Appearance::Unsupported) {
-        return forced;
-    }
-
-    if (NSClassFromString(@"NSVisualEffectView") == nil || NSClassFromString(@"NSButton") == nil) {
-        return MacPostBarBridge::Appearance::Unsupported;
-    }
-
-    if (forced == MacPostBarBridge::Appearance::NativeBlur) {
-        return MacPostBarBridge::Appearance::NativeBlur;
-    }
-
-#if NETHERLINK_HAS_NS_GLASS_EFFECT_VIEW
-    if (@available(macOS 26.0, *)) {
-        if (NSClassFromString(@"NSGlassEffectView") != nil) {
-            return MacPostBarBridge::Appearance::LiquidGlass;
-        }
-    }
-#endif
-
-    const QOperatingSystemVersion current = QOperatingSystemVersion::current();
-    if (current.type() == QOperatingSystemVersion::MacOS && current.majorVersion() >= 26) {
-        return MacPostBarBridge::Appearance::NativeBlur;
-    }
-
-    return MacPostBarBridge::Appearance::NativeBlur;
+    return resolvedAppearanceForMode(normalizedTestMode());
 }
 
 NSView* topLevelQtViewForWidget(QWidget* widget, bool createIfNeeded)
@@ -469,7 +485,7 @@ NSView* ensureContainer(NSView* hostView, MacPostBarBridge::Appearance appearanc
 #if NETHERLINK_HAS_NS_GLASS_EFFECT_VIEW
         return ensureGlassContainer(hostView, style);
 #else
-        return ensureVisualEffectContainer(hostView, style);
+        return nil;
 #endif
     case MacPostBarBridge::Appearance::NativeBlur:
         return ensureVisualEffectContainer(hostView, style);
