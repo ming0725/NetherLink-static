@@ -16,7 +16,15 @@ PostCreatePage::PostCreatePage(QWidget* parent)
     : QWidget(parent)
 {
     setupUI();
+#ifdef Q_OS_WIN
+    setAttribute(Qt::WA_StyledBackground, true);
+    setAutoFillBackground(true);
+    QPalette palette = this->palette();
+    palette.setColor(QPalette::Window, QColor(0xF8, 0xF8, 0xFC));
+    setPalette(palette);
+#else
     setAttribute(Qt::WA_TranslucentBackground);
+#endif
 }
 
 void PostCreatePage::setupUI()

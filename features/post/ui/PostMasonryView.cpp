@@ -13,6 +13,12 @@
 #include "features/post/model/PostFeedModel.h"
 #include "shared/ui/SmoothScrollBar.h"
 
+namespace {
+
+const QColor kPostPageBackground(0xF8, 0xF8, 0xFC);
+
+} // namespace
+
 PostMasonryView::PostMasonryView(QWidget* parent)
     : QAbstractItemView(parent)
     , m_overlayScrollBar(new SmoothScrollBar(this))
@@ -20,12 +26,24 @@ PostMasonryView::PostMasonryView(QWidget* parent)
     , m_hoverAnimation(new QVariantAnimation(this))
     , m_resizeDebounceTimer(new QTimer(this))
 {
+#ifndef Q_OS_WIN
     setAttribute(Qt::WA_TranslucentBackground);
+#endif
     setMouseTracking(true);
     setFocusPolicy(Qt::NoFocus);
     viewport()->setMouseTracking(true);
+#ifndef Q_OS_WIN
     viewport()->setAttribute(Qt::WA_TranslucentBackground);
+#endif
+#ifdef Q_OS_WIN
+    viewport()->setAutoFillBackground(true);
+    QPalette palette = viewport()->palette();
+    palette.setColor(QPalette::Base, kPostPageBackground);
+    palette.setColor(QPalette::Window, kPostPageBackground);
+    viewport()->setPalette(palette);
+#else
     viewport()->setAutoFillBackground(false);
+#endif
     setFrameShape(QFrame::NoFrame);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -206,7 +224,11 @@ void PostMasonryView::paintEvent(QPaintEvent* event)
 {
     QPainter painter(viewport());
     painter.setCompositionMode(QPainter::CompositionMode_Source);
+#ifdef Q_OS_WIN
+    painter.fillRect(event->rect(), kPostPageBackground);
+#else
     painter.fillRect(event->rect(), Qt::transparent);
+#endif
     painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
 
     if (!model() || !m_postDelegate) {
