@@ -16,16 +16,22 @@ public:
 signals:
     void sendImage(const QString &path);
     void sendText(const QString &text);
+    void sendTextAsPeer(const QString &text);
 protected:
     void paintEvent(QPaintEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
 private:
+    enum class SendMode {
+        Self,
+        Peer
+    };
+
     void initUI();
     void updateLabelIcon(QLabel *label, const QString &normalIcon, 
                         const QString &hoveredIcon, const QSize &size);
-    void sendCurrentMessage();
+    void sendCurrentMessage(SendMode mode = SendMode::Self);
     void handleLabelHover(QLabel *label, const QString &normalIcon,
                          const QString &hoveredIcon, const QSize &size);
     void showTooltip(QLabel *label, const QString &text);

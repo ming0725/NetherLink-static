@@ -88,6 +88,8 @@ ChatArea::ChatArea(QWidget *parent)
             this, &ChatArea::onSendImage);
     connect(inputBar, &FloatingInputBar::sendText,
             this, &ChatArea::onSendText);
+    connect(inputBar, &FloatingInputBar::sendTextAsPeer,
+            this, &ChatArea::onSendTextAsPeer);
 
     // 设置样式
     chatView->setStyleSheet(
@@ -104,7 +106,7 @@ void ChatArea::addMessage(QSharedPointer<ChatMessage> message)
     // 添加消息
     chatModel->addMessage(message);
     MessageRepository::instance().addMessage(messageId, message);
-    emit sendMessage(messageId, message->getContent(), message->getTimestamp());
+    emit sendMessage(messageId, previewTextForMessage(message.get()), message->getTimestamp());
 
     // 调整底部空白
     adjustBottomSpace();
@@ -179,6 +181,7 @@ void ChatArea::resizeEvent(QResizeEvent *event)
     QWidget::resizeEvent(event);
     updateNewMessageNotifierPosition();
     updateInputBarPosition();
+    adjustBottomSpace();
 
     // 确保新消息提示器在最上层
     if (newMessageNotifier && newMessageNotifier->isVisible()) {
@@ -220,8 +223,16 @@ void ChatArea::scrollToBottom()
 
 void ChatArea::adjustBottomSpace()
 {
-    // 使用固定的底部空白高度
-    chatModel->setBottomSpaceHeight(BottomSpace::DEFAULT_HEIGHT);
+    if (!chatModel || !chatView || !inputBar) {
+        return;
+    }
+
+    const QRect chatViewRect = chatView->geometry();
+    const QRect inputBarRect = inputBar->geometry();
+    const int overlapHeight = qMax(0, chatViewRect.bottom() - inputBarRect.top() + 1);
+    const int safeBottomSpace = overlapHeight + 10;
+
+    chatModel->setBottomSpaceHeight(safeBottomSpace);
 }
 
 void ChatArea::addTextMessage(QSharedPointer<TextMessage> message,
@@ -248,6 +259,7 @@ void ChatArea::addTextMessage(QSharedPointer<TextMessage> message,
 }
 
 void ChatArea::setConversationMeta(const ConversationMeta& meta) {
+    m_conversationMeta = meta;
     isGroupMode = meta.isGroup;
     if (meta.isGroup) {
         statusIcon->hide();
@@ -305,6 +317,33 @@ void ChatArea::onSendText(const QString &text)
     }
 }
 
+void ChatArea::onSendTextAsPeer(const QString& text)
+{
+    const QString trimmedText = text.trimmed();
+    if (trimmedText.isEmpty()) {
+        return;
+    }
+
+    QString senderId = m_conversationMeta.conversationId;
+    QString senderName = m_conversationMeta.title;
+    GroupRole role = GroupRole::Member;
+
+    if (isGroupMode) {
+        const Group group = GroupRepository::instance().requestGroupDetail({messageId});
+        senderId = group.ownerId;
+        senderName = UserRepository::instance().requestUserName(group.ownerId);
+        role = GroupRole::Owner;
+    }
+
+    auto ptr = QSharedPointer<TextMessage>::create(trimmedText,
+                                                   false,
+                                                   senderId,
+                                                   isGroupMode,
+                                                   senderName,
+                                                   role);
+    addMessage(ptr);
+}
+
 void ChatArea::clearAll() {
     chatModel->clear();
     unreadMessageCount = 0;
@@ -323,4 +362,21 @@ void ChatArea::initMessage(QVector<ChatArea::ChatMessagePtr>& messages) {
     }
     adjustBottomSpace();
     QTimer::singleShot(0, chatView, &ChatListView::jumpToBottom);
+}
+
+QString ChatArea::previewTextForMessage(const ChatMessage* message) const
+{
+    if (!message) {
+        return {};
+    }
+
+    if (!message->isInGroupChat()) {
+        return message->getContent();
+    }
+
+    QString senderName = message->getSenderName();
+    if (senderName.isEmpty()) {
+        senderName = UserRepository::instance().requestUserName(message->getSenderId());
+    }
+    return QString("%1：%2").arg(senderName, message->getContent());
 }

@@ -46,8 +46,7 @@ void ChatItemDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opti
         );
         drawTimeHeader(painter, timeHeaderRect, timeHeader->text);
     } else if (message) {
-        // 计算气泡最大宽度（窗口宽度的70%）
-        int maxBubbleWidth = option.rect.width() * 0.7;
+        const int maxBubbleWidth = calculateMaxBubbleWidth(option.rect);
         bool isFromMe = message->isFromMe();
 
         // 绘制头像
@@ -68,7 +67,7 @@ void ChatItemDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opti
                 drawGroupInfo(painter, groupInfoRect, message);
             }
 
-            bubbleRect.moveTop(bubbleRect.top() + NAME_HEIGHT + 5);
+            bubbleRect.moveTop(bubbleRect.top() + NAME_HEIGHT + GROUP_INFO_GAP);
         }
         // 绘制气泡
         drawBubble(painter, bubbleRect, isFromMe, message, message->getIsSelected());
@@ -95,17 +94,18 @@ bool ChatItemDelegate::editorEvent(QEvent* event, QAbstractItemModel* model,
         if (!message) return false;
 
         // 计算气泡区域
-        int maxBubbleWidth = option.rect.width() * 0.7;
+        const int maxBubbleWidth = calculateMaxBubbleWidth(option.rect);
         QRect bubbleRect = calculateBubbleRect(option.rect, message, maxBubbleWidth, message->isFromMe());
 
         // 如果是群聊消息，需要考虑名字区域的偏移
         if (message->isInGroupChat()) {
-            bubbleRect.moveTop(bubbleRect.top() + NAME_HEIGHT + 5);
+            bubbleRect.moveTop(bubbleRect.top() + NAME_HEIGHT + GROUP_INFO_GAP);
         }
 
         // 创建气泡路径（用于精确点击检测）
         QPainterPath bubblePath;
-        bubblePath.addRoundedRect(bubbleRect, BUBBLE_RADIUS, BUBBLE_RADIUS);
+        const qreal bubbleRadius = message->getType() == MessageType::Image ? IMAGE_RADIUS : BUBBLE_RADIUS;
+        bubblePath.addRoundedRect(bubbleRect, bubbleRadius, bubbleRadius);
 
         if (bubblePath.contains(mouseEvent->pos())) {
             // 无论是左键还是右键点击，都设置选中状态
@@ -137,6 +137,12 @@ bool ChatItemDelegate::editorEvent(QEvent* event, QAbstractItemModel* model,
 void ChatItemDelegate::drawBubble(QPainter* painter, const QRect& rect,
                                  bool isFromMe, const ChatMessage* message, bool isSelected) const
 {
+    if (message->getType() == MessageType::Image) {
+        const ImageMessage* imgMsg = static_cast<const ImageMessage*>(message);
+        drawImageMessage(painter, rect, imgMsg->getImageSource(), isSelected);
+        return;
+    }
+
     // 设置气泡颜色
     QColor bubbleColor;
     if (isFromMe) {
@@ -157,9 +163,6 @@ void ChatItemDelegate::drawBubble(QPainter* painter, const QRect& rect,
     // 根据消息类型绘制内容
     if (message->getType() == MessageType::Text) {
         drawTextMessage(painter, rect, message->getContent(), isFromMe, isSelected);
-    } else if (message->getType() == MessageType::Image) {
-        const ImageMessage* imgMsg = static_cast<const ImageMessage*>(message);
-        drawImageMessage(painter, rect, imgMsg->getImageSource());
     }
 }
 
@@ -222,26 +225,28 @@ void ChatItemDelegate::drawTextMessage(QPainter* painter, const QRect& rect,
 }
 
 void ChatItemDelegate::drawImageMessage(QPainter* painter, const QRect& rect,
-                                      const QString& imageSource) const
+                                      const QString& imageSource,
+                                      bool isSelected) const
 {
-    QRect imageRect = rect.adjusted(BUBBLE_PADDING, BUBBLE_PADDING,
-                                  -BUBBLE_PADDING, -BUBBLE_PADDING);
     const QSize sourceSize = ImageService::instance().sourceSize(imageSource);
     if (!sourceSize.isValid()) {
         return;
     }
 
-    QSize scaledSize = sourceSize.scaled(imageRect.size(), Qt::KeepAspectRatio);
-
-    QRect targetRect(imageRect.x() + (imageRect.width() - scaledSize.width()) / 2,
-                    imageRect.y() + (imageRect.height() - scaledSize.height()) / 2,
-                    scaledSize.width(), scaledSize.height());
-
     const QPixmap image = ImageService::instance().scaled(imageSource,
-                                                          targetRect.size(),
+                                                          rect.size(),
                                                           Qt::KeepAspectRatio,
                                                           painter->device()->devicePixelRatioF());
-    painter->drawPixmap(targetRect, image);
+
+    QPainterPath clipPath;
+    clipPath.addRoundedRect(rect, IMAGE_RADIUS, IMAGE_RADIUS);
+    painter->save();
+    painter->setClipPath(clipPath);
+    painter->drawPixmap(rect, image);
+    if (isSelected) {
+        painter->fillRect(rect, QColor(128, 128, 128, 80));
+    }
+    painter->restore();
 }
 
 void ChatItemDelegate::drawGroupInfo(QPainter* painter, const QRect& rect,
@@ -384,20 +389,15 @@ QSize ChatItemDelegate::sizeHint(const QStyleOptionViewItem& option,
         // 时间标识的高度（包括上下间距）
         return QSize(option.rect.width(), TIME_HEADER_HEIGHT + 12);  // 12是上下各6像素的间距
     } else if (message) {
-        int maxBubbleWidth = option.rect.width() * 0.7;
+        const int maxBubbleWidth = calculateMaxBubbleWidth(option.rect);
 
         // 使用更大的字体
         QFont messageFont = QApplication::font();
         messageFont.setPixelSize(14);
         QFontMetrics fm(messageFont);
 
-        int height = AVATAR_SIZE + 2 * BUBBLE_MARGIN;
         int bubbleHeight = 0;
-
-        // 如果是群聊消息，需要额外的空间显示群成员信息
-        if (message->isInGroupChat()) {
-            height += NAME_HEIGHT;  // 名字高度 + 5像素间距
-        }
+        const int groupInfoHeight = message->isInGroupChat() ? (NAME_HEIGHT + GROUP_INFO_GAP) : 0;
 
         if (message->getType() == MessageType::Text) {
             QString text = message->getContent();
@@ -421,24 +421,19 @@ QSize ChatItemDelegate::sizeHint(const QStyleOptionViewItem& option,
             textLayout.endLayout();
 
             bubbleHeight = qCeil(textHeight) + 2 * BUBBLE_PADDING;
-            if (message->isInGroupChat()) {
-                bubbleHeight += NAME_HEIGHT;
-            }
         } else if (message->getType() == MessageType::Image) {
             const ImageMessage* imgMsg = static_cast<const ImageMessage*>(message);
             const QSize sourceSize = ImageService::instance().sourceSize(imgMsg->getImageSource());
             if (sourceSize.isValid()) {
-                QSize scaledSize = sourceSize.scaled(maxBubbleWidth - 2 * BUBBLE_PADDING,
-                                                     200,
+                QSize scaledSize = sourceSize.scaled(maxBubbleWidth,
+                                                     IMAGE_MAX_HEIGHT,
                                                      Qt::KeepAspectRatio);
-                bubbleHeight = scaledSize.height() + 2 * BUBBLE_PADDING;
-            }
-            if (message->isInGroupChat()) {
-                bubbleHeight += 20; // 群图片消息空隙补偿
+                bubbleHeight = scaledSize.height();
             }
         }
 
-        height = qMax(height, bubbleHeight + 2 * BUBBLE_MARGIN);
+        const int contentHeight = qMax(AVATAR_SIZE, groupInfoHeight + bubbleHeight);
+        const int height = contentHeight + 2 * BUBBLE_MARGIN;
         return QSize(option.rect.width(), height);
     }
 
@@ -486,17 +481,18 @@ QRect ChatItemDelegate::calculateBubbleRect(const QRect& contentRect,
         const ImageMessage* imgMsg = static_cast<const ImageMessage*>(message);
         const QSize sourceSize = ImageService::instance().sourceSize(imgMsg->getImageSource());
         if (sourceSize.isValid()) {
-            QSize scaledSize = sourceSize.scaled(maxWidth - 2 * BUBBLE_PADDING,
-                                                 200,
+            QSize scaledSize = sourceSize.scaled(maxWidth,
+                                                 IMAGE_MAX_HEIGHT,
                                                  Qt::KeepAspectRatio);
-            bubbleWidth = scaledSize.width() + 2 * BUBBLE_PADDING;
-            bubbleHeight = scaledSize.height() + 2 * BUBBLE_PADDING;
+            bubbleWidth = scaledSize.width();
+            bubbleHeight = scaledSize.height();
         }
     }
 
     bubbleWidth = qMin(bubbleWidth, maxWidth);
-    int x = isFromMe ? contentRect.right() - bubbleWidth - AVATAR_SIZE - BUBBLE_MARGIN
-                     : AVATAR_SIZE + BUBBLE_MARGIN + LEFT_MARGIN;
+    const int x = isFromMe
+            ? contentRect.right() - HORIZONTAL_EDGE_MARGIN - AVATAR_SIZE - BUBBLE_MARGIN - bubbleWidth + 1
+            : HORIZONTAL_EDGE_MARGIN + AVATAR_SIZE + BUBBLE_MARGIN;
 
     return QRect(x, contentRect.y() + BUBBLE_MARGIN,
                 bubbleWidth, bubbleHeight);
@@ -505,8 +501,20 @@ QRect ChatItemDelegate::calculateBubbleRect(const QRect& contentRect,
 QRect ChatItemDelegate::calculateAvatarRect(const QRect& contentRect,
                                           bool isFromMe) const
 {
-    int x = isFromMe ? contentRect.right() - AVATAR_SIZE : LEFT_MARGIN;
+    const int x = isFromMe
+            ? contentRect.right() - HORIZONTAL_EDGE_MARGIN - AVATAR_SIZE + 1
+            : HORIZONTAL_EDGE_MARGIN;
     return QRect(x, contentRect.y() + BUBBLE_MARGIN, AVATAR_SIZE, AVATAR_SIZE);
+}
+
+int ChatItemDelegate::calculateMaxBubbleWidth(const QRect& contentRect) const
+{
+    const int availableWidth = contentRect.width()
+            - 2 * HORIZONTAL_EDGE_MARGIN
+            - AVATAR_SIZE
+            - BUBBLE_MARGIN
+            - 12;
+    return qMax(120, qMin(static_cast<int>(contentRect.width() * 0.7), availableWidth));
 }
 
 void ChatItemDelegate::showContextMenu(const QPoint& pos, const QModelIndex& index,

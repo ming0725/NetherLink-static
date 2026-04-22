@@ -17,6 +17,7 @@ public:
     void jumpToBottom();
 
 protected:
+    void resizeEvent(QResizeEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
 
 private slots:

@@ -39,6 +39,7 @@ private slots:
     void onNewMessageNotifierClicked();
     void onSendImage(const QString &path);
     void onSendText(const QString &text);
+    void onSendTextAsPeer(const QString &text);
 
 private:
     ChatListView* chatView;
@@ -53,6 +54,7 @@ private:
     bool isAtBottom;
     bool isGroupMode;
     QString messageId;
+    ConversationMeta m_conversationMeta;
     
     void updateNewMessageNotifier();
     void updateNewMessageNotifierPosition();
@@ -61,6 +63,7 @@ private:
     bool isNearBottom() const;
     void adjustBottomSpace();
     void updateInputBarPosition();
+    QString previewTextForMessage(const ChatMessage* message) const;
 };
 
 #endif // CHATAREA_H 

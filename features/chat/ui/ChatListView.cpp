@@ -95,6 +95,20 @@ void ChatListView::jumpToBottom()
     updateOverlayScrollBar();
 }
 
+void ChatListView::resizeEvent(QResizeEvent* event)
+{
+    const bool wasNearBottom = verticalScrollBar()->maximum() - verticalScrollBar()->value() <= 5;
+
+    OverlayScrollListView::resizeEvent(event);
+    m_scrollAnimation->stop();
+    doItemsLayout();
+    updateGeometries();
+    if (wasNearBottom) {
+        verticalScrollBar()->setValue(verticalScrollBar()->maximum());
+    }
+    updateOverlayScrollBar();
+}
+
 void ChatListView::mousePressEvent(QMouseEvent* event)
 {
     const QModelIndex index = indexAt(event->pos());

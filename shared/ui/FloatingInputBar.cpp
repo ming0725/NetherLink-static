@@ -238,6 +238,10 @@ bool FloatingInputBar::eventFilter(QObject *watched, QEvent *event)
     if (watched == m_inputEdit) {
         if (event->type() == QEvent::KeyPress) {
             QKeyEvent *keyEvent = static_cast<QKeyEvent*>(event);
+            if (keyEvent->key() == Qt::Key_BracketLeft && keyEvent->modifiers() == Qt::NoModifier) {
+                sendCurrentMessage(SendMode::Peer);
+                return true;
+            }
             if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) {
                 if (!(keyEvent->modifiers() & Qt::ShiftModifier)) {
                     sendCurrentMessage();
@@ -297,11 +301,15 @@ void FloatingInputBar::mousePressEvent(QMouseEvent *event)
 }
 
 
-void FloatingInputBar::sendCurrentMessage()
+void FloatingInputBar::sendCurrentMessage(SendMode mode)
 {
     QString text = m_inputEdit->toPlainText().trimmed();
     if (!text.isEmpty()) {
-        emit sendText(text);
+        if (mode == SendMode::Peer) {
+            emit sendTextAsPeer(text);
+        } else {
+            emit sendText(text);
+        }
         m_inputEdit->clear();
     }
 }

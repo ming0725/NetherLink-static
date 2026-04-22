@@ -23,12 +23,15 @@ private:
     static constexpr int BUBBLE_MARGIN = 10;
     static constexpr int BUBBLE_PADDING = 12;
     static constexpr int BUBBLE_RADIUS = 10;
+    static constexpr int IMAGE_RADIUS = 12;
+    static constexpr int IMAGE_MAX_HEIGHT = 200;
     static constexpr int NAME_HEIGHT = 20;  // 群聊成员名字的高度
+    static constexpr int GROUP_INFO_GAP = 5;  // 群成员名字与消息内容间距
     static constexpr int NAME_MAX_WIDTH = 140;  // 群聊成员名字的最大宽度
     static constexpr int ROLE_PADDING = 5;  // 身份标签的内边距
     static constexpr int ROLE_HEIGHT = 18;  // 身份标签的高度
     static constexpr int ROLE_RADIUS = 4;   // 身份标签的圆角半径
-    static constexpr int LEFT_MARGIN = 8;   // 左边头像边距
+    static constexpr int HORIZONTAL_EDGE_MARGIN = 20;   // 聊天项左右安全边距
     
     // 时间标识相关常量
     static constexpr int TIME_HEADER_HEIGHT = 22;  // 时间标识高度
@@ -42,7 +45,7 @@ private:
     void drawTextMessage(QPainter* painter, const QRect& rect,
                         const QString& text, bool isFromMe, bool isSelected) const;
     void drawImageMessage(QPainter* painter, const QRect& rect,
-                         const QString& imageSource) const;
+                         const QString& imageSource, bool isSelected) const;
     void drawAvatar(QPainter* painter, const QRect& rect,
                     const QString& userId) const;
     void drawGroupInfo(QPainter* painter, const QRect& rect,
@@ -57,6 +60,7 @@ private:
                              int maxWidth, bool isFromMe) const;
     QRect calculateAvatarRect(const QRect& contentRect,
                              bool isFromMe) const;
+    int calculateMaxBubbleWidth(const QRect& contentRect) const;
     QRect calculateTimeHeaderRect(const QRect& contentRect,
                                 const QString& text) const;
                              
