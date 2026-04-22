@@ -5,11 +5,62 @@
 #include "features/chat/data/MessageRepository.h"
 #include "app/state/CurrentUser.h"
 #include "shared/services/ImageService.h"
+#ifdef Q_OS_MACOS
+#include "platform/macos/MacFloatingInputBarBridge_p.h"
+#endif
+#include <QPainter>
+#include <QLinearGradient>
 #include <QVBoxLayout>
 #include <QScrollBar>
 #include <QTimer>
 #include <QResizeEvent>
 #include <QDateTime>
+
+namespace {
+
+// Floating input bar metrics. Keep list bottom spacing in sync with these values.
+static constexpr int kInputBarSideMargin = 20;
+static constexpr int kInputBarBottomMargin = 18;
+static constexpr int kInputBarHeight = 195;
+static constexpr int kChatListBottomSpacePadding = 10;
+static constexpr int kNewMessageNotifierBottomMargin = 26;
+static constexpr int kInputBarBottomGradientFadeHeight = 32;
+static constexpr int kInputBarBottomGradientSolidAlpha = 192;
+
+class BottomGapGradientOverlay : public QWidget
+{
+public:
+    explicit BottomGapGradientOverlay(QWidget* parent = nullptr)
+        : QWidget(parent)
+    {
+        setAttribute(Qt::WA_TransparentForMouseEvents);
+        setAttribute(Qt::WA_NoSystemBackground);
+        setAttribute(Qt::WA_TranslucentBackground);
+        hide();
+    }
+
+protected:
+    void paintEvent(QPaintEvent* event) override
+    {
+        QWidget::paintEvent(event);
+
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+
+        QLinearGradient gradient(rect().topLeft(), rect().bottomLeft());
+        const qreal fadeStop = rect().height() > 0
+                ? qBound(0.0,
+                         static_cast<qreal>(kInputBarBottomGradientFadeHeight) / rect().height(),
+                         1.0)
+                : 1.0;
+        gradient.setColorAt(0.0, QColor(0xF2, 0xF2, 0xF2, 0));
+        gradient.setColorAt(fadeStop, QColor(0xF2, 0xF2, 0xF2, kInputBarBottomGradientSolidAlpha));
+        gradient.setColorAt(1.0, QColor(0xF2, 0xF2, 0xF2, kInputBarBottomGradientSolidAlpha));
+        painter.fillRect(rect(), gradient);
+    }
+};
+
+} // namespace
 
 ChatArea::ChatArea(QWidget *parent)
         : QWidget(parent)
@@ -37,6 +88,8 @@ ChatArea::ChatArea(QWidget *parent)
     // 创建新消息提示组件
     newMessageNotifier = new NewMessageNotifier(this);
     newMessageNotifier->hide();
+
+    bottomGapGradientOverlay = new BottomGapGradientOverlay(this);
 
     // 创建悬浮输入栏
     inputBar = new FloatingInputBar(this);
@@ -207,8 +260,7 @@ void ChatArea::updateNewMessageNotifierPosition()
         // 计算新消息提示器的位置
         int x = (width() - newMessageNotifier->width()) / 2;
         // 将提示器放在输入栏上方
-        const int BUTTOM_MARGIN = 26;
-        int y = height() - inputBar->height() - newMessageNotifier->height() - BUTTOM_MARGIN;
+        int y = height() - inputBar->height() - newMessageNotifier->height() - kNewMessageNotifierBottomMargin;
         newMessageNotifier->move(x, y);
         newMessageNotifier->raise();  // 确保显示在最上层
     }
@@ -229,8 +281,8 @@ void ChatArea::adjustBottomSpace()
 
     const QRect chatViewRect = chatView->geometry();
     const QRect inputBarRect = inputBar->geometry();
-    const int overlapHeight = qMax(0, chatViewRect.bottom() - inputBarRect.top() + 1);
-    const int safeBottomSpace = overlapHeight + 10;
+    const int inputBarOverlapHeight = qMax(0, chatViewRect.bottom() - inputBarRect.top() + 1);
+    const int safeBottomSpace = inputBarOverlapHeight + kChatListBottomSpacePadding;
 
     chatModel->setBottomSpaceHeight(safeBottomSpace);
 }
@@ -275,17 +327,37 @@ void ChatArea::setConversationMeta(const ConversationMeta& meta) {
 
 void ChatArea::updateInputBarPosition() {
     if (inputBar) {
-        // 设置输入栏的大小和位置
-        const int MARGIN = 20;  // 距离边缘的边距
-        const int INPUT_BAR_WIDTH = width() - 2 * MARGIN;
-        const int INPUT_BAR_HEIGHT = 175;  // 输入栏高度
+        const QRect inputBarRect(
+                kInputBarSideMargin,
+                height() - kInputBarHeight - kInputBarBottomMargin,
+                width() - 2 * kInputBarSideMargin,
+                kInputBarHeight);
+        inputBar->setGeometry(inputBarRect);
+        inputBar->raise();
 
-        inputBar->setGeometry(
-                MARGIN,  // x
-                height() - INPUT_BAR_HEIGHT - MARGIN,  // y
-                INPUT_BAR_WIDTH,  // width
-                INPUT_BAR_HEIGHT  // height
-        );
+#ifdef Q_OS_MACOS
+        const bool useBottomGradient =
+                MacFloatingInputBarBridge::appearance() == MacFloatingInputBarBridge::Appearance::LiquidGlass;
+#else
+        const bool useBottomGradient = false;
+#endif
+        if (bottomGapGradientOverlay) {
+            const int gradientTop = inputBarRect.bottom() + 1;
+            const int gradientHeight = height() - gradientTop;
+            if (useBottomGradient && gradientHeight > 0) {
+                const int overlayTop = qMax(0, gradientTop - kInputBarBottomGradientFadeHeight);
+                bottomGapGradientOverlay->setGeometry(
+                        0,
+                        overlayTop,
+                        width(),
+                        height() - overlayTop);
+                bottomGapGradientOverlay->show();
+                bottomGapGradientOverlay->raise();
+                inputBar->raise();
+            } else {
+                bottomGapGradientOverlay->hide();
+            }
+        }
     }
 }
 
@@ -362,6 +434,7 @@ void ChatArea::initMessage(QVector<ChatArea::ChatMessagePtr>& messages) {
     }
     adjustBottomSpace();
     QTimer::singleShot(0, chatView, &ChatListView::jumpToBottom);
+    QTimer::singleShot(0, inputBar, &FloatingInputBar::focusInput);
 }
 
 QString ChatArea::previewTextForMessage(const ChatMessage* message) const

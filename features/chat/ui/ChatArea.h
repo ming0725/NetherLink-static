@@ -46,6 +46,7 @@ private:
     ChatListModel* chatModel;
     ChatItemDelegate* chatDelegate;
     NewMessageNotifier* newMessageNotifier;
+    QWidget* bottomGapGradientOverlay;
     FloatingInputBar* inputBar;
     QLabel* statusIcon;
     QLabel* nameLabel;

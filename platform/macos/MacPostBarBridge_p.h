@@ -9,7 +9,7 @@ namespace MacPostBarBridge {
 // 1 = prefer LiquidGlass, then NativeBlur, then Qt fallback
 // 2 = prefer NativeBlur, then Qt fallback
 // 3 = force Qt fallback
-constexpr int kPostBarTestMode = 2;
+constexpr int kPostBarTestMode = 1;
 
 enum class Appearance {
     Unsupported,
