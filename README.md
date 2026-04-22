@@ -47,10 +47,11 @@ NetherLink‑static 是一个基于 Qt 的聊天社交客户端静态演示，**
 
 > 以下为示例截图，展示主要页面风格。
 
-1. **主界面**
+1. **聊天界面**
 2. **好友列表**
 3. **帖子中心**
-4. **AI 对话窗口**
+4. **帖子详情页**
+5. **macOS 原生液态玻璃和高斯模糊**
 
 <img src="https://github.com/ming0725/NetherLink-static/blob/master/doc/images/1_chat.jpg?raw=true" alt="聊天界面" width="600"/>
 
@@ -60,7 +61,9 @@ NetherLink‑static 是一个基于 Qt 的聊天社交客户端静态演示，**
 
 <img src="https://github.com/ming0725/NetherLink-static/blob/master/doc/images/4_detail_post.png?raw=true" alt="帖子详情页" width="600"/>
 
-<img src="https://github.com/ming0725/NetherLink-static/blob/master/doc/images/5_aichat.png?raw=true" alt="AI 对话" width="600"/>
+<img src="https://github.com/ming0725/NetherLink-static/blob/master/doc/images/6_lqglass.png?raw=true" alt="Mac 液态玻璃底部栏" width="600"/>
+
+<img src="https://github.com/ming0725/NetherLink-static/blob/master/doc/images/7_gsblur.png?raw=true" alt="Mac 高斯模糊底部栏" width="600"/>
 
 ---
 
@@ -93,6 +96,17 @@ cmake --build . --config Release
 完善基础功能，添加 Minecraft 音效，统一数据接口层：将当前静态数据抽象为统一的数据访问接口，保持与未来网络请求结构一致，便于后续无缝切换为真实 API。
 
 ## 📅 更新日志
+
+### 2026/4/22 更新
+
+🍎 **macOS 帖子底部栏原生渲染**  
+帖子页底部 Bar 接入 macOS 原生 Liquid Glass 与 Native Blur 渲染链路；在 macOS 26 及以上可切换液态玻璃、原生模糊和纯 QT 实现。
+
+🪟 **Windows 帖子页背景绘制修复**  
+为 Windows 下的帖子流、发帖页和瀑布流视图补齐背景绘制，修复透明区域与页面背景显示异常。
+
+🎞 **帖子详情转场继续打磨**  
+继续优化帖子详情页打开和关闭时的转场表现，以及与底部 Bar 的联动效果，页面切换更连贯自然。
 
 ### 2026/4/21 更新
 
