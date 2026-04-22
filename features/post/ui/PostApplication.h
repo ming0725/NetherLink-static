@@ -36,6 +36,7 @@ private:
 
     void onPageChanged(int index);
     void fadeOverlay(qreal startOpacity, qreal endOpacity, bool hideAfter);
+    void fadeBar(qreal startOpacity, qreal endOpacity, bool hideAfter);
     QRect detailRectForCurrentPost() const;
     void updateLayerOrder();
     void removeTransitionImage();
@@ -48,8 +49,10 @@ private:
     PostApplicationBar*   m_bar;
     PostOverlay* m_overlay = nullptr;
     QVariantAnimation* m_overlayFadeAnimation = nullptr;
+    QVariantAnimation* m_barFadeAnimation = nullptr;
     QParallelAnimationGroup* m_transitionAnimation = nullptr;
     QMetaObject::Connection m_overlayFadeFinishedConnection;
+    QMetaObject::Connection m_barFadeFinishedConnection;
     QStackedWidget*       m_stack;
     PostFeedPage* m_homeFeedPage = nullptr;
     PostFeedPage* m_followFeedPage = nullptr;

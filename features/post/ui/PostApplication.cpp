@@ -125,7 +125,14 @@ PostApplication::PostApplication(QWidget* parent)
         , m_stack(new QStackedWidget(this))
         , m_detailView(nullptr)
 {
-    m_bar->enableBlur(false);
+#ifdef Q_OS_WIN
+    setAttribute(Qt::WA_StyledBackground, true);
+    setAutoFillBackground(true);
+    QPalette palette = this->palette();
+    palette.setColor(QPalette::Window, QColor(0xF8, 0xF8, 0xFC));
+    setPalette(palette);
+#endif
+
     m_stack->addWidget(createPlaceholderPage());
     m_stack->addWidget(createPlaceholderPage());
     m_stack->addWidget(createPlaceholderPage());
@@ -133,6 +140,15 @@ PostApplication::PostApplication(QWidget* parent)
     connect(m_bar, &PostApplicationBar::pageClicked, this, &PostApplication::onPageChanged);
     connect(&PostRepository::instance(), &PostRepository::postDetailReady,
             this, &PostApplication::onPostDetailReady);
+
+    m_barFadeAnimation = new QVariantAnimation(this);
+    m_barFadeAnimation->setDuration(220);
+    m_barFadeAnimation->setEasingCurve(QEasingCurve::InOutQuad);
+    connect(m_barFadeAnimation, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
+        if (m_bar) {
+            m_bar->setVisualOpacity(value.toReal());
+        }
+    });
 
     if (!m_overlay) {
         m_overlay = new PostOverlay(this);
@@ -150,6 +166,7 @@ PostApplication::PostApplication(QWidget* parent)
     }
     m_overlay->setGeometry(rect());
     m_overlay->lower();
+    m_bar->setVisualOpacity(1.0);
     updateLayerOrder();
 
     if (!m_initialPageLoadScheduled) {
@@ -170,12 +187,18 @@ void PostApplication::resizeEvent(QResizeEvent* ev)
     QWidget::resizeEvent(ev);
     const int w = width();
     const int h = height();
-    // 1. 让 stack 铺满整个区域
-    m_stack->setGeometry(0, kContentTopInset, w, h - kContentTopInset);
-    // 2. 计算 bar 的居中底部位置
     const int barW = m_bar->width();
     const int barH = m_bar->height();
     const int bottomMargin = 15;
+#ifdef Q_OS_MACOS
+    const int stackBottomSafeInset = 0;
+#else
+    const int stackBottomSafeInset = m_bar->usesNativeBar() ? (barH + bottomMargin + 10) : 0;
+#endif
+    const int stackHeight = qMax(0, h - kContentTopInset - stackBottomSafeInset);
+
+    // macOS keeps the bar floating over the feed; other platforms can still reserve space.
+    m_stack->setGeometry(0, kContentTopInset, w, stackHeight);
     const int x = (w - barW) / 2;
     const int y = h - barH - bottomMargin;
     m_bar->setGeometry(x, y, barW, barH);
@@ -216,6 +239,7 @@ void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, cons
     m_overlay->lower();
     m_overlay->show();
     fadeOverlay(m_overlay ? m_overlay->overlayOpacity() : 0.0, 1.0, false);
+    fadeBar(m_bar ? m_bar->visualOpacity() : 1.0, 0.0, true);
 
     m_detailView = new PostDetailView(this);
     m_detailView->setPreviewSummary(summary);
@@ -327,7 +351,15 @@ QWidget* PostApplication::createPlaceholderPage() const
 {
     auto* page = new QWidget(m_stack);
     page->setAttribute(Qt::WA_StyledBackground, true);
+#ifdef Q_OS_WIN
+    page->setAutoFillBackground(true);
+    QPalette palette = page->palette();
+    palette.setColor(QPalette::Window, QColor(0xF8, 0xF8, 0xFC));
+    page->setPalette(palette);
+    page->setStyleSheet("border:none;");
+#else
     page->setStyleSheet("background:transparent;border:none;");
+#endif
     return page;
 }
 
@@ -417,6 +449,38 @@ void PostApplication::fadeOverlay(qreal startOpacity, qreal endOpacity, bool hid
     m_overlayFadeAnimation->start();
 }
 
+void PostApplication::fadeBar(qreal startOpacity, qreal endOpacity, bool hideAfter)
+{
+    if (!m_bar || !m_barFadeAnimation) {
+        return;
+    }
+
+    m_barFadeAnimation->stop();
+    if (m_barFadeFinishedConnection) {
+        disconnect(m_barFadeFinishedConnection);
+        m_barFadeFinishedConnection = {};
+    }
+
+    m_bar->setVisualOpacity(startOpacity);
+    if (!m_bar->isVisible()) {
+        m_bar->show();
+        updateLayerOrder();
+    }
+
+    m_barFadeAnimation->setStartValue(startOpacity);
+    m_barFadeAnimation->setEndValue(endOpacity);
+    if (hideAfter) {
+        m_barFadeFinishedConnection = connect(m_barFadeAnimation, &QVariantAnimation::finished, this, [this]() {
+            if (m_bar) {
+                m_bar->hide();
+                m_bar->setVisualOpacity(0.0);
+                updateLayerOrder();
+            }
+        });
+    }
+    m_barFadeAnimation->start();
+}
+
 QRect PostApplication::detailRectForCurrentPost() const
 {
     if (!m_detailView) {
@@ -487,6 +551,13 @@ void PostApplication::stopActiveTransition()
         disconnect(m_overlayFadeFinishedConnection);
         m_overlayFadeFinishedConnection = {};
     }
+    if (m_barFadeAnimation) {
+        m_barFadeAnimation->stop();
+    }
+    if (m_barFadeFinishedConnection) {
+        disconnect(m_barFadeFinishedConnection);
+        m_barFadeFinishedConnection = {};
+    }
 
     if (!m_transitionAnimation) {
         m_transitionPhase = TransitionPhase::Idle;
@@ -535,6 +606,7 @@ void PostApplication::startCloseAnimation()
 
     stopActiveTransition();
     m_detailView->setImageVisible(false);
+    fadeBar(m_bar ? m_bar->visualOpacity() : 0.0, 1.0, false);
 
     if (!transitionImageWidget(m_transitionImage)) {
         auto* transitionImage = new TransitionImageWidget(this);

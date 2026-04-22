@@ -1,26 +1,32 @@
 #include "PostApplicationBar.h"
 
 #include <QFontMetrics>
-#include <QGraphicsBlurEffect>
 #include <QGraphicsDropShadowEffect>
-#include <QGraphicsPixmapItem>
-#include <QGraphicsScene>
 #include <QMouseEvent>
 #include <QPainter>
-#include <QPixmap>
+#include <QtGlobal>
+
+#ifdef Q_OS_MACOS
+#include "platform/macos/MacPostBarBridge_p.h"
+#endif
 
 PostApplicationBar::PostApplicationBar(QWidget* parent)
     : QWidget(parent)
-    , m_parent(parent)
 {
     setAttribute(Qt::WA_TranslucentBackground);
     setMouseTracking(true);
 
-    auto* shadow = new QGraphicsDropShadowEffect(this);
-    shadow->setBlurRadius(30);
-    shadow->setOffset(0, 0);
-    shadow->setColor(QColor(150, 150, 150, 220));
-    setGraphicsEffect(shadow);
+#ifdef Q_OS_MACOS
+    m_usesNativeBar = MacPostBarBridge::appearance() != MacPostBarBridge::Appearance::Unsupported;
+#endif
+
+    if (!m_usesNativeBar) {
+        auto* shadow = new QGraphicsDropShadowEffect(this);
+        shadow->setBlurRadius(30);
+        shadow->setOffset(0, 0);
+        shadow->setColor(QColor(150, 150, 150, 220));
+        setGraphicsEffect(shadow);
+    }
 
     highlightAnim = new QVariantAnimation(this);
     highlightAnim->setDuration(300);
@@ -31,29 +37,44 @@ PostApplicationBar::PostApplicationBar(QWidget* parent)
     initItems();
     resize(sizeHint());
     layoutItems();
-
-    m_updateTimer = new QTimer(this);
-    connect(m_updateTimer, &QTimer::timeout, this, &PostApplicationBar::updateBlurBackground);
-    m_updateTimer->start(16);
-    preSize = parent ? parent->size() : QSize();
 }
 
-void PostApplicationBar::enableBlur(bool enabled)
+PostApplicationBar::~PostApplicationBar()
 {
-    isEnableBlur = enabled;
-    if (!m_updateTimer) {
-        return;
+#ifdef Q_OS_MACOS
+    if (m_usesNativeBar) {
+        MacPostBarBridge::clearBar(this);
+    }
+#endif
+}
+
+bool PostApplicationBar::event(QEvent* event)
+{
+    const bool handled = QWidget::event(event);
+
+#ifdef Q_OS_MACOS
+    if (!m_usesNativeBar) {
+        return handled;
     }
 
-    if (isEnableBlur) {
-        if (!m_updateTimer->isActive()) {
-            m_updateTimer->start(16);
-        }
-    } else {
-        m_updateTimer->stop();
-        m_blurredBackground = QImage();
-        update();
+    switch (event->type()) {
+    case QEvent::Show:
+    case QEvent::Move:
+    case QEvent::Resize:
+    case QEvent::WinIdChange:
+    case QEvent::ParentChange:
+    case QEvent::ZOrderChange:
+        syncPlatformBar();
+        break;
+    case QEvent::Hide:
+        MacPostBarBridge::clearBar(this);
+        break;
+    default:
+        break;
     }
+#endif
+
+    return handled;
 }
 
 void PostApplicationBar::initItems()
@@ -89,6 +110,18 @@ void PostApplicationBar::resizeEvent(QResizeEvent* event)
 QSize PostApplicationBar::minimumSizeHint() const
 {
     return sizeHint();
+}
+
+void PostApplicationBar::setVisualOpacity(qreal opacity)
+{
+    const qreal bounded = qBound<qreal>(0.0, opacity, 1.0);
+    if (qFuzzyCompare(m_visualOpacity, bounded)) {
+        return;
+    }
+
+    m_visualOpacity = bounded;
+    update();
+    syncPlatformBar();
 }
 
 QSize PostApplicationBar::sizeHint() const
@@ -145,20 +178,17 @@ int PostApplicationBar::indexAtPosition(const QPoint& pos) const
 
 void PostApplicationBar::paintEvent(QPaintEvent*)
 {
+    if (m_usesNativeBar) {
+        return;
+    }
+
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
+    painter.setOpacity(m_visualOpacity);
     painter.setPen(Qt::NoPen);
 
     const QRectF contentRect = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
     const qreal outerRadius = 15.0;
-
-    if (!m_blurredBackground.isNull()) {
-        QPainterPath clipPath;
-        clipPath.addRoundedRect(contentRect, outerRadius, outerRadius);
-        painter.setClipPath(clipPath);
-        painter.drawImage(rect(), m_blurredBackground);
-        painter.setClipping(false);
-    }
 
     painter.setBrush(QColor(255, 255, 255, 100));
     painter.drawRoundedRect(contentRect, outerRadius, outerRadius);
@@ -187,6 +217,11 @@ void PostApplicationBar::paintEvent(QPaintEvent*)
 
 void PostApplicationBar::mouseMoveEvent(QMouseEvent* event)
 {
+    if (m_usesNativeBar) {
+        QWidget::mouseMoveEvent(event);
+        return;
+    }
+
     const int index = indexAtPosition(event->pos());
     if (hoveredIndex != index) {
         hoveredIndex = index;
@@ -201,6 +236,11 @@ void PostApplicationBar::mouseMoveEvent(QMouseEvent* event)
 
 void PostApplicationBar::leaveEvent(QEvent* event)
 {
+    if (m_usesNativeBar) {
+        QWidget::leaveEvent(event);
+        return;
+    }
+
     hoveredIndex = -1;
     unsetCursor();
     QWidget::leaveEvent(event);
@@ -208,6 +248,11 @@ void PostApplicationBar::leaveEvent(QEvent* event)
 
 void PostApplicationBar::mousePressEvent(QMouseEvent* event)
 {
+    if (m_usesNativeBar) {
+        QWidget::mousePressEvent(event);
+        return;
+    }
+
     if (event->button() != Qt::LeftButton) {
         QWidget::mousePressEvent(event);
         return;
@@ -231,11 +276,19 @@ void PostApplicationBar::onItemClicked(int index)
 
     const int startX = highlightX;
     const int endX = items.at(index).rect.x();
-    highlightAnim->stop();
     selectedIndex = index;
-    highlightAnim->setStartValue(startX);
-    highlightAnim->setEndValue(endX);
-    highlightAnim->start();
+
+    if (m_usesNativeBar) {
+        highlightX = endX;
+        updateSelectedRect();
+        MacPostBarBridge::syncBar(this, labels(), selectedIndex, true, m_visualOpacity);
+    } else {
+        highlightAnim->stop();
+        highlightAnim->setStartValue(startX);
+        highlightAnim->setEndValue(endX);
+        highlightAnim->start();
+    }
+
     emit pageClicked(index);
     update();
 }
@@ -254,43 +307,28 @@ void PostApplicationBar::onHighlightValueChanged(const QVariant& value)
     update();
 }
 
-void PostApplicationBar::updateBlurBackground()
+void PostApplicationBar::onNativeSelectionChanged(int index)
 {
-    if (!m_parent || !isVisible() || !isEnableBlur) {
+    onItemClicked(index);
+}
+
+void PostApplicationBar::syncPlatformBar()
+{
+#ifdef Q_OS_MACOS
+    if (!m_usesNativeBar) {
         return;
     }
 
-    QWidget* postApp = m_parent;
-    if (m_parent->size() != preSize) {
-        preSize = m_parent->size();
-        m_blurredBackground = QImage(size(), QImage::Format_ARGB32);
-        m_blurredBackground.fill(Qt::transparent);
-        return;
+    MacPostBarBridge::syncBar(this, labels(), selectedIndex, false, m_visualOpacity);
+#endif
+}
+
+QStringList PostApplicationBar::labels() const
+{
+    QStringList result;
+    result.reserve(items.size());
+    for (const TabItem& item : items) {
+        result.push_back(item.label);
     }
-
-    QPixmap appShot(postApp->size());
-    appShot.fill(Qt::transparent);
-    const bool wasVisible = isVisible();
-    hide();
-    postApp->render(&appShot);
-    if (wasVisible) {
-        show();
-    }
-
-    const QRect myRect = geometry();
-    const QPixmap backgroundShot = appShot.copy(myRect);
-
-    QGraphicsScene scene;
-    QGraphicsPixmapItem item;
-    item.setPixmap(backgroundShot);
-    auto* blurEffect = new QGraphicsBlurEffect;
-    blurEffect->setBlurRadius(10);
-    item.setGraphicsEffect(blurEffect);
-    scene.addItem(&item);
-
-    m_blurredBackground = QImage(size(), QImage::Format_ARGB32);
-    m_blurredBackground.fill(Qt::transparent);
-    QPainter painter(&m_blurredBackground);
-    scene.render(&painter, QRectF(), QRectF(0, 0, width(), height()));
-    delete blurEffect;
+    return result;
 }

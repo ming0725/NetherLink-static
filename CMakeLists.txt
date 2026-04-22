@@ -31,8 +31,14 @@ file(GLOB_RECURSE SHARED_SOURCES CONFIGURE_DEPENDS
 file(GLOB_RECURSE PLATFORM_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/platform/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/platform/*.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/platform/*.mm"
 )
+
+if(APPLE)
+    file(GLOB_RECURSE PLATFORM_OBJCXX_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/platform/*.mm"
+    )
+    list(APPEND PLATFORM_SOURCES ${PLATFORM_OBJCXX_SOURCES})
+endif()
 
 set(PROJECT_SOURCES
     main.cpp
@@ -71,6 +77,10 @@ target_include_directories(NetherLink-static PRIVATE
 )
 
 target_link_libraries(NetherLink-static PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
+
+if(APPLE)
+    target_link_libraries(NetherLink-static PRIVATE "-framework QuartzCore")
+endif()
 
 if(WIN32)
     target_link_libraries(NetherLink-static PRIVATE dwmapi user32)

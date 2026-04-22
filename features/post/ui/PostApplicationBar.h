@@ -1,7 +1,5 @@
 #pragma once
 
-#include <QPainterPath>
-#include <QTimer>
 #include <QVariantAnimation>
 #include <QVector>
 #include <QWidget>
@@ -10,25 +8,29 @@ class PostApplicationBar : public QWidget {
     Q_OBJECT
 public:
     explicit PostApplicationBar(QWidget* parent = nullptr);
+    ~PostApplicationBar() override;
     QSize minimumSizeHint() const override;
     QSize sizeHint() const override;
-    void enableBlur(bool enabled = true);
     void setCurrentIndex(int index);
+    void setVisualOpacity(qreal opacity);
+    qreal visualOpacity() const { return m_visualOpacity; }
+    bool usesNativeBar() const { return m_usesNativeBar; }
 
 signals:
     void pageClicked(int index);
 
 protected:
+    bool event(QEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void leaveEvent(QEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
-    void updateBlurBackground();
 
 private slots:
     void onItemClicked(int index);
     void onHighlightValueChanged(const QVariant& value);
+    void onNativeSelectionChanged(int index);
 
 private:
     struct TabItem {
@@ -41,6 +43,8 @@ private:
     void layoutItems();
     void updateSelectedRect();
     int indexAtPosition(const QPoint& pos) const;
+    void syncPlatformBar();
+    QStringList labels() const;
 
     QVector<TabItem> items;
     int selectedIndex = 0;
@@ -52,10 +56,7 @@ private:
     const int spacing = 0;
     const int margin = 6;
 
-    QWidget* m_parent = nullptr;
-    QTimer* m_updateTimer = nullptr;
-    QImage m_blurredBackground;
     QRect selectedRect;
-    bool isEnableBlur = true;
-    QSize preSize;
+    qreal m_visualOpacity = 1.0;
+    bool m_usesNativeBar = false;
 };
