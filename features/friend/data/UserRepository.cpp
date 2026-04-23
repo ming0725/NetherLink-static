@@ -129,18 +129,36 @@ QString UserRepository::requestUserAvatarPath(const QString& userId) const
 
 void UserRepository::saveUser(const User& user)
 {
+    bool changed = false;
+    QString oldAvatarPath;
     QMutexLocker locker(&mutex);
-    const QString oldAvatarPath = userMap.value(user.id).avatarPath;
+    oldAvatarPath = userMap.value(user.id).avatarPath;
+    changed = !userMap.contains(user.id) || userMap.value(user.id).nick != user.nick
+            || userMap.value(user.id).remark != user.remark
+            || userMap.value(user.id).avatarPath != user.avatarPath
+            || userMap.value(user.id).status != user.status
+            || userMap.value(user.id).signature != user.signature
+            || userMap.value(user.id).isDnd != user.isDnd;
     userMap[user.id] = user;
+    locker.unlock();
+
     if (!oldAvatarPath.isEmpty() && oldAvatarPath != user.avatarPath) {
         ImageService::instance().invalidateSource(oldAvatarPath);
+    }
+    if (changed) {
+        emit friendListChanged();
     }
 }
 
 void UserRepository::removeUser(const QString& userID)
 {
+    bool removed = false;
     QMutexLocker locker(&mutex);
-    userMap.remove(userID);
+    removed = userMap.remove(userID) > 0;
+    locker.unlock();
+    if (removed) {
+        emit friendListChanged();
+    }
 }
 
 QString statusText(UserStatus userStatus)

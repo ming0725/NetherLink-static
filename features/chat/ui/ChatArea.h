@@ -19,23 +19,16 @@ class ChatArea : public QWidget
     using ChatMessagePtr = QSharedPointer<ChatMessage>;
 public:
     explicit ChatArea(QWidget *parent = nullptr);
-    void initMessage(QVector<ChatMessagePtr>&);
+    void openConversation(const ConversationThreadData& conversation);
     void addMessage(ChatMessagePtr message);
     void addImageMessage(QSharedPointer<ImageMessage> message,
                          const QDateTime& timestamp = QDateTime::currentDateTime());
     void addTextMessage(QSharedPointer<TextMessage> message,
                         const QDateTime& timestamp = QDateTime::currentDateTime());
-    void setConversationMeta(const ConversationMeta& meta);
-    void setMessageId(QString id);
-    void clearAll();
     void clearMessageSelection();
     void handleGlobalMousePress(const QPoint& globalPos);
 protected:
     void resizeEvent(QResizeEvent *event) override;
-signals:
-    void sendMessage(const QString& chatId,
-                     const QString& text,
-                     const QDateTime& timestamp);
 private slots:
     void onScrollValueChanged(int value);
     void onNewMessageNotifierClicked();
@@ -44,6 +37,12 @@ private slots:
     void onSendTextAsPeer(const QString &text);
 
 private:
+    struct ConversationState {
+        ConversationMeta meta;
+        int unreadMessageCount = 0;
+        bool isAtBottom = true;
+    };
+
     ChatListView* chatView;
     ChatListModel* chatModel;
     ChatItemDelegate* chatDelegate;
@@ -52,12 +51,7 @@ private:
     FloatingInputBar* inputBar;
     QLabel* statusIcon;
     QLabel* nameLabel;
-    
-    int unreadMessageCount;
-    bool isAtBottom;
-    bool isGroupMode;
-    QString messageId;
-    ConversationMeta m_conversationMeta;
+    ConversationState m_state;
     
     void updateNewMessageNotifier();
     void updateNewMessageNotifierPosition();
@@ -66,7 +60,10 @@ private:
     bool isNearBottom() const;
     void adjustBottomSpace();
     void updateInputBarPosition();
-    QString previewTextForMessage(const ChatMessage* message) const;
+    void applyConversationMeta();
+    void clearConversation();
+    QString conversationId() const;
+    bool isGroupMode() const;
 };
 
 #endif // CHATAREA_H 

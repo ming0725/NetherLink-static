@@ -63,9 +63,6 @@ protected:
 
 ChatArea::ChatArea(QWidget *parent)
         : QWidget(parent)
-        , unreadMessageCount(0)
-        , isAtBottom(true)
-        , isGroupMode(false)
 {
     // 创建布局
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
@@ -156,18 +153,21 @@ ChatArea::ChatArea(QWidget *parent)
 
 void ChatArea::addMessage(QSharedPointer<ChatMessage> message)
 {
+    if (!message || conversationId().isEmpty()) {
+        return;
+    }
+
     bool shouldScroll = message->isFromMe() || isNearBottom();
     // 添加消息
     chatModel->addMessage(message);
-    MessageRepository::instance().addMessage(messageId, message);
-    emit sendMessage(messageId, previewTextForMessage(message.get()), message->getTimestamp());
+    MessageRepository::instance().addMessage(conversationId(), message);
 
     // 调整底部空白
     adjustBottomSpace();
     
     // 根据情况处理滚动和未读计数
     if (!message->isFromMe() && !shouldScroll) {
-        unreadMessageCount++;
+        ++m_state.unreadMessageCount;
         updateNewMessageNotifier();
     }
     
@@ -181,31 +181,19 @@ void ChatArea::addMessage(QSharedPointer<ChatMessage> message)
 void ChatArea::addImageMessage(QSharedPointer<ImageMessage> message,
                                const QDateTime& timestamp)
 {
-    bool isFromMe = message->isFromMe();
-    bool shouldScroll = isFromMe || isNearBottom();
-    // 设置消息时间戳为当前时间
+    if (!message) {
+        return;
+    }
     message->setTimestamp(timestamp);
-    // 添加消息
-    chatModel->addMessage(std::move(message));
-    
-    // 根据情况处理滚动和未读计数
-    if (!isFromMe && !shouldScroll) {
-        unreadMessageCount++;
-        updateNewMessageNotifier();
-    }
-    
-    // 最后处理滚动，确保新消息完全可见
-    if (shouldScroll) {
-        QTimer::singleShot(0, this, &ChatArea::scrollToBottom);
-    }
+    addMessage(std::move(message));
 }
 
 void ChatArea::onScrollValueChanged(int)
 {
-    isAtBottom = isScrollAtBottom();
+    m_state.isAtBottom = isScrollAtBottom();
     
-    if (isAtBottom) {
-        unreadMessageCount = 0;
+    if (m_state.isAtBottom) {
+        m_state.unreadMessageCount = 0;
         updateNewMessageNotifier();
     }
 }
@@ -245,8 +233,8 @@ void ChatArea::resizeEvent(QResizeEvent *event)
 
 void ChatArea::updateNewMessageNotifier()
 {
-    if (unreadMessageCount > 0) {
-        newMessageNotifier->setMessageCount(unreadMessageCount);
+    if (m_state.unreadMessageCount > 0) {
+        newMessageNotifier->setMessageCount(m_state.unreadMessageCount);
         newMessageNotifier->show();
         newMessageNotifier->raise();
         updateNewMessageNotifierPosition();
@@ -270,7 +258,7 @@ void ChatArea::updateNewMessageNotifierPosition()
 void ChatArea::scrollToBottom()
 {
     chatView->scrollToBottom();
-    unreadMessageCount = 0;
+    m_state.unreadMessageCount = 0;
     updateNewMessageNotifier();
 }
 
@@ -291,39 +279,25 @@ void ChatArea::adjustBottomSpace()
 void ChatArea::addTextMessage(QSharedPointer<TextMessage> message,
                               const QDateTime &timestamp)
 {
-    bool isFromMe = message->isFromMe();
-    bool shouldScroll = isFromMe || isNearBottom();
-
-    // 设置消息时间戳为当前时间
+    if (!message) {
+        return;
+    }
     message->setTimestamp(timestamp);
-    // 添加消息
-    chatModel->addMessage(message);
-
-    // 根据情况处理滚动和未读计数
-    if (!isFromMe && !shouldScroll) {
-        unreadMessageCount++;
-        updateNewMessageNotifier();
-    }
-
-    // 最后处理滚动，确保新消息完全可见
-    if (shouldScroll) {
-        QTimer::singleShot(0, this, &ChatArea::scrollToBottom);
-    }
+    addMessage(std::move(message));
 }
 
-void ChatArea::setConversationMeta(const ConversationMeta& meta) {
-    m_conversationMeta = meta;
-    isGroupMode = meta.isGroup;
-    if (meta.isGroup) {
+void ChatArea::applyConversationMeta()
+{
+    if (m_state.meta.isGroup) {
         statusIcon->hide();
-        nameLabel->setText(QString("%1（%2）").arg(meta.title, QString::number(meta.memberCount)));
+        nameLabel->setText(QString("%1（%2）").arg(m_state.meta.title, QString::number(m_state.meta.memberCount)));
         return;
     }
 
     statusIcon->show();
-    statusIcon->setPixmap(ImageService::instance().scaled(statusIconPath(meta.status),
+    statusIcon->setPixmap(ImageService::instance().scaled(statusIconPath(m_state.meta.status),
                                                           QSize(12, 12)));
-    nameLabel->setText(meta.title);
+    nameLabel->setText(m_state.meta.title);
 }
 
 void ChatArea::updateInputBarPosition() {
@@ -369,7 +343,7 @@ void ChatArea::onSendImage(const QString &path)
                 QSharedPointer<ImageMessage>::create(path,
                                                true,
                                                CurrentUser::instance().getUserId(),
-                                               isGroupMode,
+                                               isGroupMode(),
                                                CurrentUser::instance().getUserName(),
                                                GroupRole::Admin);
         addMessage(ptr);
@@ -383,7 +357,7 @@ void ChatArea::onSendText(const QString &text)
                 QSharedPointer<TextMessage>::create(text,
                                                true,
                                                CurrentUser::instance().getUserId(),
-                                               isGroupMode,
+                                               isGroupMode(),
                                                CurrentUser::instance().getUserName(),
                                                GroupRole::Admin);
         addMessage(ptr);
@@ -397,12 +371,12 @@ void ChatArea::onSendTextAsPeer(const QString& text)
         return;
     }
 
-    QString senderId = m_conversationMeta.conversationId;
-    QString senderName = m_conversationMeta.title;
+    QString senderId = m_state.meta.conversationId;
+    QString senderName = m_state.meta.title;
     GroupRole role = GroupRole::Member;
 
-    if (isGroupMode) {
-        const Group group = GroupRepository::instance().requestGroupDetail({messageId});
+    if (isGroupMode()) {
+        const Group group = GroupRepository::instance().requestGroupDetail({conversationId()});
         senderId = group.ownerId;
         senderName = UserRepository::instance().requestUserName(group.ownerId);
         role = GroupRole::Owner;
@@ -411,49 +385,43 @@ void ChatArea::onSendTextAsPeer(const QString& text)
     auto ptr = QSharedPointer<TextMessage>::create(trimmedText,
                                                    false,
                                                    senderId,
-                                                   isGroupMode,
+                                                   isGroupMode(),
                                                    senderName,
                                                    role);
     addMessage(ptr);
 }
 
-void ChatArea::clearAll() {
+void ChatArea::clearConversation()
+{
     chatModel->clear();
     chatModel->clearSelection();
-    unreadMessageCount = 0;
-    isAtBottom = true;
+    m_state = {};
+    nameLabel->clear();
+    statusIcon->hide();
     newMessageNotifier->hide();
 }
 
-void ChatArea::setMessageId(QString id) {
-    messageId = id;
+QString ChatArea::conversationId() const
+{
+    return m_state.meta.conversationId;
 }
 
-void ChatArea::initMessage(QVector<ChatArea::ChatMessagePtr>& messages) {
-    clearAll();
-    for (auto message : messages) {
+bool ChatArea::isGroupMode() const
+{
+    return m_state.meta.isGroup;
+}
+
+void ChatArea::openConversation(const ConversationThreadData& conversation)
+{
+    clearConversation();
+    m_state.meta = conversation.meta;
+    applyConversationMeta();
+    for (const auto& message : conversation.messages) {
         chatModel->addMessage(message);
     }
     adjustBottomSpace();
     QTimer::singleShot(0, chatView, &ChatListView::jumpToBottom);
     QTimer::singleShot(0, inputBar, &FloatingInputBar::focusInput);
-}
-
-QString ChatArea::previewTextForMessage(const ChatMessage* message) const
-{
-    if (!message) {
-        return {};
-    }
-
-    if (!message->isInGroupChat()) {
-        return message->getContent();
-    }
-
-    QString senderName = message->getSenderName();
-    if (senderName.isEmpty()) {
-        senderName = UserRepository::instance().requestUserName(message->getSenderId());
-    }
-    return QString("%1：%2").arg(senderName, message->getContent());
 }
 
 void ChatArea::clearMessageSelection()

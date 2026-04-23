@@ -20,6 +20,9 @@ public:
     void saveUser(const User& user);
     void removeUser(const QString& userID);
 
+signals:
+    void friendListChanged();
+
 private:
     explicit UserRepository(QObject* parent = nullptr);
     Q_DISABLE_COPY(UserRepository)

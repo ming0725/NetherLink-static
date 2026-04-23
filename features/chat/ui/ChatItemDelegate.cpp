@@ -3,7 +3,6 @@
 #include "features/friend/data/UserRepository.h"
 #include "ChatArea.h"
 #include "app/frame/NotificationManager.h"
-#include "app/state/CurrentUser.h"
 #include "shared/services/ImageService.h"
 #include <QPainter>
 #include <QTextLayout>
@@ -14,6 +13,23 @@
 #include <QClipboard>
 #include <QPainterPath>
 #include <QMenu>
+
+namespace {
+
+QWidget* notificationTargetForDelegate(const QObject* delegate)
+{
+    auto* widget = qobject_cast<QWidget*>(delegate ? delegate->parent() : nullptr);
+    return widget ? widget->window() : nullptr;
+}
+
+void showSuccessNotificationForDelegate(const QObject* delegate, const QString& message)
+{
+    NotificationManager::instance().showMessage(message,
+                                                NotificationManager::Success,
+                                                notificationTargetForDelegate(delegate));
+}
+
+} // namespace
 
 ChatItemDelegate::ChatItemDelegate(QObject* parent)
     : QStyledItemDelegate(parent)
@@ -532,12 +548,10 @@ void ChatItemDelegate::showContextMenu(const QPoint& pos, const QModelIndex& ind
     // 添加复制选项
     if (message->getType() == MessageType::Text) {
         QAction* copyAction = menu->addAction("复制");
-        connect(copyAction, &QAction::triggered, [message, index, model = const_cast<QAbstractItemModel*>(index.model())]() {
+        connect(copyAction, &QAction::triggered, [this, message, index, model = const_cast<QAbstractItemModel*>(index.model())]() {
             const TextMessage* textMessage = static_cast<const TextMessage*>(message);
             QApplication::clipboard()->setText(textMessage->getText());
-            // 取消选中状态
-            NotificationManager::instance()
-                    .showMessage("复制成功！", NotificationManager::Success, CurrentUser::instance().getMainWindow());
+            showSuccessNotificationForDelegate(this, QStringLiteral("复制成功！"));
             model->setData(index, false, Qt::UserRole + 1);
         });
         menu->addSeparator();
@@ -545,11 +559,10 @@ void ChatItemDelegate::showContextMenu(const QPoint& pos, const QModelIndex& ind
 
     // 添加删除选项
     QAction* deleteAction = menu->addAction("删除");
-    connect(deleteAction, &QAction::triggered, [index, model = index.model()]() {
+    connect(deleteAction, &QAction::triggered, [this, index, model = index.model()]() {
         if (ChatListModel* chatModel = qobject_cast<ChatListModel*>(const_cast<QAbstractItemModel*>(model))) {
             chatModel->removeMessage(index.row());
-            NotificationManager::instance()
-                    .showMessage("删除成功！", NotificationManager::Success, CurrentUser::instance().getMainWindow());
+            showSuccessNotificationForDelegate(this, QStringLiteral("删除成功！"));
         }
     });
 

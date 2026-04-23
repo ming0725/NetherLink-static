@@ -202,6 +202,17 @@ ConversationMeta MessageRepository::requestConversationMeta(const ConversationMe
     return ConversationMetaRequestOperation().request(query);
 }
 
+ConversationThreadData MessageRepository::requestConversationThread(const ConversationThreadRequest& query) const
+{
+    ConversationThreadData thread;
+    thread.meta = requestConversationMeta({query.conversationId});
+    {
+        QMutexLocker locker(&m_mutex);
+        thread.messages = m_store.value(query.conversationId);
+    }
+    return thread;
+}
+
 void MessageRepository::addMessage(const QString& conversationId,
                                    QSharedPointer<ChatMessage> message)
 {

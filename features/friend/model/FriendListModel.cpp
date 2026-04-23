@@ -1,7 +1,5 @@
 #include "FriendListModel.h"
 
-#include <algorithm>
-#include <QCollator>
 #include <QSize>
 
 FriendListModel::FriendListModel(QObject* parent)
@@ -54,7 +52,6 @@ void FriendListModel::setFriends(QVector<FriendSummary> friends)
 {
     beginResetModel();
     m_friends = std::move(friends);
-    sortFriends();
     endResetModel();
 }
 
@@ -74,18 +71,12 @@ FriendSummary FriendListModel::friendAt(const QModelIndex& index) const
     return m_friends.at(index.row());
 }
 
-void FriendListModel::sortFriends()
+int FriendListModel::indexOfFriend(const QString& userId) const
 {
-    std::sort(m_friends.begin(), m_friends.end(),
-              [](const FriendSummary& lhs, const FriendSummary& rhs) {
-                  if (lhs.status != Offline && rhs.status == Offline) {
-                      return true;
-                  }
-                  if (lhs.status == Offline && rhs.status != Offline) {
-                      return false;
-                  }
-                  static QCollator localCollator(QLocale::Chinese);
-                  localCollator.setNumericMode(true);
-                  return localCollator.compare(lhs.displayName, rhs.displayName) < 0;
-              });
+    for (int row = 0; row < m_friends.size(); ++row) {
+        if (m_friends.at(row).userId == userId) {
+            return row;
+        }
+    }
+    return -1;
 }

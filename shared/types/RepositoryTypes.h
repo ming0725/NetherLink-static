@@ -35,6 +35,10 @@ struct ConversationMetaRequest {
     QString conversationId;
 };
 
+struct ConversationThreadRequest {
+    QString conversationId;
+};
+
 struct AiChatListRequest {
 };
 
@@ -79,6 +83,13 @@ struct ConversationMeta {
     bool isDoNotDisturb = false;
 };
 
+using ChatMessageList = QVector<QSharedPointer<ChatMessage>>;
+
+struct ConversationThreadData {
+    ConversationMeta meta;
+    ChatMessageList messages;
+};
+
 struct AiChatListEntry {
     QString conversationId;
     QString title;
@@ -110,5 +121,3 @@ struct PostDetailData {
     int commentCount = 0;
     bool isLiked = false;
 };
-
-using ChatMessageList = QVector<QSharedPointer<ChatMessage>>;

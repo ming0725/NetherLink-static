@@ -13,6 +13,7 @@ class FriendListWidget : public OverlayScrollListView
 public:
     explicit FriendListWidget(QWidget* parent = nullptr);
     void ensureInitialized();
+    void setKeyword(const QString& keyword);
 
     QString selectedFriendId() const;
     FriendSummary selectedFriend() const;
@@ -22,7 +23,20 @@ protected:
     void showEvent(QShowEvent* event) override;
 
 private:
+    struct ViewState {
+        QString keyword;
+        QString selectedFriendId;
+        bool initialized = false;
+    };
+
+private slots:
+    void onCurrentChanged(const QModelIndex& current, const QModelIndex& previous);
+    void reloadFriends();
+
+private:
+    void restoreSelection();
+
     FriendListModel* m_model;
     FriendListDelegate* m_delegate;
-    bool m_initialized = false;
+    ViewState m_state;
 };

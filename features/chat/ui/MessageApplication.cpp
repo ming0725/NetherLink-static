@@ -55,8 +55,7 @@ MessageApplication::MessageApplication(QWidget* parent)
         : QWidget(parent)
 {
     m_leftPane = new LeftPane(this);
-    m_msgList = m_leftPane->messageList();
-    connect(m_msgList, &MessageListWidget::conversationActivated,
+    connect(m_leftPane->messageList(), &MessageListWidget::conversationActivated,
             this, &MessageApplication::onMessageClicked);
 
     // 右侧堆栈：初始页 + 聊天页
@@ -79,7 +78,7 @@ MessageApplication::MessageApplication(QWidget* parent)
     m_splitter->handle(1)->setCursor(Qt::SizeHorCursor);
 
     setWindowFlag(Qt::FramelessWindowHint);
-    m_msgList->clearCurrentConversationSelection();
+    m_leftPane->messageList()->clearCurrentConversationSelection();
     m_rightStack->setCurrentWidget(m_defaultPage);
 }
 
@@ -106,17 +105,13 @@ void MessageApplication::paintEvent(QPaintEvent*)
 
 void MessageApplication::onMessageClicked(const QString& conversationId)
 {
-    if (conversationId.isEmpty())
+    if (conversationId.isEmpty()) {
         return;
+    }
+
     ensureChatArea();
-    m_chatArea->clearAll();
     m_rightStack->setCurrentWidget(m_chatArea);
-    auto& mr = MessageRepository::instance();
-    auto msgs = mr.requestConversationMessages({conversationId});
-    auto meta = mr.requestConversationMeta({conversationId});
-    m_chatArea->setConversationMeta(meta);
-    m_chatArea->setMessageId(conversationId);
-    m_chatArea->initMessage(msgs);
+    m_chatArea->openConversation(MessageRepository::instance().requestConversationThread({conversationId}));
 }
 
 void MessageApplication::ensureChatArea()
@@ -127,6 +122,4 @@ void MessageApplication::ensureChatArea()
 
     m_chatArea = new ChatArea(this);
     m_rightStack->addWidget(m_chatArea);
-    connect(m_chatArea, &ChatArea::sendMessage,
-            m_msgList, &MessageListWidget::onLastMessageUpdated);
 }

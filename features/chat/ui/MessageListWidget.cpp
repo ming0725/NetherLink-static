@@ -3,6 +3,7 @@
 #include <QItemSelectionModel>
 #include <QTimer>
 
+#include "features/friend/data/UserRepository.h"
 #include "features/chat/ui/MessageListDelegate.h"
 #include "features/chat/model/MessageListModel.h"
 #include "features/chat/data/MessageRepository.h"
@@ -27,6 +28,8 @@ MessageListWidget::MessageListWidget(QWidget* parent)
 
     connect(selectionModel(), &QItemSelectionModel::currentChanged,
             this, &MessageListWidget::onCurrentChanged);
+    connect(&MessageRepository::instance(), &MessageRepository::lastMessageChanged,
+            this, &MessageListWidget::onRepositoryLastMessageChanged);
     QTimer::singleShot(0, this, [this]() { clearCurrentConversationSelection(); });
 }
 
@@ -54,15 +57,6 @@ void MessageListWidget::clearCurrentConversationSelection()
     viewport()->update();
 }
 
-void MessageListWidget::onLastMessageUpdated(const QString& chatId,
-                                             const QString& text,
-                                             const QDateTime& timestamp)
-{
-    const QString selectedId = selectedConversationId();
-    m_model->updateConversationPreview(chatId, text, timestamp);
-    restoreSelection(selectedId);
-}
-
 void MessageListWidget::onCurrentChanged(const QModelIndex& current, const QModelIndex& previous)
 {
     if (!current.isValid()) {
@@ -82,6 +76,16 @@ void MessageListWidget::onCurrentChanged(const QModelIndex& current, const QMode
     }
 }
 
+void MessageListWidget::onRepositoryLastMessageChanged(const QString& conversationId,
+                                                       QSharedPointer<ChatMessage> lastMessage)
+{
+    const QString selectedId = selectedConversationId();
+    m_model->updateConversationPreview(conversationId,
+                                       previewTextForMessage(conversationId, lastMessage),
+                                       lastMessage ? lastMessage->getTimestamp() : QDateTime());
+    restoreSelection(selectedId);
+}
+
 void MessageListWidget::restoreSelection(const QString& conversationId)
 {
     if (conversationId.isEmpty()) {
@@ -99,4 +103,23 @@ void MessageListWidget::restoreSelection(const QString& conversationId)
     m_restoringSelection = true;
     selectionModel()->setCurrentIndex(index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
     m_restoringSelection = false;
+}
+
+QString MessageListWidget::previewTextForMessage(const QString& conversationId,
+                                                 const QSharedPointer<ChatMessage>& message) const
+{
+    if (!message) {
+        return {};
+    }
+
+    const ConversationSummary summary = m_model->conversationById(conversationId);
+    if (!summary.isGroup) {
+        return message->getContent();
+    }
+
+    QString senderName = message->getSenderName();
+    if (senderName.isEmpty()) {
+        senderName = UserRepository::instance().requestUserName(message->getSenderId());
+    }
+    return QString("%1：%2").arg(senderName, message->getContent());
 }

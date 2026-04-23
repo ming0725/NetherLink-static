@@ -16,6 +16,7 @@ public:
     QVector<ConversationSummary> requestConversationList(const ConversationListRequest& query = {}) const;
     ChatMessageList requestConversationMessages(const ConversationMessagesRequest& query) const;
     ConversationMeta requestConversationMeta(const ConversationMetaRequest& query) const;
+    ConversationThreadData requestConversationThread(const ConversationThreadRequest& query) const;
 
 public slots:
     void addMessage(const QString& conversationId,

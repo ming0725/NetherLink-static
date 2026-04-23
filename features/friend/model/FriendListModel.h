@@ -28,9 +28,8 @@ public:
     void setFriends(QVector<FriendSummary> friends);
     QString friendIdAt(const QModelIndex& index) const;
     FriendSummary friendAt(const QModelIndex& index) const;
+    int indexOfFriend(const QString& userId) const;
 
 private:
-    void sortFriends();
-
     QVector<FriendSummary> m_friends;
 };

@@ -18,47 +18,12 @@ protected:
 private:
     class LeftPane : public QWidget {
     public:
-        explicit LeftPane(QWidget* parent = nullptr)
-                : QWidget(parent)
-                , m_searchInput(new IconLineEdit(this))
-                , m_addButton(new StatefulPushButton("+", this))
-                , m_content(new FriendListWidget(this))
-        {
-            setMinimumWidth(144);
-            setMaximumWidth(305);
-            m_searchInput->setFixedHeight(26);
-            m_addButton->setRadius(8);
-            m_addButton->setNormalColor(QColor(0xF5, 0xF5, 0xF5));
-            m_addButton->setHoverColor(QColor(0xEB, 0xEB, 0xEB));
-            m_addButton->setPressColor(QColor(0xD7, 0xD7, 0xD7));
-            m_addButton->setTextColor(QColor(0x33, 0x33, 0x33));
-            m_addButton->setFixedHeight(26);
-            QFont addFont = m_addButton->font();
-            addFont.setPixelSize(18);
-            m_addButton->setFont(addFont);
-            m_content->setStyleSheet("border-width:0px;border-style:solid;");
-        }
+        explicit LeftPane(QWidget* parent = nullptr);
+        FriendListWidget* friendList() const { return m_content; }
+        IconLineEdit* searchInput() const { return m_searchInput; }
 
     protected:
-        void resizeEvent(QResizeEvent* ev) override {
-            QWidget::resizeEvent(ev);
-            const int topMargin = 24;
-            const int bottomMargin = 12;
-            const int leftMargin = 14;
-            const int rightMargin = 14;
-            const int spacing = 5;
-            const int controlHeight = 26;
-            const int buttonX = width() - rightMargin - controlHeight;
-
-            m_addButton->setGeometry(buttonX, topMargin, controlHeight, controlHeight);
-            m_searchInput->setGeometry(leftMargin,
-                                       topMargin,
-                                       qMax(0, buttonX - spacing - leftMargin),
-                                       controlHeight);
-
-            const int contentY = topMargin + controlHeight + bottomMargin;
-            m_content->setGeometry(0, contentY, width(), qMax(0, height() - contentY));
-        }
+        void resizeEvent(QResizeEvent* ev) override;
 
     private:
         IconLineEdit* m_searchInput;

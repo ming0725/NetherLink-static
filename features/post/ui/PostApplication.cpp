@@ -140,6 +140,8 @@ PostApplication::PostApplication(QWidget* parent)
     connect(m_bar, &PostApplicationBar::pageClicked, this, &PostApplication::onPageChanged);
     connect(&PostRepository::instance(), &PostRepository::postDetailReady,
             this, &PostApplication::onPostDetailReady);
+    connect(&PostRepository::instance(), &PostRepository::postUpdated,
+            this, &PostApplication::onPostUpdated);
 
     m_barFadeAnimation = new QVariantAnimation(this);
     m_barFadeAnimation->setDuration(220);
@@ -229,9 +231,9 @@ bool PostApplication::eventFilter(QObject *obj, QEvent *ev) {
 void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, const QRect& sourceGeometry)
 {
     stopActiveTransition();
-    m_openPostId = summary.postId;
-    m_openDetailRequestId.clear();
-    m_openSourceGeometry = QRect(mapFromGlobal(sourceGeometry.topLeft()), sourceGeometry.size());
+    m_openPostSession.postId = summary.postId;
+    m_openPostSession.detailRequestId.clear();
+    m_openPostSession.sourceGeometry = QRect(mapFromGlobal(sourceGeometry.topLeft()), sourceGeometry.size());
     removeTransitionImage();
     clearDetailView();
 
@@ -245,8 +247,8 @@ void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, cons
     m_detailView->setPreviewSummary(summary);
     m_detailView->setImageVisible(false);
     connect(m_detailView, &PostDetailView::likeClicked, this, [this](bool liked) {
-        if (!m_openPostId.isEmpty()) {
-            PostRepository::instance().setPostLiked(m_openPostId, liked);
+        if (!m_openPostSession.postId.isEmpty()) {
+            PostRepository::instance().setPostLiked(m_openPostSession.postId, liked);
         }
     });
     m_detailView->setGeometry(detailRectForCurrentPost());
@@ -263,14 +265,14 @@ void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, cons
     QPixmap transitionPixmap = ImageService::instance().pixmap(summary.thumbnailImagePath);
     if (transitionPixmap.isNull()) {
         transitionPixmap = ImageService::instance().centerCrop(summary.thumbnailImagePath,
-                                                               m_openSourceGeometry.size(),
+                                                               m_openPostSession.sourceGeometry.size(),
                                                                12,
                                                                devicePixelRatioF());
     }
     transitionImage->setPixmap(transitionPixmap);
     transitionImage->setRevealProgress(0.0);
     m_transitionImage = transitionImage;
-    m_transitionImage->setGeometry(m_openSourceGeometry);
+    m_transitionImage->setGeometry(m_openPostSession.sourceGeometry);
     m_transitionImage->show();
     updateLayerOrder();
 
@@ -280,7 +282,7 @@ void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, cons
 
     auto* transitionAnim = new QPropertyAnimation(m_transitionImage, "geometry", group);
     transitionAnim->setDuration(260);
-    transitionAnim->setStartValue(m_openSourceGeometry);
+    transitionAnim->setStartValue(m_openPostSession.sourceGeometry);
     transitionAnim->setEndValue(targetImageGeometry);
     transitionAnim->setEasingCurve(QEasingCurve::OutCubic);
     group->addAnimation(transitionAnim);
@@ -324,17 +326,28 @@ void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, cons
     });
     group->start();
 
-    m_openDetailRequestId = PostRepository::instance().requestPostDetailAsync({summary.postId});
+    m_openPostSession.detailRequestId = PostRepository::instance().requestPostDetailAsync({summary.postId});
 }
 
 void PostApplication::onPostDetailReady(const QString& requestId, const PostDetailData& detail)
 {
-    if (!m_detailView || requestId != m_openDetailRequestId || detail.postId != m_openPostId) {
+    if (!m_detailView
+        || requestId != m_openPostSession.detailRequestId
+        || detail.postId != m_openPostSession.postId) {
         return;
     }
 
     m_detailView->setPostData(detail);
-    m_openDetailRequestId.clear();
+    m_openPostSession.detailRequestId.clear();
+}
+
+void PostApplication::onPostUpdated(const PostSummary& summary)
+{
+    if (!m_detailView || summary.postId != m_openPostSession.postId) {
+        return;
+    }
+
+    m_detailView->updatePostSummary(summary);
 }
 
 void PostApplication::onPageChanged(int index)
@@ -542,7 +555,7 @@ void PostApplication::removeTransitionImage()
 
 void PostApplication::stopActiveTransition()
 {
-    m_openDetailRequestId.clear();
+    m_openPostSession.detailRequestId.clear();
 
     if (m_overlayFadeAnimation) {
         m_overlayFadeAnimation->stop();
@@ -628,7 +641,7 @@ void PostApplication::startCloseAnimation()
     auto* transitionAnim = new QPropertyAnimation(m_transitionImage, "geometry", group);
     transitionAnim->setDuration(240);
     transitionAnim->setStartValue(startImageGeometry);
-    transitionAnim->setEndValue(m_openSourceGeometry);
+    transitionAnim->setEndValue(m_openPostSession.sourceGeometry);
     transitionAnim->setEasingCurve(QEasingCurve::InOutQuad);
     group->addAnimation(transitionAnim);
 
@@ -677,7 +690,7 @@ void PostApplication::startCloseAnimation()
         m_transitionPhase = TransitionPhase::Idle;
         removeTransitionImage();
         clearDetailView();
-        m_openPostId.clear();
+        m_openPostSession.clear();
         if (m_overlay) {
             m_overlay->hide();
             m_overlay->setOverlayOpacity(0.0);

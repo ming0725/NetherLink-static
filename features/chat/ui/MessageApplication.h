@@ -36,7 +36,6 @@ private:
     void ensureChatArea();
     LeftPane*            m_leftPane;
     QSplitter*          m_splitter;
-    MessageListWidget*  m_msgList;
     QStackedWidget*     m_rightStack;
     DefaultPage*        m_defaultPage;
     ChatArea*           m_chatArea = nullptr;

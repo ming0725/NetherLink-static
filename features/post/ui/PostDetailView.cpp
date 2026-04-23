@@ -123,9 +123,9 @@ void PostDetailView::setupUI()
     m_authorAvatar = new QLabel(this);
     m_authorAvatar->setFixedSize({40, 40});
 
-    commentLineEdit = new IconLineEdit(this);
-    commentLineEdit->setIcon(QStringLiteral(":/resources/icon/selected_message.png"));
-    commentLineEdit->getLineEdit()->setPlaceholderText("说点什么吧...");
+    m_commentLineEdit = new IconLineEdit(this);
+    m_commentLineEdit->setIcon(QStringLiteral(":/resources/icon/selected_message.png"));
+    m_commentLineEdit->getLineEdit()->setPlaceholderText("说点什么吧...");
 
     m_authorName = new QLabel(this);
     QFont nameFont;
@@ -190,26 +190,21 @@ void PostDetailView::setupUI()
     m_commentCount = new QLabel("0", this);
 
     connect(m_followBtn, &QPushButton::clicked, this, [this]() {
-        m_isFollowed = !m_isFollowed;
-        m_followBtn->setText(m_isFollowed ? "已关注" : "关注");
-        emit followClicked(m_isFollowed);
+        m_state.isFollowed = !m_state.isFollowed;
+        m_followBtn->setText(m_state.isFollowed ? "已关注" : "关注");
+        emit followClicked(m_state.isFollowed);
     });
 
     connect(m_likeBtn, &QPushButton::clicked, this, [this]() {
-        m_isLiked = !m_isLiked;
-        m_likeBtn->setIcon(QIcon(m_isLiked ? ":/resources/icon/full_heart.png"
-                                           : ":/resources/icon/heart.png"));
-        m_likes += m_isLiked ? 1 : -1;
-        m_likeCount->setText(QString::number(m_likes));
-        emit likeClicked(m_isLiked);
+        emit likeClicked(!m_state.isLiked);
     });
 
     connect(m_commentBtn, &QPushButton::clicked, this, &PostDetailView::commentClicked);
-    connect(commentLineEdit->getLineEdit(), &QLineEdit::returnPressed, this, [this]() {
-        const QString content = commentLineEdit->getLineEdit()->text().trimmed();
+    connect(m_commentLineEdit->getLineEdit(), &QLineEdit::returnPressed, this, [this]() {
+        const QString content = m_commentLineEdit->getLineEdit()->text().trimmed();
         if (!content.isEmpty()) {
             addComment(content);
-            commentLineEdit->getLineEdit()->clear();
+            m_commentLineEdit->getLineEdit()->clear();
         }
     });
 }
@@ -234,21 +229,21 @@ QRect PostDetailView::imageRect() const
 QRect PostDetailView::paintedImageRect() const
 {
     return fittedImageRect(imageRect(),
-                           m_fullImageSource.isEmpty() ? m_previewImageSize : m_fullImageSize);
+                           m_state.fullImageSource.isEmpty() ? m_state.previewImageSize : m_state.fullImageSize);
 }
 
 void PostDetailView::setImageVisible(bool visible)
 {
-    if (m_imageVisible == visible) {
+    if (m_state.imageVisible == visible) {
         return;
     }
-    m_imageVisible = visible;
+    m_state.imageVisible = visible;
     update(imageRect());
 }
 
 QPixmap PostDetailView::transitionPixmap() const
 {
-    const QString source = m_fullImageSource.isEmpty() ? m_previewImageSource : m_fullImageSource;
+    const QString source = m_state.fullImageSource.isEmpty() ? m_state.previewImageSource : m_state.fullImageSource;
     if (source.isEmpty()) {
         return {};
     }
@@ -270,9 +265,9 @@ void PostDetailView::paintEvent(QPaintEvent*)
     p.fillRect(detailImageRect, kDetailImagePlaceholder);
 
     const qreal dpr = p.device()->devicePixelRatioF();
-    if (m_imageVisible && !m_previewImageSource.isEmpty()) {
-        const QRect previewRect = fittedImageRect(detailImageRect, m_previewImageSize);
-        const QPixmap preview = ImageService::instance().scaled(m_previewImageSource,
+    if (m_state.imageVisible && !m_state.previewImageSource.isEmpty()) {
+        const QRect previewRect = fittedImageRect(detailImageRect, m_state.previewImageSize);
+        const QPixmap preview = ImageService::instance().scaled(m_state.previewImageSource,
                                                                 previewRect.size(),
                                                                 Qt::KeepAspectRatio,
                                                                 dpr);
@@ -281,15 +276,15 @@ void PostDetailView::paintEvent(QPaintEvent*)
         }
     }
 
-    if (m_imageVisible && !m_fullImageSource.isEmpty()) {
-        const QRect fullRect = fittedImageRect(detailImageRect, m_fullImageSize);
-        const QPixmap fullImage = ImageService::instance().scaled(m_fullImageSource,
+    if (m_state.imageVisible && !m_state.fullImageSource.isEmpty()) {
+        const QRect fullRect = fittedImageRect(detailImageRect, m_state.fullImageSize);
+        const QPixmap fullImage = ImageService::instance().scaled(m_state.fullImageSource,
                                                                   fullRect.size(),
                                                                   Qt::KeepAspectRatio,
                                                                   dpr);
-        if (!fullImage.isNull() && m_fullImageOpacity > 0.0) {
+        if (!fullImage.isNull() && m_state.fullImageOpacity > 0.0) {
             p.save();
-            p.setOpacity(m_fullImageOpacity);
+            p.setOpacity(m_state.fullImageOpacity);
             p.drawPixmap(fullRect, fullImage);
             p.restore();
         }
@@ -315,7 +310,7 @@ void PostDetailView::updateLayout()
     const int btnY = bottomY + (bottomH - 32) / 2;
 
     int x = rightX + 10;
-    commentLineEdit->setGeometry(x, btnY, 160, 32);
+    m_commentLineEdit->setGeometry(x, btnY, 160, 32);
     x += 160;
     m_likeBtn->setGeometry(x, btnY, 32, 32);
     x += 40;
@@ -329,69 +324,96 @@ void PostDetailView::updateLayout()
 
 void PostDetailView::setPreviewSummary(const PostSummary& summary)
 {
-    m_postId = summary.postId;
-    m_authorId = summary.authorId;
-    m_previewImageSource = summary.thumbnailImagePath;
-    m_previewImageSize = summary.thumbnailImageSize;
-    m_fullImageSource.clear();
-    m_fullImageSize = {};
-    m_fullImageOpacity = 0.0;
+    applySummaryState(summary, true);
+}
 
-    m_authorName->setText(summary.authorName);
-    m_authorAvatar->setPixmap(ImageService::instance().circularAvatar(summary.authorAvatarPath, 32));
-    m_titleLabel->setText(summary.title);
-    m_contentLabel->setText(QStringLiteral("加载中..."));
+void PostDetailView::setPostData(const PostDetailData& data)
+{
+    m_state.postId = data.postId;
+    m_state.authorId = data.authorId;
+    m_state.authorName = data.authorName;
+    m_state.authorAvatarPath = data.authorAvatarPath;
+    m_state.title = data.title;
+    m_state.content = data.content;
+    m_state.isLiked = data.isLiked;
+    m_state.likeCount = data.likeCount;
+    m_state.commentCount = data.commentCount;
 
-    m_isLiked = summary.isLiked;
-    m_likes = summary.likeCount;
-    m_comments = summary.commentCount;
-    m_likeBtn->setIcon(QIcon(m_isLiked ? ":/resources/icon/full_heart.png"
-                                       : ":/resources/icon/heart.png"));
-    m_likeCount->setText(QString::number(m_likes));
-    m_commentCount->setText(QString::number(m_comments));
+    if (!data.imagePaths.isEmpty()) {
+        m_state.fullImageSource = data.imagePaths.first();
+        m_state.fullImageSize = ImageService::instance().sourceSize(m_state.fullImageSource);
+    } else {
+        m_state.fullImageSource.clear();
+        m_state.fullImageSize = {};
+    }
+    m_state.fullImageOpacity = 0.0;
 
+    syncUiFromState();
+
+    auto* imageFade = new QVariantAnimation(this);
+    imageFade->setDuration(180);
+    imageFade->setStartValue(m_state.fullImageOpacity);
+    imageFade->setEndValue(1.0);
+    imageFade->setEasingCurve(QEasingCurve::OutCubic);
+    connect(imageFade, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
+        m_state.fullImageOpacity = value.toReal();
+        update(imageRect());
+    });
+    imageFade->start(QAbstractAnimation::DeleteWhenStopped);
+
+    update();
+}
+
+void PostDetailView::updatePostSummary(const PostSummary& summary)
+{
+    if (summary.postId != m_state.postId) {
+        return;
+    }
+    applySummaryState(summary, false);
+}
+
+void PostDetailView::applySummaryState(const PostSummary& summary, bool resetDetailContent)
+{
+    m_state.postId = summary.postId;
+    m_state.authorId = summary.authorId;
+    m_state.authorName = summary.authorName;
+    m_state.authorAvatarPath = summary.authorAvatarPath;
+    m_state.title = summary.title;
+    m_state.previewImageSource = summary.thumbnailImagePath;
+    m_state.previewImageSize = summary.thumbnailImageSize;
+    m_state.isLiked = summary.isLiked;
+    m_state.likeCount = summary.likeCount;
+    m_state.commentCount = summary.commentCount;
+
+    if (resetDetailContent) {
+        m_state.content = QStringLiteral("加载中...");
+        m_state.fullImageSource.clear();
+        m_state.fullImageSize = {};
+        m_state.fullImageOpacity = 0.0;
+    }
+
+    syncUiFromState();
+}
+
+void PostDetailView::syncUiFromState()
+{
+    m_authorName->setText(m_state.authorName);
+    m_authorAvatar->setPixmap(ImageService::instance().circularAvatar(m_state.authorAvatarPath, 32));
+    m_followBtn->setText(m_state.isFollowed ? "已关注" : "关注");
+    m_titleLabel->setText(m_state.title);
+    m_contentLabel->setText(m_state.content);
+    syncEngagementUi();
     m_contentArea->relayout();
     updateLayout();
     update();
 }
 
-void PostDetailView::setPostData(const PostDetailData& data)
+void PostDetailView::syncEngagementUi()
 {
-    m_postId = data.postId;
-    m_authorId = data.authorId;
-
-    if (!data.imagePaths.isEmpty()) {
-        m_fullImageSource = data.imagePaths.first();
-        m_fullImageSize = ImageService::instance().sourceSize(m_fullImageSource);
-    }
-
-    m_authorName->setText(data.authorName);
-    m_authorAvatar->setPixmap(ImageService::instance().circularAvatar(data.authorAvatarPath, 32));
-    m_titleLabel->setText(data.title);
-    m_contentLabel->setText(data.content);
-
-    m_isLiked = data.isLiked;
-    m_likes = data.likeCount;
-    m_comments = data.commentCount;
-    m_likeBtn->setIcon(QIcon(m_isLiked ? ":/resources/icon/full_heart.png"
-                                       : ":/resources/icon/heart.png"));
-    m_likeCount->setText(QString::number(m_likes));
-    m_commentCount->setText(QString::number(m_comments));
-
-    auto* imageFade = new QVariantAnimation(this);
-    imageFade->setDuration(180);
-    imageFade->setStartValue(m_fullImageOpacity);
-    imageFade->setEndValue(1.0);
-    imageFade->setEasingCurve(QEasingCurve::OutCubic);
-    connect(imageFade, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
-        m_fullImageOpacity = value.toReal();
-        update(imageRect());
-    });
-    imageFade->start(QAbstractAnimation::DeleteWhenStopped);
-
-    m_contentArea->relayout();
-    updateLayout();
-    update();
+    m_likeBtn->setIcon(QIcon(m_state.isLiked ? ":/resources/icon/full_heart.png"
+                                             : ":/resources/icon/heart.png"));
+    m_likeCount->setText(QString::number(m_state.likeCount));
+    m_commentCount->setText(QString::number(m_state.commentCount));
 }
 
 QWidget* PostDetailView::createCommentWidget(const QString& userName, const QString& content)
@@ -448,6 +470,6 @@ void PostDetailView::addComment(const QString& content)
     }
 
     m_contentArea->addCommentWidget(commentWidget);
-    ++m_comments;
-    m_commentCount->setText(QString::number(m_comments));
+    ++m_state.commentCount;
+    syncEngagementUi();
 }

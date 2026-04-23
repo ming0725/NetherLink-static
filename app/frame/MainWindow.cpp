@@ -3,7 +3,6 @@
 #include "features/friend/ui/FriendApplication.h"
 #include "features/aichat/ui/AiChatApplication.h"
 #include "features/post/ui/PostApplication.h"
-#include "app/state/CurrentUser.h"
 #include "shared/ui/IconLineEdit.h"
 #include "shared/ui/FloatingInputBar.h"
 #include <QHBoxLayout>
@@ -89,7 +88,6 @@ MainWindow::MainWindow(QWidget* parent)
 
     setBackdropColor(QColor(248, 248, 252, 92));
 
-    CurrentUser::instance().setMainWindow(this);
     appBar = new ApplicationBar(this);
     appBar->setFixedWidth(54);
 

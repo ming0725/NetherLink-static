@@ -34,7 +34,21 @@ private:
         Closing
     };
 
+    struct OpenPostSession {
+        QString postId;
+        QString detailRequestId;
+        QRect sourceGeometry;
+
+        void clear()
+        {
+            postId.clear();
+            detailRequestId.clear();
+            sourceGeometry = {};
+        }
+    };
+
     void onPageChanged(int index);
+    void onPostUpdated(const PostSummary& summary);
     void fadeOverlay(qreal startOpacity, qreal endOpacity, bool hideAfter);
     void fadeBar(qreal startOpacity, qreal endOpacity, bool hideAfter);
     QRect detailRectForCurrentPost() const;
@@ -60,9 +74,7 @@ private:
     QGraphicsOpacityEffect* m_detailOpacityEffect = nullptr;
     QWidget* m_transitionImage = nullptr;
     PostCreatePage* m_createPage = nullptr;
-    QString m_openPostId;
-    QString m_openDetailRequestId;
-    QRect m_openSourceGeometry;
+    OpenPostSession m_openPostSession;
     TransitionPhase m_transitionPhase = TransitionPhase::Idle;
     bool m_initialPageLoadScheduled = false;
 #ifdef Q_OS_MACOS

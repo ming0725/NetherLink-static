@@ -28,6 +28,7 @@ public:
     explicit PostDetailView(QWidget* parent = nullptr);
     void setPreviewSummary(const PostSummary& summary);
     void setPostData(const PostDetailData& data);
+    void updatePostSummary(const PostSummary& summary);
     void setImageVisible(bool visible);
     QSize preferredSize(const QSize& availableBounds) const;
     QRect imageRect() const;
@@ -43,17 +44,35 @@ protected:
     void resizeEvent(QResizeEvent* ev) override;
     void paintEvent(QPaintEvent*) override;
 private:
+    struct State {
+        QString postId;
+        QString authorId;
+        QString authorName;
+        QString authorAvatarPath;
+        QString title;
+        QString content;
+        QString previewImageSource;
+        QSize previewImageSize;
+        QString fullImageSource;
+        QSize fullImageSize;
+        qreal fullImageOpacity = 0.0;
+        bool imageVisible = true;
+        bool isFollowed = false;
+        bool isLiked = false;
+        int likeCount = 0;
+        int commentCount = 0;
+    };
+
     QRect fittedImageRect(const QRect& bounds, const QSize& imageSize) const;
     void setupUI();
     void updateLayout();
+    void applySummaryState(const PostSummary& summary, bool resetDetailContent);
+    void syncUiFromState();
+    void syncEngagementUi();
     void addComment(const QString& content);
     QWidget* createCommentWidget(const QString& userName, const QString& content);
 private:
-    QString m_previewImageSource;
-    QSize m_previewImageSize;
-    QString m_fullImageSource;
-    QSize m_fullImageSize;
-    qreal m_fullImageOpacity = 0.0;
+    State m_state;
     QLabel* m_authorAvatar;
     QLabel* m_authorName;
     QPushButton* m_followBtn;
@@ -64,12 +83,5 @@ private:
     QLabel* m_likeCount;
     QPushButton* m_commentBtn;
     QLabel* m_commentCount;
-    QString m_postId;
-    QString m_authorId;
-    IconLineEdit* commentLineEdit;
-    bool m_imageVisible = true;
-    bool m_isFollowed = false;
-    bool m_isLiked = false;
-    int m_likes = 0;
-    int m_comments = 0;
+    IconLineEdit* m_commentLineEdit;
 };
