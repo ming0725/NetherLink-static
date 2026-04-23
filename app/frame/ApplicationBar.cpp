@@ -77,7 +77,9 @@ void ApplicationBar::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.setRenderHints(QPainter::Antialiasing |
                            QPainter::SmoothPixmapTransform);
-    painter.fillRect(rect(), QColor(0xF2, 0xF2, 0xF2, 64));
+#ifdef Q_OS_WIN
+    painter.fillRect(rect(), QColor(0xFF, 0xFF, 0xFF, 128));
+#endif
     int w = width();
     if (selectedItem) {
         painter.save();

@@ -281,7 +281,9 @@ void PostApplicationBar::onItemClicked(int index)
     if (m_usesNativeBar) {
         highlightX = endX;
         updateSelectedRect();
+#ifdef Q_OS_MACOS
         MacPostBarBridge::syncBar(this, labels(), selectedIndex, true, m_visualOpacity);
+#endif
     } else {
         highlightAnim->stop();
         highlightAnim->setStartValue(startX);
