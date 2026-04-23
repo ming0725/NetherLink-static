@@ -43,6 +43,11 @@ static constexpr CGFloat kInactiveGlassShadowOpacity = 0.16;
 static constexpr CGFloat kInactiveGlassShadowRadius = 18.0;
 static constexpr CGFloat kInactiveGlassShadowYOffset = 8.0;
 
+NSColor* chatInputBorderColor(CGFloat alpha)
+{
+    return [NSColor colorWithSRGBRed:0.62 green:0.65 blue:0.70 alpha:alpha];
+}
+
 QString qStringFromNSString(NSString* string)
 {
     if (!string) {
@@ -471,12 +476,12 @@ struct AppearanceStyle {
     CGFloat borderAlpha;
 };
 
-constexpr CGFloat kNativeBlurShadowOpacity = 0.26;
-constexpr CGFloat kNativeBlurShadowRadius = 26.0;
+constexpr CGFloat kNativeBlurShadowOpacity = 0.18;
+constexpr CGFloat kNativeBlurShadowRadius = 20.0;
 constexpr CGFloat kNativeBlurShadowYOffset = 0.0;
-constexpr CGFloat kNativeBlurShadowPaddingX = 22.0;
-constexpr CGFloat kNativeBlurShadowPaddingTop = 18.0;
-constexpr CGFloat kNativeBlurShadowPaddingBottom = 22.0;
+constexpr CGFloat kNativeBlurShadowPaddingX = 18.0;
+constexpr CGFloat kNativeBlurShadowPaddingTop = 14.0;
+constexpr CGFloat kNativeBlurShadowPaddingBottom = 18.0;
 constexpr CGFloat kNativeBlurBackgroundAlpha = 0.34;
 constexpr CGFloat kNativeBlurBorderAlpha = 0.32;
 
@@ -826,7 +831,7 @@ CAShapeLayer* ensureInactiveBorderLayer(NSView* hostView, NSView* container)
 
     layer.fillColor = NSColor.clearColor.CGColor;
     layer.lineWidth = kInactiveGlassBorderWidth;
-    layer.strokeColor = [NSColor colorWithWhite:1.0 alpha:kInactiveGlassBorderAlpha].CGColor;
+    layer.strokeColor = chatInputBorderColor(kInactiveGlassBorderAlpha).CGColor;
     return layer;
 }
 
@@ -935,17 +940,18 @@ void updateInactiveGlassChrome(NSView* hostView)
     const CGFloat alpha = qBound(0.0,
                                  static_cast<double>(storedOpacityForView(hostView)),
                                  1.0);
-    const BOOL showInactiveChrome = !hidden && alpha > 0.001 && !window.isKeyWindow;
+    const BOOL showBorderChrome = !hidden && alpha > 0.001;
+    const BOOL showInactiveShadow = showBorderChrome && !window.isKeyWindow;
 
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
 
-    borderLayer.hidden = !showInactiveChrome;
-    shadowLayer.hidden = !showInactiveChrome;
+    borderLayer.hidden = !showBorderChrome;
+    shadowLayer.hidden = !showInactiveShadow;
     borderLayer.opacity = alpha;
     shadowLayer.opacity = alpha;
 
-    if (showInactiveChrome) {
+    if (showBorderChrome) {
         borderLayer.frame = container.bounds;
         const CGRect borderRect = CGRectInset(container.bounds,
                                               kInactiveGlassBorderWidth / 2.0,
@@ -956,7 +962,9 @@ void updateInactiveGlassChrome(NSView* hostView)
                                                            nil);
         borderLayer.path = borderPath;
         CGPathRelease(borderPath);
+    }
 
+    if (showInactiveShadow) {
         shadowLayer.frame = shadowHost.bounds;
         const CGRect shadowRect = [shadowHost convertRect:container.frame fromView:hostView];
         CGPathRef shadowPath = CGPathCreateWithRoundedRect(shadowRect,
@@ -1079,7 +1087,7 @@ NSView* ensureVisualEffectContainer(NSView* hostView, const AppearanceStyle& sty
     container.layer.masksToBounds = YES;
     container.layer.backgroundColor = [[NSColor colorWithWhite:1.0 alpha:style.backgroundAlpha] CGColor];
     container.layer.borderWidth = 1.0;
-    container.layer.borderColor = [[NSColor colorWithWhite:1.0 alpha:style.borderAlpha] CGColor];
+    container.layer.borderColor = chatInputBorderColor(style.borderAlpha).CGColor;
     applyCommonContainerShadow(shadowHost, style);
     return container;
 }
