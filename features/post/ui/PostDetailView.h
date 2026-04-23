@@ -3,7 +3,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QJsonObject>
-#include "shared/ui/LineEditComponent.h"
+#include "shared/ui/IconLineEdit.h"
 #include "shared/ui/OverlayScrollArea.h"
 #include "shared/types/RepositoryTypes.h"
 
@@ -57,8 +57,7 @@ private:
     QLabel* m_authorAvatar;
     QLabel* m_authorName;
     QPushButton* m_followBtn;
-    OverlayScrollArea* m_contentArea;
-    QWidget* m_contentWidget;
+    PostDetailScrollArea* m_contentArea;
     QLabel* m_titleLabel;
     QLabel* m_contentLabel;
     QPushButton* m_likeBtn;
@@ -67,7 +66,7 @@ private:
     QLabel* m_commentCount;
     QString m_postId;
     QString m_authorId;
-    LineEditComponent* commentLineEdit;
+    IconLineEdit* commentLineEdit;
     bool m_imageVisible = true;
     bool m_isFollowed = false;
     bool m_isLiked = false;

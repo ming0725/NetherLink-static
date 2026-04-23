@@ -5,7 +5,7 @@
 FriendApplication::FriendApplication(QWidget* parent)
         : QWidget(parent)
 {
-    // 1) 左侧面板：内部已创建 TopSearchWidget + FriendListWidget
+    // 1) 左侧面板：内部手动布局搜索框、加号按钮和好友列表
     m_leftPane    = new LeftPane(this);
 
     // 2) 右侧默认页

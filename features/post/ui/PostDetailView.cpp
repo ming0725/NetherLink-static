@@ -123,9 +123,8 @@ void PostDetailView::setupUI()
     m_authorAvatar = new QLabel(this);
     m_authorAvatar->setFixedSize({40, 40});
 
-    commentLineEdit = new LineEditComponent(this);
-    commentLineEdit->setIcon(ImageService::instance().scaled(":/resources/icon/selected_message.png",
-                                                             QSize(20, 20)));
+    commentLineEdit = new IconLineEdit(this);
+    commentLineEdit->setIcon(QStringLiteral(":/resources/icon/selected_message.png"));
     commentLineEdit->getLineEdit()->setPlaceholderText("说点什么吧...");
 
     m_authorName = new QLabel(this);
@@ -140,11 +139,10 @@ void PostDetailView::setupUI()
     m_followBtn->setCursor(Qt::PointingHandCursor);
 
     m_contentArea = new PostDetailScrollArea(this);
-    m_contentWidget = m_contentArea->getContentWidget();
     m_contentArea->setObjectName("ContentArea");
     m_contentArea->setStyleSheet("#ContentArea { border-top: 2px solid #f5f5f5; border-bottom: 2px solid #f5f5f5; border-left: none; border-right: none; }");
 
-    m_titleLabel = new QLabel(m_contentWidget);
+    m_titleLabel = new QLabel(m_contentArea->getContentWidget());
     m_titleLabel->setWordWrap(true);
     m_titleLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     QFont titleFont;
@@ -153,7 +151,7 @@ void PostDetailView::setupUI()
     titleFont.setBold(true);
     m_titleLabel->setFont(titleFont);
 
-    m_contentLabel = new QLabel(m_contentWidget);
+    m_contentLabel = new QLabel(m_contentArea->getContentWidget());
     m_contentLabel->setWordWrap(true);
     m_contentLabel->setTextFormat(Qt::PlainText);
     m_contentLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
@@ -163,7 +161,7 @@ void PostDetailView::setupUI()
     contentFont.setPointSize(13);
     m_contentLabel->setFont(contentFont);
 
-    static_cast<PostDetailScrollArea*>(m_contentArea)->setLabels(m_titleLabel, m_contentLabel);
+    m_contentArea->setLabels(m_titleLabel, m_contentLabel);
 
     m_likeBtn = new QPushButton(this);
     m_likeBtn->setFixedSize(32, 32);
@@ -352,7 +350,7 @@ void PostDetailView::setPreviewSummary(const PostSummary& summary)
     m_likeCount->setText(QString::number(m_likes));
     m_commentCount->setText(QString::number(m_comments));
 
-    static_cast<PostDetailScrollArea*>(m_contentArea)->relayout();
+    m_contentArea->relayout();
     updateLayout();
     update();
 }
@@ -391,14 +389,14 @@ void PostDetailView::setPostData(const PostDetailData& data)
     });
     imageFade->start(QAbstractAnimation::DeleteWhenStopped);
 
-    static_cast<PostDetailScrollArea*>(m_contentArea)->relayout();
+    m_contentArea->relayout();
     updateLayout();
     update();
 }
 
 QWidget* PostDetailView::createCommentWidget(const QString& userName, const QString& content)
 {
-    QWidget* commentWidget = new QWidget(m_contentWidget);
+    QWidget* commentWidget = new QWidget(m_contentArea->getContentWidget());
     commentWidget->setObjectName("CommentWidget");
     commentWidget->setFixedHeight(80);
     commentWidget->setStyleSheet("background-color: white;");
@@ -449,7 +447,7 @@ void PostDetailView::addComment(const QString& content)
         return;
     }
 
-    static_cast<PostDetailScrollArea*>(m_contentArea)->addCommentWidget(commentWidget);
+    m_contentArea->addCommentWidget(commentWidget);
     ++m_comments;
     m_commentCount->setText(QString::number(m_comments));
 }

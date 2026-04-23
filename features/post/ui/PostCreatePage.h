@@ -4,7 +4,7 @@
 #include <QTextEdit>
 #include <QLabel>
 #include <QPushButton>
-#include "shared/ui/LineEditComponent.h"
+#include "shared/ui/IconLineEdit.h"
 
 class PostCreatePage : public QWidget {
     Q_OBJECT
@@ -20,7 +20,7 @@ private slots:
 private:
     void setupUI();
 
-    LineEditComponent* m_titleEdit;
+    IconLineEdit* m_titleEdit;
     QTextEdit* m_contentEdit;
     QPushButton* m_imageButton;
     QPushButton* m_sendButton;

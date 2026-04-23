@@ -30,9 +30,8 @@ PostCreatePage::PostCreatePage(QWidget* parent)
 void PostCreatePage::setupUI()
 {
     // 创建标题输入框
-    m_titleEdit = new LineEditComponent(this);
-    m_titleEdit->setIcon(ImageService::instance().scaled(":/resources/icon/blazer.png",
-                                                         QSize(20, 20)));
+    m_titleEdit = new IconLineEdit(this);
+    m_titleEdit->setIcon(QStringLiteral(":/resources/icon/blazer.png"));
     m_titleEdit->setIconSize(QSize(20, 20));
     m_titleEdit->getLineEdit()->setPlaceholderText("请输入标题");
     m_titleEdit->setFixedHeight(40);
