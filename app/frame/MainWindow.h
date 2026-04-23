@@ -3,6 +3,7 @@
 #include "DefaultPage.h"
 #include "ApplicationBar.h"
 #include "platform/SystemWindow.h"
+#include <QPointer>
 #include <QMouseEvent>
 #include <QMoveEvent>
 #include <QStackedWidget>
@@ -16,6 +17,7 @@ class AiChatApplication;
 class MainWindow : public SystemWindow {
 public:
     MainWindow(QWidget *parent = nullptr);
+    ~MainWindow() override;
 protected:
     void resizeEvent(QResizeEvent *event) override;
     void moveEvent(QMoveEvent *event) override;
@@ -42,4 +44,5 @@ private:
     PostApplication* m_postApp = nullptr;
     AiChatApplication* m_aiChatApp = nullptr;
     DefaultPage* m_defaultPage = nullptr;
+    QPointer<QWidget> m_pendingFocusClear;
 };

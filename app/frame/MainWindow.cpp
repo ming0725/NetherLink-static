@@ -4,14 +4,75 @@
 #include "features/aichat/ui/AiChatApplication.h"
 #include "features/post/ui/PostApplication.h"
 #include "app/state/CurrentUser.h"
-#include "shared/ui/LineEditComponent.h"
+#include "shared/ui/IconLineEdit.h"
+#include "shared/ui/FloatingInputBar.h"
 #include <QHBoxLayout>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QTextEdit>
 #include <QScreen>
 #include <QGuiApplication>
 #include <QShowEvent>
 #include <QApplication>
+namespace {
+
+IconLineEdit* iconLineEditForWidget(QWidget* widget)
+{
+    QWidget* current = widget;
+    while (current) {
+        if (auto* input = qobject_cast<IconLineEdit*>(current)) {
+            return input;
+        }
+        current = current->parentWidget();
+    }
+    return nullptr;
+}
+
+QWidget* focusedInnerLineEdit()
+{
+    if (auto* lineEdit = qobject_cast<QLineEdit*>(QApplication::focusWidget())) {
+        return lineEdit;
+    }
+    if (auto* textEdit = qobject_cast<QTextEdit*>(QApplication::focusWidget())) {
+        return textEdit;
+    }
+    return nullptr;
+}
+
+bool shouldClearLineEditFocus(QWidget* watched, const QPoint& globalPos)
+{
+    QWidget* focusedLineEdit = focusedInnerLineEdit();
+    if (!focusedLineEdit) {
+        return false;
+    }
+
+    if (!watched) {
+        return true;
+    }
+
+    auto* focusedInput = iconLineEditForWidget(focusedLineEdit);
+    auto* clickedInput = iconLineEditForWidget(watched);
+
+    if (focusedInput && clickedInput == focusedInput) {
+        const QPoint localPos = focusedInput->mapFromGlobal(globalPos);
+        return !focusedInput->rect().contains(localPos);
+    }
+
+    if (auto* focusedFloatingBar = qobject_cast<FloatingInputBar*>(focusedLineEdit->parentWidget())) {
+        if (watched == focusedFloatingBar || focusedFloatingBar->isAncestorOf(watched) || watched->isAncestorOf(focusedFloatingBar)) {
+            const QPoint localPos = focusedFloatingBar->mapFromGlobal(globalPos);
+            return !focusedFloatingBar->rect().contains(localPos);
+        }
+    }
+
+    if (focusedLineEdit == watched || watched->isAncestorOf(focusedLineEdit)) {
+        return false;
+    }
+
+    return true;
+}
+
+} // namespace
 
 MainWindow::MainWindow(QWidget* parent)
     : SystemWindow(parent)
@@ -98,6 +159,7 @@ MainWindow::MainWindow(QWidget* parent)
 #endif
 
     setDragTitleBar(titleBar);
+    qApp->installEventFilter(this);
 
     m_messageApp = new MessageApplication(this);
     stack->addWidget(m_messageApp);
@@ -117,6 +179,11 @@ MainWindow::MainWindow(QWidget* parent)
     int     cx     = (sg.width()  - width())  / 2;
     int     cy     = (sg.height() - height()) / 2;
     move(cx, cy);
+}
+
+MainWindow::~MainWindow()
+{
+    qApp->removeEventFilter(this);
 }
 
 void MainWindow::showEvent(QShowEvent* event)
@@ -143,11 +210,6 @@ void MainWindow::moveEvent(QMoveEvent* event)
 
 void MainWindow::mousePressEvent(QMouseEvent* event)
 {
-    QWidget* fw = QApplication::focusWidget();
-    if (qobject_cast<LineEditComponent*>(fw)
-        || qobject_cast<QLineEdit*>(fw)) {
-        fw->clearFocus();
-    }
     SystemWindow::mousePressEvent(event);
 }
 
@@ -218,6 +280,29 @@ void MainWindow::ensureApplicationLoaded(int index)
 }
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *ev) {
+    if (ev->type() == QEvent::MouseButtonPress || ev->type() == QEvent::MouseButtonRelease) {
+        if (auto* watchedWidget = qobject_cast<QWidget*>(watched)) {
+            if (watchedWidget->window() != this) {
+                return SystemWindow::eventFilter(watched, ev);
+            }
+            auto* mouseEvent = static_cast<QMouseEvent*>(ev);
+            if (ev->type() == QEvent::MouseButtonPress) {
+                if (stack->currentWidget() == m_messageApp && m_messageApp) {
+                    m_messageApp->handleGlobalMousePress(mouseEvent->globalPosition().toPoint());
+                }
+                m_pendingFocusClear = nullptr;
+                if (shouldClearLineEditFocus(watchedWidget, mouseEvent->globalPosition().toPoint())) {
+                    m_pendingFocusClear = QApplication::focusWidget();
+                }
+            } else if (ev->type() == QEvent::MouseButtonRelease) {
+                if (m_pendingFocusClear && QApplication::focusWidget() == m_pendingFocusClear) {
+                    m_pendingFocusClear->clearFocus();
+                }
+                m_pendingFocusClear = nullptr;
+            }
+        }
+    }
+
     if (btnClose && watched == btnClose) {
         if (ev->type() == QEvent::Enter) {
             btnClose->setIcon(iconCloseHover);

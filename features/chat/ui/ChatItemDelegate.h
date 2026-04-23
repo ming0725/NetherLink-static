@@ -17,6 +17,9 @@ public:
     bool editorEvent(QEvent* event, QAbstractItemModel* model,
                     const QStyleOptionViewItem& option,
                     const QModelIndex& index) override;
+    bool bubbleHitTest(const QStyleOptionViewItem& option,
+                       const QModelIndex& index,
+                       const QPoint& viewportPos) const;
 
 private:
     static constexpr int AVATAR_SIZE = 40;

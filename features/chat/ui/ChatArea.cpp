@@ -1,5 +1,4 @@
 #include "ChatArea.h"
-#include "shared/ui/TopSearchWidget.h"
 #include "features/chat/data/GroupRepository.h"
 #include "features/friend/data/UserRepository.h"
 #include "features/chat/data/MessageRepository.h"
@@ -143,6 +142,8 @@ ChatArea::ChatArea(QWidget *parent)
             this, &ChatArea::onSendText);
     connect(inputBar, &FloatingInputBar::sendTextAsPeer,
             this, &ChatArea::onSendTextAsPeer);
+    connect(inputBar, &FloatingInputBar::inputFocused,
+            this, &ChatArea::clearMessageSelection);
 
     // 设置样式
     chatView->setStyleSheet(
@@ -418,6 +419,7 @@ void ChatArea::onSendTextAsPeer(const QString& text)
 
 void ChatArea::clearAll() {
     chatModel->clear();
+    chatModel->clearSelection();
     unreadMessageCount = 0;
     isAtBottom = true;
     newMessageNotifier->hide();
@@ -452,4 +454,48 @@ QString ChatArea::previewTextForMessage(const ChatMessage* message) const
         senderName = UserRepository::instance().requestUserName(message->getSenderId());
     }
     return QString("%1：%2").arg(senderName, message->getContent());
+}
+
+void ChatArea::clearMessageSelection()
+{
+    if (chatModel) {
+        chatModel->clearSelection();
+    }
+}
+
+void ChatArea::handleGlobalMousePress(const QPoint& globalPos)
+{
+    if (!chatModel || !chatView) {
+        return;
+    }
+
+    if (inputBar && inputBar->rect().contains(inputBar->mapFromGlobal(globalPos))) {
+        clearMessageSelection();
+        return;
+    }
+
+    QWidget* viewport = chatView->viewport();
+    if (!viewport || !viewport->rect().contains(viewport->mapFromGlobal(globalPos))) {
+        clearMessageSelection();
+        return;
+    }
+
+    const QPoint viewportPos = viewport->mapFromGlobal(globalPos);
+    const QModelIndex index = chatView->indexAt(viewportPos);
+    if (!index.isValid()) {
+        clearMessageSelection();
+        return;
+    }
+
+    if (chatModel->isBottomSpace(index.row()) || chatModel->isTimeHeader(index.row())) {
+        clearMessageSelection();
+        return;
+    }
+
+    QStyleOptionViewItem option;
+    option.initFrom(chatView->viewport());
+    option.rect = chatView->visualRect(index);
+    if (!chatDelegate || !chatDelegate->bubbleHitTest(option, index, viewportPos)) {
+        clearMessageSelection();
+    }
 }

@@ -1,4 +1,6 @@
 #include "FloatingInputBar.h"
+#include "shared/services/ImageService.h"
+
 #include <QEvent>
 #include <QFileDialog>
 #include <QGraphicsDropShadowEffect>
@@ -20,10 +22,10 @@
 namespace {
 
 constexpr int kQtMode3ToolbarInputOverlap = -4;
+constexpr auto kNormalIconProperty = "normalIcon";
+constexpr auto kHoveredIconProperty = "hoveredIcon";
 
 } // namespace
-
-const QString FloatingInputBar::RESOURCE_PATH = ":/resources/icon/";
 
 FloatingInputBar::FloatingInputBar(QWidget *parent)
         : QWidget(parent)
@@ -94,12 +96,28 @@ void FloatingInputBar::initQtFallbackUi()
     m_imageLabel->setFixedSize(buttonSize);
     m_screenshotLabel->setFixedSize(buttonSize);
     m_historyLabel->setFixedSize(buttonSize);
+    m_emojiLabel->setAlignment(Qt::AlignCenter);
+    m_imageLabel->setAlignment(Qt::AlignCenter);
+    m_screenshotLabel->setAlignment(Qt::AlignCenter);
+    m_historyLabel->setAlignment(Qt::AlignCenter);
 
     const QSize iconSize(ICON_SIZE, ICON_SIZE);
-    updateLabelIcon(m_emojiLabel, "skull.png", "hovered_skull.png", iconSize);
-    updateLabelIcon(m_imageLabel, "painting.png", "hovered_painting.png", iconSize);
-    updateLabelIcon(m_screenshotLabel, "shears.png", "hovered_shears.png", iconSize);
-    updateLabelIcon(m_historyLabel, "clock.png", "hovered_clock.png", iconSize);
+    updateLabelIcon(m_emojiLabel,
+                    QStringLiteral(":/resources/icon/skull.png"),
+                    QStringLiteral(":/resources/icon/hovered_skull.png"),
+                    iconSize);
+    updateLabelIcon(m_imageLabel,
+                    QStringLiteral(":/resources/icon/painting.png"),
+                    QStringLiteral(":/resources/icon/hovered_painting.png"),
+                    iconSize);
+    updateLabelIcon(m_screenshotLabel,
+                    QStringLiteral(":/resources/icon/shears.png"),
+                    QStringLiteral(":/resources/icon/hovered_shears.png"),
+                    iconSize);
+    updateLabelIcon(m_historyLabel,
+                    QStringLiteral(":/resources/icon/clock.png"),
+                    QStringLiteral(":/resources/icon/hovered_clock.png"),
+                    iconSize);
 
     const QList<QLabel*> toolbarLabels {m_emojiLabel, m_imageLabel, m_screenshotLabel, m_historyLabel};
     for (QLabel* label : toolbarLabels) {
@@ -171,9 +189,10 @@ void FloatingInputBar::initQtFallbackUi()
     m_sendLabel = new QLabel(this);
     m_sendLabel->setFixedSize(SEND_BUTTON_SIZE, SEND_BUTTON_SIZE);
     m_sendLabel->setCursor(Qt::PointingHandCursor);
+    m_sendLabel->setAlignment(Qt::AlignCenter);
     updateLabelIcon(m_sendLabel,
-                    "book_and_pen.png",
-                    "hovered_book_and_pen.png",
+                    QStringLiteral(":/resources/icon/book_and_pen.png"),
+                    QStringLiteral(":/resources/icon/hovered_book_and_pen.png"),
                     QSize(SEND_BUTTON_SIZE, SEND_BUTTON_SIZE));
     m_sendLabel->installEventFilter(this);
     m_sendLabel->raise();
@@ -191,56 +210,14 @@ void FloatingInputBar::updateLabelIcon(QLabel *label,
         return;
     }
 
-    QPixmap normalPixmap(RESOURCE_PATH + normalIcon);
-    if (normalPixmap.isNull()) {
-        label->clear();
-        return;
-    }
-
-    const qreal ratio = qMin(size.width() / static_cast<qreal>(normalPixmap.width()),
-                             size.height() / static_cast<qreal>(normalPixmap.height()));
-    const QSize targetSize(normalPixmap.width() * ratio, normalPixmap.height() * ratio);
-    QPixmap finalIcon(size);
-    finalIcon.fill(Qt::transparent);
-
-    QPainter painter(&finalIcon);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform);
-    painter.drawPixmap((size.width() - targetSize.width()) / 2,
-                       (size.height() - targetSize.height()) / 2,
-                       normalPixmap.scaled(targetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-
-    label->setProperty("hoveredIcon", RESOURCE_PATH + hoveredIcon);
-    label->setProperty("normalIcon", RESOURCE_PATH + normalIcon);
+    const qreal dpr = label->devicePixelRatioF();
+    label->setProperty(kNormalIconProperty, normalIcon);
+    label->setProperty(kHoveredIconProperty, hoveredIcon);
     label->setProperty("iconSize", size);
-    label->setPixmap(finalIcon);
-}
-
-void FloatingInputBar::handleLabelHover(QLabel *label,
-                                        const QString &normalIcon,
-                                        const QString &hoveredIcon,
-                                        const QSize &size)
-{
-    if (!label) {
-        return;
-    }
-
-    QPixmap pixmap(hoveredIcon);
-    if (pixmap.isNull()) {
-        return;
-    }
-
-    const qreal ratio = qMin(size.width() / static_cast<qreal>(pixmap.width()),
-                             size.height() / static_cast<qreal>(pixmap.height()));
-    const QSize targetSize(pixmap.width() * ratio, pixmap.height() * ratio);
-    QPixmap finalIcon(size);
-    finalIcon.fill(Qt::transparent);
-
-    QPainter painter(&finalIcon);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform);
-    painter.drawPixmap((size.width() - targetSize.width()) / 2,
-                       (size.height() - targetSize.height()) / 2,
-                       pixmap.scaled(targetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    label->setPixmap(finalIcon);
+    label->setPixmap(ImageService::instance().scaled(normalIcon,
+                                                     size,
+                                                     Qt::KeepAspectRatio,
+                                                     dpr));
 }
 
 void FloatingInputBar::showTooltip(QLabel *label, const QString &text)
@@ -343,7 +320,9 @@ void FloatingInputBar::resizeEvent(QResizeEvent *event)
 bool FloatingInputBar::eventFilter(QObject *watched, QEvent *event)
 {
     if (watched == m_inputEdit) {
-        if (event->type() == QEvent::KeyPress) {
+        if (event->type() == QEvent::FocusIn) {
+            emit inputFocused();
+        } else if (event->type() == QEvent::KeyPress) {
             QKeyEvent *keyEvent = static_cast<QKeyEvent*>(event);
             if (keyEvent->key() == Qt::Key_BracketLeft && keyEvent->modifiers() == Qt::NoModifier) {
                 sendCurrentMessage(SendMode::Peer);
@@ -368,10 +347,12 @@ bool FloatingInputBar::eventFilter(QObject *watched, QEvent *event)
     QLabel* label = qobject_cast<QLabel*>(watched);
     if (label) {
         if (event->type() == QEvent::Enter) {
-            const QString hoveredIcon = label->property("hoveredIcon").toString();
-            const QString normalIcon = label->property("normalIcon").toString();
+            const QString hoveredIcon = label->property(kHoveredIconProperty).toString();
             const QSize iconSize = label->property("iconSize").toSize();
-            handleLabelHover(label, normalIcon, hoveredIcon, iconSize);
+            label->setPixmap(ImageService::instance().scaled(hoveredIcon,
+                                                             iconSize,
+                                                             Qt::KeepAspectRatio,
+                                                             label->devicePixelRatioF()));
 
             if (label == m_emojiLabel) {
                 showTooltip(label, QStringLiteral("表情"));
@@ -385,10 +366,12 @@ bool FloatingInputBar::eventFilter(QObject *watched, QEvent *event)
                 showTooltip(label, QStringLiteral("发送"));
             }
         } else if (event->type() == QEvent::Leave) {
-            const QString hoveredIcon = label->property("hoveredIcon").toString();
-            const QString normalIcon = label->property("normalIcon").toString();
+            const QString normalIcon = label->property(kNormalIconProperty).toString();
             const QSize iconSize = label->property("iconSize").toSize();
-            handleLabelHover(label, hoveredIcon, normalIcon, iconSize);
+            label->setPixmap(ImageService::instance().scaled(normalIcon,
+                                                             iconSize,
+                                                             Qt::KeepAspectRatio,
+                                                             label->devicePixelRatioF()));
             hideTooltip();
         }
     }

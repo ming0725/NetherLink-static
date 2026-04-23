@@ -93,21 +93,7 @@ bool ChatItemDelegate::editorEvent(QEvent* event, QAbstractItemModel* model,
         const ChatMessage* message = index.data(Qt::UserRole).value<ChatMessage*>();
         if (!message) return false;
 
-        // 计算气泡区域
-        const int maxBubbleWidth = calculateMaxBubbleWidth(option.rect);
-        QRect bubbleRect = calculateBubbleRect(option.rect, message, maxBubbleWidth, message->isFromMe());
-
-        // 如果是群聊消息，需要考虑名字区域的偏移
-        if (message->isInGroupChat()) {
-            bubbleRect.moveTop(bubbleRect.top() + NAME_HEIGHT + GROUP_INFO_GAP);
-        }
-
-        // 创建气泡路径（用于精确点击检测）
-        QPainterPath bubblePath;
-        const qreal bubbleRadius = message->getType() == MessageType::Image ? IMAGE_RADIUS : BUBBLE_RADIUS;
-        bubblePath.addRoundedRect(bubbleRect, bubbleRadius, bubbleRadius);
-
-        if (bubblePath.contains(mouseEvent->pos())) {
+        if (bubbleHitTest(option, index, mouseEvent->pos())) {
             // 无论是左键还是右键点击，都设置选中状态
             model->setData(index, true, Qt::UserRole + 1);
 
@@ -132,6 +118,27 @@ bool ChatItemDelegate::editorEvent(QEvent* event, QAbstractItemModel* model,
         }
     }
     return QStyledItemDelegate::editorEvent(event, model, option, index);
+}
+
+bool ChatItemDelegate::bubbleHitTest(const QStyleOptionViewItem& option,
+                                     const QModelIndex& index,
+                                     const QPoint& viewportPos) const
+{
+    const ChatMessage* message = index.data(Qt::UserRole).value<ChatMessage*>();
+    if (!message) {
+        return false;
+    }
+
+    const int maxBubbleWidth = calculateMaxBubbleWidth(option.rect);
+    QRect bubbleRect = calculateBubbleRect(option.rect, message, maxBubbleWidth, message->isFromMe());
+    if (message->isInGroupChat()) {
+        bubbleRect.moveTop(bubbleRect.top() + NAME_HEIGHT + GROUP_INFO_GAP);
+    }
+
+    QPainterPath bubblePath;
+    const qreal bubbleRadius = message->getType() == MessageType::Image ? IMAGE_RADIUS : BUBBLE_RADIUS;
+    bubblePath.addRoundedRect(bubbleRect, bubbleRadius, bubbleRadius);
+    return bubblePath.contains(viewportPos);
 }
 
 void ChatItemDelegate::drawBubble(QPainter* painter, const QRect& rect,

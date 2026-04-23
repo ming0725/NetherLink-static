@@ -28,6 +28,8 @@ public:
     void setConversationMeta(const ConversationMeta& meta);
     void setMessageId(QString id);
     void clearAll();
+    void clearMessageSelection();
+    void handleGlobalMousePress(const QPoint& globalPos);
 protected:
     void resizeEvent(QResizeEvent *event) override;
 signals:

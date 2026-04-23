@@ -21,6 +21,7 @@ signals:
     void sendImage(const QString &path);
     void sendText(const QString &text);
     void sendTextAsPeer(const QString &text);
+    void inputFocused();
 protected:
     bool event(QEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
@@ -38,10 +39,6 @@ private:
                          const QString &normalIcon,
                          const QString &hoveredIcon,
                          const QSize &size);
-    void handleLabelHover(QLabel *label,
-                          const QString &normalIcon,
-                          const QString &hoveredIcon,
-                          const QSize &size);
     void showTooltip(QLabel *label, const QString &text);
     void hideTooltip();
     void sendCurrentMessage(SendMode mode = SendMode::Self);
@@ -73,7 +70,6 @@ private:
     static const int HORIZONTAL_MARGIN = 22;
     static const int TOP_MARGIN = 18;
     static const int BOTTOM_MARGIN = 16;
-    static const QString RESOURCE_PATH;
 };
 
 #endif // FLOATINGINPUTBAR_H 
