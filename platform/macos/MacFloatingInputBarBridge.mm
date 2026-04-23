@@ -37,6 +37,11 @@ static constexpr CGFloat kToolbarButtonSize = 32.0;
 static constexpr CGFloat kToolbarButtonSpacing = 6.0;
 static constexpr CGFloat kToolbarIconSize = 22.0;
 static constexpr CGFloat kSendToolbarIconSize = 26.0;
+static constexpr CGFloat kInactiveGlassBorderWidth = 1.0;
+static constexpr CGFloat kInactiveGlassBorderAlpha = 0.28;
+static constexpr CGFloat kInactiveGlassShadowOpacity = 0.16;
+static constexpr CGFloat kInactiveGlassShadowRadius = 18.0;
+static constexpr CGFloat kInactiveGlassShadowYOffset = 8.0;
 
 QString qStringFromNSString(NSString* string)
 {
@@ -143,6 +148,7 @@ void hideNativeTooltip()
 }
 
 NLFloatingInputShortcutTextView* inputTextViewForView(NSView* qtView);
+void updateInactiveGlassChrome(NSView* hostView);
 
 } // namespace
 
@@ -168,6 +174,12 @@ NLFloatingInputShortcutTextView* inputTextViewForView(NSView* qtView);
 @property(nonatomic, assign) BOOL hovering;
 @property(nonatomic, retain) NSTrackingArea* hoverTrackingArea;
 - (void)refreshImage;
+@end
+
+@interface NLFloatingInputWindowObserver : NSObject
+@property(nonatomic, assign) NSView* hostView;
+@property(nonatomic, assign) NSWindow* window;
+- (void)bindWindow:(NSWindow*)window hostView:(NSView*)hostView;
 @end
 
 @implementation NLFloatingInputBarTarget
@@ -384,6 +396,52 @@ NLFloatingInputShortcutTextView* inputTextViewForView(NSView* qtView);
 
 @end
 
+@implementation NLFloatingInputWindowObserver
+
+- (void)dealloc
+{
+    [self bindWindow:nil hostView:nil];
+    [super dealloc];
+}
+
+- (void)bindWindow:(NSWindow*)window hostView:(NSView*)hostView
+{
+    if (self.window == window && self.hostView == hostView) {
+        return;
+    }
+
+    if (self.window) {
+        [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                        name:NSWindowDidBecomeKeyNotification
+                                                      object:self.window];
+        [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                        name:NSWindowDidResignKeyNotification
+                                                      object:self.window];
+    }
+
+    self.window = window;
+    self.hostView = hostView;
+
+    if (self.window) {
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(handleWindowFocusChange:)
+                                                     name:NSWindowDidBecomeKeyNotification
+                                                   object:self.window];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(handleWindowFocusChange:)
+                                                     name:NSWindowDidResignKeyNotification
+                                                   object:self.window];
+    }
+}
+
+- (void)handleWindowFocusChange:(NSNotification*)notification
+{
+    Q_UNUSED(notification);
+    updateInactiveGlassChrome(self.hostView);
+}
+
+@end
+
 namespace {
 
 const void* const kContainerAssociationKey = &kContainerAssociationKey;
@@ -397,6 +455,10 @@ const void* const kImageButtonAssociationKey = &kImageButtonAssociationKey;
 const void* const kScreenshotButtonAssociationKey = &kScreenshotButtonAssociationKey;
 const void* const kHistoryButtonAssociationKey = &kHistoryButtonAssociationKey;
 const void* const kSendButtonAssociationKey = &kSendButtonAssociationKey;
+const void* const kInactiveBorderLayerAssociationKey = &kInactiveBorderLayerAssociationKey;
+const void* const kInactiveShadowLayerAssociationKey = &kInactiveShadowLayerAssociationKey;
+const void* const kWindowObserverAssociationKey = &kWindowObserverAssociationKey;
+const void* const kVisualOpacityAssociationKey = &kVisualOpacityAssociationKey;
 
 struct AppearanceStyle {
     CGFloat shadowOpacity;
@@ -612,6 +674,35 @@ NLFloatingInputIconButton* sendButtonForView(NSView* qtView)
             : nil;
 }
 
+CAShapeLayer* inactiveBorderLayerForView(NSView* qtView)
+{
+    return qtView
+            ? static_cast<CAShapeLayer*>(objc_getAssociatedObject(qtView, kInactiveBorderLayerAssociationKey))
+            : nil;
+}
+
+CAShapeLayer* inactiveShadowLayerForView(NSView* qtView)
+{
+    return qtView
+            ? static_cast<CAShapeLayer*>(objc_getAssociatedObject(qtView, kInactiveShadowLayerAssociationKey))
+            : nil;
+}
+
+NLFloatingInputWindowObserver* windowObserverForView(NSView* qtView)
+{
+    return qtView
+            ? static_cast<NLFloatingInputWindowObserver*>(objc_getAssociatedObject(qtView, kWindowObserverAssociationKey))
+            : nil;
+}
+
+CGFloat storedOpacityForView(NSView* qtView)
+{
+    NSNumber* value = qtView
+            ? static_cast<NSNumber*>(objc_getAssociatedObject(qtView, kVisualOpacityAssociationKey))
+            : nil;
+    return value ? static_cast<CGFloat>(value.doubleValue) : 1.0;
+}
+
 NSScrollView* inputScrollForView(NSView* qtView)
 {
     return qtView
@@ -634,6 +725,18 @@ void configureHostView(NSView* qtView)
 
     qtView.wantsLayer = YES;
     qtView.layer.backgroundColor = NSColor.clearColor.CGColor;
+}
+
+void storeOpacityForView(NSView* qtView, CGFloat opacity)
+{
+    if (!qtView) {
+        return;
+    }
+
+    objc_setAssociatedObject(qtView,
+                             kVisualOpacityAssociationKey,
+                             [NSNumber numberWithDouble:opacity],
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 NSImage* iconImageFromResource(const QString& resourcePath, CGFloat iconSize)
@@ -699,6 +802,173 @@ void applyCommonContainerShadow(NSView* container, const AppearanceStyle& style)
     container.layer.shadowOpacity = style.shadowOpacity;
     container.layer.shadowRadius = style.shadowRadius;
     container.layer.shadowOffset = CGSizeMake(0.0, style.shadowYOffset);
+}
+
+CAShapeLayer* ensureInactiveBorderLayer(NSView* hostView, NSView* container)
+{
+    if (!hostView || !container || !container.layer) {
+        return nil;
+    }
+
+    CAShapeLayer* layer = inactiveBorderLayerForView(hostView);
+    if (!layer) {
+        layer = [CAShapeLayer layer];
+        objc_setAssociatedObject(hostView,
+                                 kInactiveBorderLayerAssociationKey,
+                                 layer,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+
+    if (layer.superlayer != container.layer) {
+        [layer removeFromSuperlayer];
+        [container.layer addSublayer:layer];
+    }
+
+    layer.fillColor = NSColor.clearColor.CGColor;
+    layer.lineWidth = kInactiveGlassBorderWidth;
+    layer.strokeColor = [NSColor colorWithWhite:1.0 alpha:kInactiveGlassBorderAlpha].CGColor;
+    return layer;
+}
+
+CAShapeLayer* ensureInactiveShadowLayer(NSView* hostView, NSView* shadowHost)
+{
+    if (!hostView || !shadowHost || !shadowHost.layer) {
+        return nil;
+    }
+
+    CAShapeLayer* layer = inactiveShadowLayerForView(hostView);
+    if (!layer) {
+        layer = [CAShapeLayer layer];
+        objc_setAssociatedObject(hostView,
+                                 kInactiveShadowLayerAssociationKey,
+                                 layer,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+
+    if (layer.superlayer != shadowHost.layer) {
+        [layer removeFromSuperlayer];
+        [shadowHost.layer addSublayer:layer];
+    }
+
+    layer.fillColor = NSColor.clearColor.CGColor;
+    layer.strokeColor = nil;
+    layer.shadowColor = NSColor.blackColor.CGColor;
+    layer.shadowOpacity = kInactiveGlassShadowOpacity;
+    layer.shadowRadius = kInactiveGlassShadowRadius;
+    layer.shadowOffset = CGSizeMake(0.0, kInactiveGlassShadowYOffset);
+    return layer;
+}
+
+void ensureWindowObserver(NSView* hostView)
+{
+    if (!hostView) {
+        return;
+    }
+
+    NLFloatingInputWindowObserver* observer = windowObserverForView(hostView);
+    if (!observer) {
+        observer = [[NLFloatingInputWindowObserver alloc] init];
+        objc_setAssociatedObject(hostView,
+                                 kWindowObserverAssociationKey,
+                                 observer,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [observer release];
+        observer = windowObserverForView(hostView);
+    }
+
+    [observer bindWindow:hostView.window hostView:hostView];
+}
+
+void clearInactiveGlassChrome(NSView* hostView)
+{
+    if (!hostView) {
+        return;
+    }
+
+    CAShapeLayer* borderLayer = inactiveBorderLayerForView(hostView);
+    if (borderLayer) {
+        [borderLayer removeFromSuperlayer];
+    }
+
+    CAShapeLayer* shadowLayer = inactiveShadowLayerForView(hostView);
+    if (shadowLayer) {
+        [shadowLayer removeFromSuperlayer];
+    }
+
+    NLFloatingInputWindowObserver* observer = windowObserverForView(hostView);
+    if (observer) {
+        [observer bindWindow:nil hostView:nil];
+    }
+
+    objc_setAssociatedObject(hostView, kInactiveBorderLayerAssociationKey, nil, OBJC_ASSOCIATION_ASSIGN);
+    objc_setAssociatedObject(hostView, kInactiveShadowLayerAssociationKey, nil, OBJC_ASSOCIATION_ASSIGN);
+    objc_setAssociatedObject(hostView, kWindowObserverAssociationKey, nil, OBJC_ASSOCIATION_ASSIGN);
+}
+
+void updateInactiveGlassChrome(NSView* hostView)
+{
+    if (!hostView) {
+        return;
+    }
+
+    NSView* container = containerForView(hostView);
+    NSView* shadowHost = shadowHostForView(hostView);
+    NSWindow* window = hostView.window;
+    bool isLiquidGlass = false;
+#if NETHERLINK_HAS_NS_GLASS_EFFECT_VIEW
+    isLiquidGlass = container && [container isKindOfClass:[NSGlassEffectView class]];
+#endif
+    if (!isLiquidGlass || !shadowHost) {
+        clearInactiveGlassChrome(hostView);
+        return;
+    }
+
+    ensureWindowObserver(hostView);
+
+    CAShapeLayer* borderLayer = ensureInactiveBorderLayer(hostView, container);
+    CAShapeLayer* shadowLayer = ensureInactiveShadowLayer(hostView, shadowHost);
+    if (!borderLayer || !shadowLayer) {
+        return;
+    }
+
+    const BOOL hidden = container.hidden || shadowHost.hidden || !window;
+    const CGFloat alpha = qBound(0.0,
+                                 static_cast<double>(storedOpacityForView(hostView)),
+                                 1.0);
+    const BOOL showInactiveChrome = !hidden && alpha > 0.001 && !window.isKeyWindow;
+
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+
+    borderLayer.hidden = !showInactiveChrome;
+    shadowLayer.hidden = !showInactiveChrome;
+    borderLayer.opacity = alpha;
+    shadowLayer.opacity = alpha;
+
+    if (showInactiveChrome) {
+        borderLayer.frame = container.bounds;
+        const CGRect borderRect = CGRectInset(container.bounds,
+                                              kInactiveGlassBorderWidth / 2.0,
+                                              kInactiveGlassBorderWidth / 2.0);
+        CGPathRef borderPath = CGPathCreateWithRoundedRect(borderRect,
+                                                           kCornerRadius - kInactiveGlassBorderWidth / 2.0,
+                                                           kCornerRadius - kInactiveGlassBorderWidth / 2.0,
+                                                           nil);
+        borderLayer.path = borderPath;
+        CGPathRelease(borderPath);
+
+        shadowLayer.frame = shadowHost.bounds;
+        const CGRect shadowRect = [shadowHost convertRect:container.frame fromView:hostView];
+        CGPathRef shadowPath = CGPathCreateWithRoundedRect(shadowRect,
+                                                           kCornerRadius,
+                                                           kCornerRadius,
+                                                           nil);
+        shadowLayer.path = shadowPath;
+        shadowLayer.shadowPath = shadowPath;
+        CGPathRelease(shadowPath);
+    }
+
+    [CATransaction commit];
 }
 
 NSView* ensureShadowHost(NSView* hostView)
@@ -1308,6 +1578,7 @@ void syncGlass(QWidget* widget, double opacity)
     container.frame = frame;
     const BOOL hidden = widget->isHidden() || widget->width() <= 0 || widget->height() <= 0;
     const CGFloat alpha = static_cast<CGFloat>(qBound(0.0, opacity, 1.0));
+    storeOpacityForView(hostView, alpha);
     shadowHost.alphaValue = alpha;
     container.alphaValue = alpha;
     shadowHost.hidden = hidden;
@@ -1315,6 +1586,7 @@ void syncGlass(QWidget* widget, double opacity)
     if (contentView != container) {
         contentView.frame = container.bounds;
     }
+    updateInactiveGlassChrome(hostView);
 }
 
 void syncInputBar(QWidget* widget,
@@ -1374,6 +1646,7 @@ void syncInputBar(QWidget* widget,
     container.frame = frame;
     const BOOL hidden = widget->isHidden() || widget->width() <= 0 || widget->height() <= 0;
     const CGFloat alpha = static_cast<CGFloat>(qBound(0.0, opacity, 1.0));
+    storeOpacityForView(hostView, alpha);
     shadowHost.alphaValue = alpha;
     container.alphaValue = alpha;
     shadowHost.hidden = hidden;
@@ -1388,6 +1661,7 @@ void syncInputBar(QWidget* widget,
                   historyButton,
                   sendButton);
     layoutInputField(inputScroll, inputField, contentView);
+    updateInactiveGlassChrome(hostView);
 }
 
 void focusInputBar(QWidget* widget)
@@ -1420,10 +1694,12 @@ void clearInputBar(QWidget* widget)
 
         clearInputField(hostView);
         clearButtons(hostView);
+        clearInactiveGlassChrome(hostView);
         objc_setAssociatedObject(hostView, kContentAssociationKey, nil, OBJC_ASSOCIATION_ASSIGN);
         objc_setAssociatedObject(hostView, kShadowHostAssociationKey, nil, OBJC_ASSOCIATION_ASSIGN);
         objc_setAssociatedObject(hostView, kTargetAssociationKey, nil, OBJC_ASSOCIATION_ASSIGN);
         objc_setAssociatedObject(hostView, kContainerAssociationKey, nil, OBJC_ASSOCIATION_ASSIGN);
+        objc_setAssociatedObject(hostView, kVisualOpacityAssociationKey, nil, OBJC_ASSOCIATION_ASSIGN);
     }
 }
 
