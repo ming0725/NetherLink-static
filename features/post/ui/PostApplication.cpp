@@ -9,7 +9,6 @@
 #include "PostOverlay.h"
 #include "features/post/data/PostRepository.h"
 #include "shared/services/ImageService.h"
-#include <QGraphicsOpacityEffect>
 #include <QParallelAnimationGroup>
 #include <QPropertyAnimation>
 #include <QPainter>
@@ -112,9 +111,85 @@ private:
     qreal m_revealProgress = 0.0;
 };
 
+class DetailSnapshotWidget final : public QWidget
+{
+public:
+    explicit DetailSnapshotWidget(QWidget* parent = nullptr)
+        : QWidget(parent)
+    {
+        setAttribute(Qt::WA_TransparentForMouseEvents);
+        setAttribute(Qt::WA_TranslucentBackground);
+    }
+
+    void setSnapshot(const QPixmap& pixmap)
+    {
+        m_pixmap = pixmap;
+        update();
+    }
+
+    void setVisualOpacity(qreal opacity)
+    {
+        const qreal bounded = qBound(0.0, opacity, 1.0);
+        if (!qFuzzyCompare(m_opacity, bounded)) {
+            m_opacity = bounded;
+            update();
+        }
+    }
+
+    qreal visualOpacity() const
+    {
+        return m_opacity;
+    }
+
+protected:
+    void paintEvent(QPaintEvent* event) override
+    {
+        Q_UNUSED(event);
+        if (m_pixmap.isNull() || m_opacity <= 0.0) {
+            return;
+        }
+
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        painter.setOpacity(m_opacity);
+        painter.drawPixmap(rect(), m_pixmap);
+    }
+
+private:
+    QPixmap m_pixmap;
+    qreal m_opacity = 1.0;
+};
+
 TransitionImageWidget* transitionImageWidget(QWidget* widget)
 {
     return dynamic_cast<TransitionImageWidget*>(widget);
+}
+
+DetailSnapshotWidget* detailSnapshotWidget(QWidget* widget)
+{
+    return dynamic_cast<DetailSnapshotWidget*>(widget);
+}
+
+QPixmap renderWidgetSnapshot(QWidget* widget)
+{
+    if (!widget || !widget->size().isValid()) {
+        return {};
+    }
+
+    const bool wasVisible = widget->isVisible();
+    if (!wasVisible) {
+        widget->ensurePolished();
+        widget->show();
+        widget->repaint();
+    }
+
+    const QPixmap pixmap = widget->grab();
+
+    if (!wasVisible) {
+        widget->hide();
+    }
+
+    return pixmap;
 }
 
 } // namespace
@@ -252,11 +327,9 @@ void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, cons
         }
     });
     m_detailView->setGeometry(detailRectForCurrentPost());
-
-    m_detailOpacityEffect = new QGraphicsOpacityEffect(m_detailView);
-    m_detailOpacityEffect->setOpacity(0.0);
-    m_detailView->setGraphicsEffect(m_detailOpacityEffect);
     m_detailView->show();
+    refreshDetailSnapshotFromView(0.0);
+    m_detailView->hide();
 
     const QRect targetImageGeometry(m_detailView->geometry().topLeft() + m_detailView->paintedImageRect().topLeft(),
                                     m_detailView->paintedImageRect().size());
@@ -305,8 +378,8 @@ void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, cons
     detailFade->setEndValue(1.0);
     detailFade->setEasingCurve(QEasingCurve::OutCubic);
     connect(detailFade, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
-        if (m_detailOpacityEffect) {
-            m_detailOpacityEffect->setOpacity(value.toReal());
+        if (auto* snapshot = detailSnapshotWidget(m_detailSnapshot)) {
+            snapshot->setVisualOpacity(value.toReal());
         }
     });
     group->addAnimation(detailFade);
@@ -314,13 +387,48 @@ void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, cons
     connect(group, &QParallelAnimationGroup::finished, this, [this, group]() {
         m_transitionAnimation = nullptr;
         m_transitionPhase = TransitionPhase::Idle;
-        if (m_detailView) {
+        if (m_detailView && m_openPostSession.detailRequestId.isEmpty()) {
             m_detailView->setImageVisible(true);
+            m_detailView->show();
+
+            auto* snapshot = detailSnapshotWidget(m_detailSnapshot);
+            if (snapshot) {
+                if (m_detailSnapshotFadeAnimation) {
+                    m_detailSnapshotFadeAnimation->stop();
+                    m_detailSnapshotFadeAnimation->deleteLater();
+                    m_detailSnapshotFadeAnimation = nullptr;
+                }
+
+                m_detailSnapshotFadeAnimation = new QVariantAnimation(this);
+                m_detailSnapshotFadeAnimation->setDuration(100);
+                m_detailSnapshotFadeAnimation->setStartValue(snapshot->visualOpacity());
+                m_detailSnapshotFadeAnimation->setEndValue(0.0);
+                m_detailSnapshotFadeAnimation->setEasingCurve(QEasingCurve::OutCubic);
+                connect(m_detailSnapshotFadeAnimation, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
+                    if (auto* currentSnapshot = detailSnapshotWidget(m_detailSnapshot)) {
+                        currentSnapshot->setVisualOpacity(value.toReal());
+                    }
+                });
+                connect(m_detailSnapshotFadeAnimation, &QVariantAnimation::finished, this, [this]() {
+                    if (m_detailSnapshotFadeAnimation) {
+                        m_detailSnapshotFadeAnimation->deleteLater();
+                        m_detailSnapshotFadeAnimation = nullptr;
+                    }
+                    clearDetailSnapshot();
+                    removeTransitionImage();
+                    updateLayerOrder();
+                });
+                m_detailSnapshotFadeAnimation->start();
+            } else {
+                clearDetailSnapshot();
+                QTimer::singleShot(0, this, [this]() {
+                    removeTransitionImage();
+                    updateLayerOrder();
+                });
+            }
+        } else if (m_openPostSession.detailRequestId.isEmpty()) {
+            removeTransitionImage();
         }
-        if (m_detailOpacityEffect) {
-            m_detailOpacityEffect->setOpacity(1.0);
-        }
-        removeTransitionImage();
         updateLayerOrder();
         group->deleteLater();
     });
@@ -338,6 +446,61 @@ void PostApplication::onPostDetailReady(const QString& requestId, const PostDeta
     }
 
     m_detailView->setPostData(detail);
+    if (m_transitionPhase == TransitionPhase::Opening) {
+        const qreal opacity = detailSnapshotWidget(m_detailSnapshot)
+                ? detailSnapshotWidget(m_detailSnapshot)->visualOpacity()
+                : 1.0;
+        refreshDetailSnapshotFromView(opacity);
+        if (m_detailView) {
+            m_detailView->hide();
+        }
+    } else if (m_detailSnapshot) {
+        m_detailView->setImageVisible(true);
+        m_detailView->show();
+
+        auto* snapshot = detailSnapshotWidget(m_detailSnapshot);
+        if (snapshot) {
+            if (m_detailSnapshotFadeAnimation) {
+                m_detailSnapshotFadeAnimation->stop();
+                m_detailSnapshotFadeAnimation->deleteLater();
+                m_detailSnapshotFadeAnimation = nullptr;
+            }
+
+            m_detailSnapshotFadeAnimation = new QVariantAnimation(this);
+            m_detailSnapshotFadeAnimation->setDuration(120);
+            m_detailSnapshotFadeAnimation->setStartValue(snapshot->visualOpacity());
+            m_detailSnapshotFadeAnimation->setEndValue(0.0);
+            m_detailSnapshotFadeAnimation->setEasingCurve(QEasingCurve::OutCubic);
+            connect(m_detailSnapshotFadeAnimation, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
+                if (auto* currentSnapshot = detailSnapshotWidget(m_detailSnapshot)) {
+                    currentSnapshot->setVisualOpacity(value.toReal());
+                }
+            });
+            connect(m_detailSnapshotFadeAnimation, &QVariantAnimation::finished, this, [this]() {
+                if (m_detailSnapshotFadeAnimation) {
+                    m_detailSnapshotFadeAnimation->deleteLater();
+                    m_detailSnapshotFadeAnimation = nullptr;
+                }
+                clearDetailSnapshot();
+                removeTransitionImage();
+                updateLayerOrder();
+            });
+            m_detailSnapshotFadeAnimation->start();
+        } else {
+            clearDetailSnapshot();
+            QTimer::singleShot(0, this, [this]() {
+                removeTransitionImage();
+                updateLayerOrder();
+            });
+        }
+    } else if (m_detailView) {
+        m_detailView->setImageVisible(true);
+        m_detailView->show();
+        QTimer::singleShot(0, this, [this]() {
+            removeTransitionImage();
+            updateLayerOrder();
+        });
+    }
     m_openPostSession.detailRequestId.clear();
 }
 
@@ -348,6 +511,15 @@ void PostApplication::onPostUpdated(const PostSummary& summary)
     }
 
     m_detailView->updatePostSummary(summary);
+    if (m_transitionPhase == TransitionPhase::Opening) {
+        const qreal opacity = detailSnapshotWidget(m_detailSnapshot)
+                ? detailSnapshotWidget(m_detailSnapshot)->visualOpacity()
+                : 1.0;
+        refreshDetailSnapshotFromView(opacity);
+        if (m_detailView) {
+            m_detailView->hide();
+        }
+    }
 }
 
 void PostApplication::onPageChanged(int index)
@@ -363,15 +535,14 @@ void PostApplication::onPageChanged(int index)
 QWidget* PostApplication::createPlaceholderPage() const
 {
     auto* page = new QWidget(m_stack);
-    page->setAttribute(Qt::WA_StyledBackground, true);
 #ifdef Q_OS_WIN
     page->setAutoFillBackground(true);
     QPalette palette = page->palette();
     palette.setColor(QPalette::Window, QColor(0xF8, 0xF8, 0xFC));
     page->setPalette(palette);
-    page->setStyleSheet("border:none;");
 #else
-    page->setStyleSheet("background:transparent;border:none;");
+    page->setAttribute(Qt::WA_TranslucentBackground);
+    page->setAutoFillBackground(false);
 #endif
     return page;
 }
@@ -538,6 +709,9 @@ void PostApplication::updateLayerOrder()
     if (m_detailView) {
         m_detailView->raise();
     }
+    if (m_detailSnapshot) {
+        m_detailSnapshot->raise();
+    }
     if (m_transitionImage) {
         m_transitionImage->raise();
     }
@@ -553,9 +727,50 @@ void PostApplication::removeTransitionImage()
     m_transitionImage = nullptr;
 }
 
+void PostApplication::refreshDetailSnapshotFromView(qreal opacity)
+{
+    if (!m_detailView) {
+        clearDetailSnapshot();
+        return;
+    }
+
+    const QPixmap detailSnapshot = renderWidgetSnapshot(m_detailView);
+    if (detailSnapshot.isNull()) {
+        clearDetailSnapshot();
+        return;
+    }
+
+    auto* snapshot = detailSnapshotWidget(m_detailSnapshot);
+    if (!snapshot) {
+        snapshot = new DetailSnapshotWidget(this);
+        m_detailSnapshot = snapshot;
+    }
+
+    snapshot->setGeometry(m_detailView->geometry());
+    snapshot->setSnapshot(detailSnapshot);
+    snapshot->setVisualOpacity(opacity);
+    snapshot->show();
+}
+
+void PostApplication::clearDetailSnapshot()
+{
+    if (!m_detailSnapshot) {
+        return;
+    }
+
+    m_detailSnapshot->deleteLater();
+    m_detailSnapshot = nullptr;
+}
+
 void PostApplication::stopActiveTransition()
 {
     m_openPostSession.detailRequestId.clear();
+
+    if (m_detailSnapshotFadeAnimation) {
+        m_detailSnapshotFadeAnimation->stop();
+        m_detailSnapshotFadeAnimation->deleteLater();
+        m_detailSnapshotFadeAnimation = nullptr;
+    }
 
     if (m_overlayFadeAnimation) {
         m_overlayFadeAnimation->stop();
@@ -586,14 +801,14 @@ void PostApplication::stopActiveTransition()
 
 void PostApplication::clearDetailView()
 {
+    clearDetailSnapshot();
+
     if (!m_detailView) {
-        m_detailOpacityEffect = nullptr;
         return;
     }
 
     m_detailView->deleteLater();
     m_detailView = nullptr;
-    m_detailOpacityEffect = nullptr;
     updateLayerOrder();
 }
 
@@ -614,11 +829,12 @@ void PostApplication::startCloseAnimation()
     if (transitionPixmap.isNull() && transitionImageWidget(m_transitionImage)) {
         transitionPixmap = transitionImageWidget(m_transitionImage)->pixmap();
     }
-    const qreal startDetailOpacity = m_detailOpacityEffect ? m_detailOpacityEffect->opacity() : 1.0;
     const qreal startOverlayOpacity = m_overlay ? m_overlay->overlayOpacity() : 1.0;
 
     stopActiveTransition();
     m_detailView->setImageVisible(false);
+    refreshDetailSnapshotFromView(1.0);
+    m_detailView->hide();
     fadeBar(m_bar ? m_bar->visualOpacity() : 0.0, 1.0, false);
 
     if (!transitionImageWidget(m_transitionImage)) {
@@ -657,15 +873,15 @@ void PostApplication::startCloseAnimation()
     });
     group->addAnimation(revealAnim);
 
-    if (m_detailOpacityEffect) {
+    if (detailSnapshotWidget(m_detailSnapshot)) {
         auto* detailFade = new QVariantAnimation(group);
         detailFade->setDuration(200);
-        detailFade->setStartValue(startDetailOpacity);
+        detailFade->setStartValue(1.0);
         detailFade->setEndValue(0.0);
         detailFade->setEasingCurve(QEasingCurve::InOutQuad);
         connect(detailFade, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
-            if (m_detailOpacityEffect) {
-                m_detailOpacityEffect->setOpacity(value.toReal());
+            if (auto* snapshot = detailSnapshotWidget(m_detailSnapshot)) {
+                snapshot->setVisualOpacity(value.toReal());
             }
         });
         group->addAnimation(detailFade);

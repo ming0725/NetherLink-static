@@ -25,6 +25,8 @@ PostMasonryView::PostMasonryView(QWidget* parent)
     , m_scrollAnimation(new QPropertyAnimation(this, "animatedScrollValue", this))
     , m_hoverAnimation(new QVariantAnimation(this))
     , m_resizeDebounceTimer(new QTimer(this))
+    , m_previewWarmupTimer(new QTimer(this))
+    , m_previewUpdateTimer(new QTimer(this))
 {
 #ifndef Q_OS_WIN
     setAttribute(Qt::WA_TranslucentBackground);
@@ -54,6 +56,10 @@ PostMasonryView::PostMasonryView(QWidget* parent)
     m_scrollAnimation->setDuration(180);
     m_resizeDebounceTimer->setSingleShot(true);
     m_resizeDebounceTimer->setInterval(kResizeDebounceMs);
+    m_previewWarmupTimer->setSingleShot(true);
+    m_previewWarmupTimer->setInterval(24);
+    m_previewUpdateTimer->setSingleShot(true);
+    m_previewUpdateTimer->setInterval(16);
     verticalScrollBar()->setSingleStep(28);
     m_hoverAnimation->setDuration(220);
     m_hoverAnimation->setEasingCurve(QEasingCurve::OutCubic);
@@ -83,9 +89,13 @@ PostMasonryView::PostMasonryView(QWidget* parent)
     connect(verticalScrollBar(), &QScrollBar::rangeChanged,
             this, &PostMasonryView::onVerticalScrollRangeChanged);
     connect(&ImageService::instance(), &ImageService::previewReady,
-            this, [this]() { viewport()->update(); });
+            this, [this]() { scheduleViewportRefresh(m_previewUpdateTimer->interval()); });
     connect(m_resizeDebounceTimer, &QTimer::timeout,
             this, &PostMasonryView::onResizeDebounceTimeout);
+    connect(m_previewWarmupTimer, &QTimer::timeout,
+            this, &PostMasonryView::warmVisiblePreviews);
+    connect(m_previewUpdateTimer, &QTimer::timeout,
+            this, [this]() { viewport()->update(); });
 }
 
 void PostMasonryView::setCardDelegate(PostCardDelegate* delegate)
@@ -149,12 +159,56 @@ void PostMasonryView::scrollTo(const QModelIndex& index, ScrollHint hint)
 
 QModelIndex PostMasonryView::indexAt(const QPoint& point) const
 {
-    if (!model()) {
+    if (!model() || m_layoutItems.isEmpty() || m_layoutColumnCount <= 0 || m_layoutColumnWidth <= 0) {
         return {};
     }
 
     const QPoint contentPoint = point + QPoint(0, verticalOffset());
-    for (int row = 0; row < m_layoutItems.size(); ++row) {
+    const int relativeX = contentPoint.x() - kMargin;
+    if (relativeX < 0) {
+        return {};
+    }
+
+    const int columnSpan = m_layoutColumnWidth + kHorizontalGap;
+    const int column = relativeX / columnSpan;
+    if (column < 0 || column >= m_columnRows.size()) {
+        return {};
+    }
+
+    const int columnLeft = kMargin + column * columnSpan;
+    if (contentPoint.x() < columnLeft || contentPoint.x() >= columnLeft + m_layoutColumnWidth) {
+        return {};
+    }
+
+    const QVector<int>& rows = m_columnRows.at(column);
+    if (rows.isEmpty()) {
+        return {};
+    }
+
+    int low = 0;
+    int high = rows.size() - 1;
+    while (low <= high) {
+        const int mid = (low + high) / 2;
+        const QRect& rect = m_layoutItems.at(rows.at(mid)).rect;
+        if (contentPoint.y() < rect.top()) {
+            high = mid - 1;
+        } else if (contentPoint.y() > rect.bottom()) {
+            low = mid + 1;
+        } else if (rect.contains(contentPoint)) {
+            return model()->index(rows.at(mid), 0, rootIndex());
+        } else {
+            break;
+        }
+    }
+
+    if (high >= 0 && high < rows.size()) {
+        const int row = rows.at(high);
+        if (m_layoutItems.at(row).rect.contains(contentPoint)) {
+            return model()->index(row, 0, rootIndex());
+        }
+    }
+    if (low >= 0 && low < rows.size()) {
+        const int row = rows.at(low);
         if (m_layoutItems.at(row).rect.contains(contentPoint)) {
             return model()->index(row, 0, rootIndex());
         }
@@ -418,9 +472,32 @@ void PostMasonryView::dataChanged(const QModelIndex& topLeft,
                                   const QList<int>& roles)
 {
     QAbstractItemView::dataChanged(topLeft, bottomRight, roles);
-    Q_UNUSED(roles);
-    relayout();
-    viewport()->update();
+    const auto needsRelayout = [&roles]() {
+        if (roles.isEmpty()) {
+            return true;
+        }
+
+        for (const int role : roles) {
+            if (role == Qt::DisplayRole
+                || role == PostFeedModel::TitleRole
+                || role == PostFeedModel::ThumbnailImageRole
+                || role == PostFeedModel::ThumbnailSizeRole) {
+                return true;
+            }
+        }
+        return false;
+    }();
+
+    if (needsRelayout) {
+        relayout();
+        return;
+    }
+
+    QRegion dirtyRegion;
+    for (int row = topLeft.row(); row <= bottomRight.row(); ++row) {
+        dirtyRegion += visualRect(model()->index(row, 0, rootIndex()));
+    }
+    viewport()->update(dirtyRegion);
 }
 
 void PostMasonryView::updateGeometries()
@@ -441,7 +518,7 @@ void PostMasonryView::onVerticalScrollValueChanged(int value)
     m_animatedScrollValue = value;
     viewport()->update();
     updateOverlayScrollBar();
-    warmVisiblePreviews();
+    scheduleWarmVisiblePreviews(m_previewWarmupTimer->interval());
     maybeEmitReachedBottom();
 }
 
@@ -472,6 +549,9 @@ void PostMasonryView::setAnimatedScrollValue(int value)
 void PostMasonryView::relayout()
 {
     m_layoutItems.clear();
+    m_columnRows.clear();
+    m_layoutColumnWidth = 0;
+    m_layoutColumnCount = 0;
     if (!model() || !m_postDelegate) {
         verticalScrollBar()->setRange(0, 0);
         viewport()->update();
@@ -492,6 +572,9 @@ void PostMasonryView::relayout()
     const int itemWidth = qMax(kMinItemWidth,
                                qRound(qreal(availableWidth - (columns - 1) * kHorizontalGap) / qreal(columns)));
     QVector<int> columnHeights(columns, kTopMargin);
+    m_columnRows.resize(columns);
+    m_layoutColumnWidth = itemWidth;
+    m_layoutColumnCount = columns;
     m_layoutItems.resize(rowCount);
 
     for (int row = 0; row < rowCount; ++row) {
@@ -502,6 +585,7 @@ void PostMasonryView::relayout()
         const int x = kMargin + column * (itemWidth + kHorizontalGap);
         const int y = columnHeights[column];
         m_layoutItems[row] = {QRect(x, y, itemWidth, height), height};
+        m_columnRows[column].append(row);
         columnHeights[column] += height + kVerticalGap;
     }
 
@@ -516,8 +600,34 @@ void PostMasonryView::relayout()
 
     updateScrollBarGeometry();
     updateOverlayScrollBar();
-    warmVisiblePreviews();
+    scheduleWarmVisiblePreviews(0);
     viewport()->update();
+}
+
+void PostMasonryView::scheduleWarmVisiblePreviews(int delayMs)
+{
+    if (delayMs <= 0) {
+        m_previewWarmupTimer->stop();
+        warmVisiblePreviews();
+        return;
+    }
+
+    if (!m_previewWarmupTimer->isActive()) {
+        m_previewWarmupTimer->start(delayMs);
+    }
+}
+
+void PostMasonryView::scheduleViewportRefresh(int delayMs)
+{
+    if (delayMs <= 0) {
+        m_previewUpdateTimer->stop();
+        viewport()->update();
+        return;
+    }
+
+    if (!m_previewUpdateTimer->isActive()) {
+        m_previewUpdateTimer->start(delayMs);
+    }
 }
 
 void PostMasonryView::updateHoveredIndex(const QModelIndex& index)

@@ -70,6 +70,8 @@ private:
     int animatedScrollValue() const { return m_animatedScrollValue; }
     void setAnimatedScrollValue(int value);
     void relayout();
+    void scheduleWarmVisiblePreviews(int delayMs);
+    void scheduleViewportRefresh(int delayMs);
     void updateScrollBarGeometry();
     void updateOverlayScrollBar();
     void showOverlayScrollBar();
@@ -85,11 +87,14 @@ private:
     void maybeEmitReachedBottom();
 
     QVector<LayoutItem> m_layoutItems;
+    QVector<QVector<int>> m_columnRows;
     PostCardDelegate* m_postDelegate = nullptr;
     SmoothScrollBar* m_overlayScrollBar;
     QPropertyAnimation* m_scrollAnimation;
     QVariantAnimation* m_hoverAnimation;
     QTimer* m_resizeDebounceTimer;
+    QTimer* m_previewWarmupTimer;
+    QTimer* m_previewUpdateTimer;
     int m_animatedScrollValue = 0;
     int m_wheelStepPixels = 56;
     qreal m_precisionScrollScale = 0.72;
@@ -101,6 +106,8 @@ private:
     qreal m_hoverTransitionProgress = 1.0;
     bool m_hovered = false;
     bool m_bottomSignalArmed = true;
+    int m_layoutColumnWidth = 0;
+    int m_layoutColumnCount = 0;
 
     static constexpr int kMargin = 16;
     static constexpr int kTopMargin = 0;

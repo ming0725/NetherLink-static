@@ -10,6 +10,40 @@
 namespace {
 
 const QColor kImagePlaceholder(0xF2, 0xF2, 0xF2);
+constexpr int kCachedTitleFontSize = 12;
+constexpr int kCachedMetaFontSize = 9;
+
+const QFont& titleFont()
+{
+    static const QFont font = []() {
+        QFont value = QApplication::font();
+        value.setPointSize(kCachedTitleFontSize);
+        return value;
+    }();
+    return font;
+}
+
+const QFontMetrics& titleMetrics()
+{
+    static const QFontMetrics metrics(titleFont());
+    return metrics;
+}
+
+const QFont& metaFont()
+{
+    static const QFont font = []() {
+        QFont value = QApplication::font();
+        value.setPointSize(kCachedMetaFontSize);
+        return value;
+    }();
+    return font;
+}
+
+const QFontMetrics& metaMetrics()
+{
+    static const QFontMetrics metrics(metaFont());
+    return metrics;
+}
 
 } // namespace
 
@@ -23,17 +57,16 @@ void PostCardDelegate::paint(QPainter* painter,
                              const QModelIndex& index) const
 {
     painter->save();
-    painter->setRenderHint(QPainter::Antialiasing);
-    painter->setRenderHint(QPainter::SmoothPixmapTransform);
 
     const CardLayout layout = calculateLayout(index, option.rect);
+    const qreal devicePixelRatio = painter->device()->devicePixelRatioF();
 
     const QString coverPath = index.data(PostFeedModel::ThumbnailImageRole).toString();
     if (!coverPath.isEmpty()) {
         const QPixmap cover = ImageService::instance().previewCrop(coverPath,
                                                                    layout.imageRect.size(),
                                                                    12,
-                                                                   painter->device()->devicePixelRatioF());
+                                                                   devicePixelRatio);
         painter->drawPixmap(layout.imageRect, cover);
     } else {
         painter->setPen(Qt::NoPen);
@@ -57,9 +90,7 @@ void PostCardDelegate::paint(QPainter* painter,
         painter->drawRoundedRect(layout.imageRect, 12, 12);
     }
 
-    QFont titleFont = option.font;
-    titleFont.setPointSize(kTitleFontSize);
-    painter->setFont(titleFont);
+    painter->setFont(titleFont());
     painter->setPen(Qt::black);
     painter->drawText(layout.titleRect,
                       Qt::TextWordWrap | Qt::AlignLeft | Qt::AlignTop,
@@ -68,18 +99,16 @@ void PostCardDelegate::paint(QPainter* painter,
     const QString avatarPath = index.data(PostFeedModel::AuthorAvatarRole).toString();
     const QPixmap avatar = ImageService::instance().circularAvatar(avatarPath,
                                                                    layout.avatarRect.width(),
-                                                                   painter->device()->devicePixelRatioF());
+                                                                   devicePixelRatio);
     painter->drawPixmap(layout.avatarRect, avatar);
 
-    QFont metaFont = option.font;
-    metaFont.setPointSize(kMetaFontSize);
-    painter->setFont(metaFont);
+    painter->setFont(metaFont());
     painter->setPen(QColor(0x33, 0x33, 0x33));
     painter->drawText(layout.authorRect,
                       Qt::AlignVCenter | Qt::AlignLeft,
-                      QFontMetrics(metaFont).elidedText(index.data(PostFeedModel::AuthorNameRole).toString(),
-                                                        Qt::ElideRight,
-                                                        layout.authorRect.width()));
+                      metaMetrics().elidedText(index.data(PostFeedModel::AuthorNameRole).toString(),
+                                               Qt::ElideRight,
+                                               layout.authorRect.width()));
 
     const bool liked = index.data(PostFeedModel::IsLikedRole).toBool();
     const QString likeIconPath = liked
@@ -88,7 +117,7 @@ void PostCardDelegate::paint(QPainter* painter,
     const QPixmap likeIcon = ImageService::instance().scaled(likeIconPath,
                                                              layout.likeIconRect.size(),
                                                              Qt::KeepAspectRatio,
-                                                             painter->device()->devicePixelRatioF());
+                                                             devicePixelRatio);
     painter->drawPixmap(layout.likeIconRect, likeIcon);
 
     painter->setPen(QColor(0x55, 0x55, 0x55));
@@ -135,53 +164,67 @@ PostCardDelegate::Action PostCardDelegate::actionAt(const QStyleOptionViewItem& 
     return NoAction;
 }
 
-PostCardDelegate::CardLayout PostCardDelegate::calculateLayout(const QModelIndex& index, const QRect& rect) const
+PostCardDelegate::CardLayout PostCardDelegate::cachedBaseLayout(const QModelIndex& index, int width) const
 {
-    CardLayout layout;
-    const int imageHeight = imageHeightForWidth(index, rect.width());
-    layout.imageRect = QRect(rect.left(), rect.top(), rect.width(), imageHeight);
+    const QString key = layoutCacheKey(index, width);
+    if (const auto it = m_layoutCache.constFind(key); it != m_layoutCache.constEnd()) {
+        return it.value();
+    }
 
-    QFont titleFont = QApplication::font();
-    titleFont.setPointSize(kTitleFontSize);
-    const QFontMetrics titleMetrics(titleFont);
-    const int titleMaxHeight = titleMetrics.lineSpacing() * kTitleMaxLines;
-    const QRect titleBounds = titleMetrics.boundingRect(0,
-                                                        0,
-                                                        rect.width() - 2 * kMargin,
-                                                        titleMaxHeight,
-                                                        Qt::TextWordWrap,
-                                                        index.data(PostFeedModel::TitleRole).toString());
+    CardLayout layout;
+    const int imageHeight = imageHeightForWidth(index, width);
+    layout.imageRect = QRect(0, 0, width, imageHeight);
+
+    const int titleMaxHeight = titleMetrics().lineSpacing() * kTitleMaxLines;
+    const QRect titleBounds = titleMetrics().boundingRect(0,
+                                                          0,
+                                                          width - 2 * kMargin,
+                                                          titleMaxHeight,
+                                                          Qt::TextWordWrap,
+                                                          index.data(PostFeedModel::TitleRole).toString());
     const int titleHeight = qMin(titleBounds.height(), titleMaxHeight);
     const int titleY = imageHeight + kMargin;
-    layout.titleRect = QRect(rect.left() + kMargin,
-                             rect.top() + titleY,
-                             rect.width() - 2 * kMargin,
+    layout.titleRect = QRect(kMargin,
+                             titleY,
+                             width - 2 * kMargin,
                              titleHeight);
 
-    const int rowY = rect.top() + titleY + titleHeight + kMargin;
-    layout.avatarRect = QRect(rect.left() + kMargin, rowY, kAvatarSize, kAvatarSize);
+    const int rowY = titleY + titleHeight + kMargin;
+    layout.avatarRect = QRect(kMargin, rowY, kAvatarSize, kAvatarSize);
 
-    QFont metaFont = QApplication::font();
-    metaFont.setPointSize(kMetaFontSize);
-    const QFontMetrics metaMetrics(metaFont);
     const QString likeText = QString::number(index.data(PostFeedModel::LikeCountRole).toInt());
-    const int likeCountWidth = metaMetrics.horizontalAdvance(likeText);
-    const int likeIconX = rect.right() - static_cast<int>(1.2 * kMargin) - likeCountWidth - kLikeIconSize;
+    const int likeCountWidth = metaMetrics().horizontalAdvance(likeText);
+    const int likeIconX = width - static_cast<int>(1.2 * kMargin) - likeCountWidth - kLikeIconSize;
     layout.likeIconRect = QRect(likeIconX,
                                 rowY + (kAvatarSize - kLikeIconSize) / 2,
                                 kLikeIconSize,
                                 kLikeIconSize);
-    layout.likeCountRect = QRect(rect.right() - kMargin - likeCountWidth,
+    layout.likeCountRect = QRect(width - kMargin - likeCountWidth,
                                  rowY,
                                  likeCountWidth,
                                  kAvatarSize);
 
-    const int authorX = rect.left() + kMargin * 2 + kAvatarSize;
+    const int authorX = kMargin * 2 + kAvatarSize;
     layout.authorRect = QRect(authorX,
                               rowY,
                               qMax(0, likeIconX - authorX - kMargin),
                               kAvatarSize);
-    layout.totalHeight = rowY + kAvatarSize + kMargin - rect.top();
+    layout.totalHeight = rowY + kAvatarSize + kMargin;
+
+    m_layoutCache.insert(key, layout);
+    return layout;
+}
+
+PostCardDelegate::CardLayout PostCardDelegate::calculateLayout(const QModelIndex& index, const QRect& rect) const
+{
+    CardLayout layout = cachedBaseLayout(index, rect.width());
+    const QPoint offset = rect.topLeft();
+    layout.imageRect.translate(offset);
+    layout.titleRect.translate(offset);
+    layout.avatarRect.translate(offset);
+    layout.authorRect.translate(offset);
+    layout.likeIconRect.translate(offset);
+    layout.likeCountRect.translate(offset);
     return layout;
 }
 
@@ -194,4 +237,15 @@ int PostCardDelegate::imageHeightForWidth(const QModelIndex& index, int width) c
 
     const int scaled = qRound(qreal(width) * qreal(sourceSize.height()) / qreal(sourceSize.width()));
     return qMin(scaled, kMaxImageHeight);
+}
+
+QString PostCardDelegate::layoutCacheKey(const QModelIndex& index, int width) const
+{
+    return QStringLiteral("%1|%2|%3|%4x%5|%6")
+            .arg(index.data(PostFeedModel::PostIdRole).toString(),
+                 QString::number(width),
+                 QString::number(index.data(PostFeedModel::LikeCountRole).toInt()),
+                 QString::number(index.data(PostFeedModel::ThumbnailSizeRole).toSize().width()),
+                 QString::number(index.data(PostFeedModel::ThumbnailSizeRole).toSize().height()),
+                 index.data(PostFeedModel::TitleRole).toString());
 }

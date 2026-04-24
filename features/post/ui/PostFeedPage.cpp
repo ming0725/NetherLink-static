@@ -16,9 +16,6 @@ PostFeedPage::PostFeedPage(QWidget* parent)
     QPalette palette = this->palette();
     palette.setColor(QPalette::Window, QColor(0xF8, 0xF8, 0xFC));
     setPalette(palette);
-    setStyleSheet("border-width:0px;border-style:solid;");
-#else
-    setStyleSheet("border-width:0px;border-style:solid;background:transparent;");
 #endif
     setModel(m_model);
     setCardDelegate(m_delegate);

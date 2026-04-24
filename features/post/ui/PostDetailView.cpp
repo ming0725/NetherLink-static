@@ -1,14 +1,12 @@
 // PostDetailView.cpp
-#include <QDateTime>
 #include <QFontMetrics>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QVariantAnimation>
 
-#include "app/state/CurrentUser.h"
 #include "shared/services/ImageService.h"
 #include "PostDetailView.h"
-#include "features/friend/data/UserRepository.h"
 
 namespace {
 
@@ -32,6 +30,76 @@ int sidePanelWidthForTotalWidth(int totalWidth)
     return qMin(kPreferredSidePanelWidth,
                 qMax(kMinSidePanelWidth, totalWidth - kMinImageWidth));
 }
+
+class IconActionButton final : public QPushButton
+{
+public:
+    explicit IconActionButton(QWidget* parent = nullptr)
+        : QPushButton(parent)
+    {
+        setFixedSize(32, 32);
+        setCursor(Qt::PointingHandCursor);
+        setFocusPolicy(Qt::NoFocus);
+        setFlat(true);
+        setAttribute(Qt::WA_Hover);
+    }
+
+protected:
+    bool event(QEvent* event) override
+    {
+        switch (event->type()) {
+        case QEvent::HoverEnter:
+            m_hovered = true;
+            update();
+            break;
+        case QEvent::HoverLeave:
+            m_hovered = false;
+            m_pressed = false;
+            update();
+            break;
+        case QEvent::MouseButtonPress:
+            if (static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
+                m_pressed = true;
+                update();
+            }
+            break;
+        case QEvent::MouseButtonRelease:
+            m_pressed = false;
+            update();
+            break;
+        default:
+            break;
+        }
+        return QPushButton::event(event);
+    }
+
+    void paintEvent(QPaintEvent* event) override
+    {
+        Q_UNUSED(event);
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+
+        if (m_hovered || m_pressed) {
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(m_pressed ? QColor(0, 0, 0, 28) : QColor(0, 0, 0, 14));
+            painter.drawRoundedRect(rect().adjusted(2, 2, -2, -2), 8, 8);
+        }
+
+        const QSize targetIconSize = iconSize().isValid() ? iconSize() : QSize(18, 18);
+        const QPixmap iconPixmap = icon().pixmap(targetIconSize);
+        if (!iconPixmap.isNull()) {
+            const QRect target((width() - targetIconSize.width()) / 2,
+                               (height() - targetIconSize.height()) / 2,
+                               targetIconSize.width(),
+                               targetIconSize.height());
+            painter.drawPixmap(target, iconPixmap);
+        }
+    }
+
+private:
+    bool m_hovered = false;
+    bool m_pressed = false;
+};
 
 } // namespace
 
@@ -59,26 +127,7 @@ void PostDetailScrollArea::layoutContent()
     m_contentLabel->setGeometry(margin, currentY, contentWidth, contentHeight);
     currentY += contentHeight + spacing;
 
-    for (QWidget* commentWidget : m_commentWidgets) {
-        if (commentWidget && commentWidget->parent() == contentWidget) {
-            commentWidget->setGeometry(margin, currentY, viewport()->width() - 2 * margin, 80);
-            commentWidget->show();
-            currentY += 80 + spacing;
-        }
-    }
-
     contentWidget->setFixedSize(viewport()->width(), currentY);
-}
-
-void PostDetailScrollArea::addCommentWidget(QWidget* commentWidget)
-{
-    if (!commentWidget) {
-        return;
-    }
-
-    commentWidget->setParent(contentWidget);
-    m_commentWidgets.append(commentWidget);
-    refreshContentLayout();
 }
 
 PostDetailScrollArea::PostDetailScrollArea(QWidget* parent)
@@ -120,27 +169,35 @@ QRect PostDetailView::fittedImageRect(const QRect& bounds, const QSize& imageSiz
 
 void PostDetailView::setupUI()
 {
-    m_authorAvatar = new QLabel(this);
+    m_panelContainer = new QWidget(this);
+    m_panelContainer->setAttribute(Qt::WA_TranslucentBackground);
+
+    m_authorAvatar = new QLabel(m_panelContainer);
     m_authorAvatar->setFixedSize({40, 40});
 
-    m_commentLineEdit = new IconLineEdit(this);
+    m_commentLineEdit = new IconLineEdit(m_panelContainer);
     m_commentLineEdit->setIcon(QStringLiteral(":/resources/icon/selected_message.png"));
     m_commentLineEdit->getLineEdit()->setPlaceholderText("说点什么吧...");
 
-    m_authorName = new QLabel(this);
+    m_authorName = new QLabel(m_panelContainer);
     QFont nameFont;
     nameFont.setStyleStrategy(QFont::PreferAntialias);
     nameFont.setPointSize(13);
     nameFont.setBold(true);
     m_authorName->setFont(nameFont);
 
-    m_followBtn = new QPushButton("关注", this);
+    m_followBtn = new QPushButton("关注", m_panelContainer);
     m_followBtn->setFixedSize(80, 32);
     m_followBtn->setCursor(Qt::PointingHandCursor);
 
-    m_contentArea = new PostDetailScrollArea(this);
-    m_contentArea->setObjectName("ContentArea");
-    m_contentArea->setStyleSheet("#ContentArea { border-top: 2px solid #f5f5f5; border-bottom: 2px solid #f5f5f5; border-left: none; border-right: none; }");
+    m_contentArea = new PostDetailScrollArea(m_panelContainer);
+    m_contentArea->setAutoFillBackground(true);
+    QPalette contentPalette = m_contentArea->palette();
+    contentPalette.setColor(QPalette::Window, Qt::white);
+    contentPalette.setColor(QPalette::Base, Qt::white);
+    m_contentArea->setPalette(contentPalette);
+    m_contentArea->viewport()->setPalette(contentPalette);
+    m_contentArea->viewport()->setAutoFillBackground(true);
 
     m_titleLabel = new QLabel(m_contentArea->getContentWidget());
     m_titleLabel->setWordWrap(true);
@@ -163,31 +220,17 @@ void PostDetailView::setupUI()
 
     m_contentArea->setLabels(m_titleLabel, m_contentLabel);
 
-    m_likeBtn = new QPushButton(this);
-    m_likeBtn->setFixedSize(32, 32);
-    m_likeBtn->setCursor(Qt::PointingHandCursor);
-    m_likeBtn->setFlat(true);
+    m_likeBtn = new IconActionButton(m_panelContainer);
     m_likeBtn->setIcon(QIcon(":/resources/icon/heart.png"));
-    m_likeBtn->setStyleSheet(QString(
-            "QPushButton:pressed {"
-            "  background: none;"
-            "  border: none;"
-            "}"));
+    m_likeBtn->setIconSize(QSize(18, 18));
 
-    m_likeCount = new QLabel("666", this);
+    m_likeCount = new QLabel("666", m_panelContainer);
 
-    m_commentBtn = new QPushButton(this);
-    m_commentBtn->setFixedSize(32, 32);
-    m_commentBtn->setCursor(Qt::PointingHandCursor);
+    m_commentBtn = new IconActionButton(m_panelContainer);
     m_commentBtn->setIcon(QIcon(":/resources/icon/selected_message.png"));
-    m_commentBtn->setFlat(true);
-    m_commentBtn->setStyleSheet(QString(
-            "QPushButton:pressed {"
-            "  background: none;"
-            "  border: none;"
-            "}"));
+    m_commentBtn->setIconSize(QSize(18, 18));
 
-    m_commentCount = new QLabel("0", this);
+    m_commentCount = new QLabel("0", m_panelContainer);
 
     connect(m_followBtn, &QPushButton::clicked, this, [this]() {
         m_state.isFollowed = !m_state.isFollowed;
@@ -197,15 +240,6 @@ void PostDetailView::setupUI()
 
     connect(m_likeBtn, &QPushButton::clicked, this, [this]() {
         emit likeClicked(!m_state.isLiked);
-    });
-
-    connect(m_commentBtn, &QPushButton::clicked, this, &PostDetailView::commentClicked);
-    connect(m_commentLineEdit->getLineEdit(), &QLineEdit::returnPressed, this, [this]() {
-        const QString content = m_commentLineEdit->getLineEdit()->text().trimmed();
-        if (!content.isEmpty()) {
-            addComment(content);
-            m_commentLineEdit->getLineEdit()->clear();
-        }
     });
 }
 
@@ -218,6 +252,11 @@ void PostDetailView::resizeEvent(QResizeEvent* ev)
 QSize PostDetailView::preferredSize(const QSize& availableBounds) const
 {
     return availableBounds;
+}
+
+QWidget* PostDetailView::panelWidget() const
+{
+    return m_panelContainer;
 }
 
 QRect PostDetailView::imageRect() const
@@ -263,6 +302,11 @@ void PostDetailView::paintEvent(QPaintEvent*)
 
     const QRect detailImageRect = imageRect();
     p.fillRect(detailImageRect, kDetailImagePlaceholder);
+    const int topH = 60;
+    const int bottomH = 60;
+    p.setPen(QColor(0xE9, 0xE9, 0xE9));
+    p.drawLine(QPoint(detailImageRect.right() + 1, topH - 1), QPoint(width() - 1, topH - 1));
+    p.drawLine(QPoint(detailImageRect.right() + 1, height() - 1), QPoint(width() - 1, height() - 1));
 
     const qreal dpr = p.device()->devicePixelRatioF();
     if (m_state.imageVisible && !m_state.previewImageSource.isEmpty()) {
@@ -297,29 +341,30 @@ void PostDetailView::updateLayout()
     const int rightX = detailImageRect.right() + 1;
     const int rightW = qMax(0, width() - rightX);
     const int h = height();
+    m_panelContainer->setGeometry(rightX, 0, rightW, h);
 
     const int topH = 60;
-    const int avatarX = rightX + 20;
+    const int avatarX = 20;
     const int avatarY = 10;
     m_authorAvatar->setGeometry(avatarX, avatarY, 40, 40);
     m_authorName->setGeometry(avatarX + 50, avatarY, qMax(120, rightW - 170), 40);
-    m_followBtn->setGeometry(rightX + rightW - 100, avatarY + 4, 80, 32);
+    m_followBtn->setGeometry(rightW - 100, avatarY + 4, 80, 32);
 
     const int bottomH = 60;
     const int bottomY = h - bottomH;
     const int btnY = bottomY + (bottomH - 32) / 2;
 
-    int x = rightX + 10;
+    int x = 20;
     m_commentLineEdit->setGeometry(x, btnY, 160, 32);
-    x += 160;
+    x += 172;
     m_likeBtn->setGeometry(x, btnY, 32, 32);
     x += 40;
     m_likeCount->setGeometry(x - 10, btnY, 50, 32);
-    x += 10;
+    x += 24;
     m_commentBtn->setGeometry(x, btnY, 32, 32);
     x += 40;
     m_commentCount->setGeometry(x - 10, btnY, 50, 32);
-    m_contentArea->setGeometry(rightX, topH, rightW, h - topH - bottomH);
+    m_contentArea->setGeometry(0, topH, rightW, h - topH - bottomH);
 }
 
 void PostDetailView::setPreviewSummary(const PostSummary& summary)
@@ -414,62 +459,4 @@ void PostDetailView::syncEngagementUi()
                                              : ":/resources/icon/heart.png"));
     m_likeCount->setText(QString::number(m_state.likeCount));
     m_commentCount->setText(QString::number(m_state.commentCount));
-}
-
-QWidget* PostDetailView::createCommentWidget(const QString& userName, const QString& content)
-{
-    QWidget* commentWidget = new QWidget(m_contentArea->getContentWidget());
-    commentWidget->setObjectName("CommentWidget");
-    commentWidget->setFixedHeight(80);
-    commentWidget->setStyleSheet("background-color: white;");
-
-    QLabel* avatar = new QLabel(commentWidget);
-    avatar->setFixedSize(32, 32);
-    avatar->setPixmap(ImageService::instance().circularAvatar(
-            UserRepository::instance().requestUserAvatarPath(CurrentUser::instance().getUserId()),
-            32));
-
-    QLabel* nameLabel = new QLabel(userName, commentWidget);
-    QFont nameFont;
-    nameFont.setPointSize(12);
-    nameFont.setBold(true);
-    nameLabel->setFont(nameFont);
-
-    QLabel* contentLabel = new QLabel(content, commentWidget);
-    contentLabel->setWordWrap(true);
-    QFont contentFont;
-    contentFont.setPointSize(12);
-    contentLabel->setFont(contentFont);
-
-    QLabel* timeLabel = new QLabel(QDateTime::currentDateTime().toString("hh:mm"), commentWidget);
-    QFont timeFont;
-    timeFont.setPointSize(10);
-    timeLabel->setFont(timeFont);
-
-    avatar->setGeometry(0, 0, 32, 32);
-    nameLabel->setGeometry(40, 0, 200, 20);
-    contentLabel->setGeometry(40, 20, commentWidget->width() - 50, 40);
-    timeLabel->setGeometry(40, 60, 200, 20);
-
-    avatar->show();
-    nameLabel->show();
-    contentLabel->show();
-    timeLabel->show();
-    commentWidget->show();
-
-    return commentWidget;
-}
-
-void PostDetailView::addComment(const QString& content)
-{
-    const QString userName = CurrentUser::instance().getUserName();
-
-    QWidget* commentWidget = createCommentWidget(userName, content);
-    if (!commentWidget) {
-        return;
-    }
-
-    m_contentArea->addCommentWidget(commentWidget);
-    ++m_state.commentCount;
-    syncEngagementUi();
 }

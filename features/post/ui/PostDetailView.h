@@ -14,12 +14,9 @@ protected:
 public:
     explicit PostDetailScrollArea(QWidget* parent = nullptr);
     void setLabels(QLabel* titleLabel, QLabel* contentLabel);
-    void addCommentWidget(QWidget* commentWidget);
     void relayout();
     QLabel* m_titleLabel = nullptr;
     QLabel* m_contentLabel = nullptr;
-private:
-    QList<QWidget*> m_commentWidgets;
 };
 
 class PostDetailView : public QWidget {
@@ -30,6 +27,7 @@ public:
     void setPostData(const PostDetailData& data);
     void updatePostSummary(const PostSummary& summary);
     void setImageVisible(bool visible);
+    QWidget* panelWidget() const;
     QSize preferredSize(const QSize& availableBounds) const;
     QRect imageRect() const;
     QRect paintedImageRect() const;
@@ -39,7 +37,6 @@ signals:
     void closed();
     void followClicked(bool followed);
     void likeClicked(bool liked);
-    void commentClicked();
 protected:
     void resizeEvent(QResizeEvent* ev) override;
     void paintEvent(QPaintEvent*) override;
@@ -69,13 +66,12 @@ private:
     void applySummaryState(const PostSummary& summary, bool resetDetailContent);
     void syncUiFromState();
     void syncEngagementUi();
-    void addComment(const QString& content);
-    QWidget* createCommentWidget(const QString& userName, const QString& content);
 private:
     State m_state;
     QLabel* m_authorAvatar;
     QLabel* m_authorName;
     QPushButton* m_followBtn;
+    QWidget* m_panelContainer;
     PostDetailScrollArea* m_contentArea;
     QLabel* m_titleLabel;
     QLabel* m_contentLabel;

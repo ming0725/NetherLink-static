@@ -8,8 +8,6 @@
 #include <QVariantAnimation>
 
 #include "shared/types/RepositoryTypes.h"
-
-class QGraphicsOpacityEffect;
 class PostFeedPage;
 class PostApplicationBar;
 class PostDetailView;
@@ -55,6 +53,8 @@ private:
     void updateLayerOrder();
     void removeTransitionImage();
     void stopActiveTransition();
+    void refreshDetailSnapshotFromView(qreal opacity);
+    void clearDetailSnapshot();
     void clearDetailView();
     void startCloseAnimation();
     QWidget* createPlaceholderPage() const;
@@ -71,7 +71,8 @@ private:
     PostFeedPage* m_homeFeedPage = nullptr;
     PostFeedPage* m_followFeedPage = nullptr;
     PostDetailView* m_detailView;
-    QGraphicsOpacityEffect* m_detailOpacityEffect = nullptr;
+    QWidget* m_detailSnapshot = nullptr;
+    QVariantAnimation* m_detailSnapshotFadeAnimation = nullptr;
     QWidget* m_transitionImage = nullptr;
     PostCreatePage* m_createPage = nullptr;
     OpenPostSession m_openPostSession;

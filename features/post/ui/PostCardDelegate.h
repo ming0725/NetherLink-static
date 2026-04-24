@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QHash>
 #include <QStyledItemDelegate>
 
 class PostCardDelegate : public QStyledItemDelegate
@@ -40,8 +41,12 @@ private:
         int totalHeight = 0;
     };
 
+    CardLayout cachedBaseLayout(const QModelIndex& index, int width) const;
     CardLayout calculateLayout(const QModelIndex& index, const QRect& rect) const;
     int imageHeightForWidth(const QModelIndex& index, int width) const;
+    QString layoutCacheKey(const QModelIndex& index, int width) const;
+
+    mutable QHash<QString, CardLayout> m_layoutCache;
 
     static constexpr int kMinWidth = 200;
     static constexpr int kMaxImageHeight = 300;

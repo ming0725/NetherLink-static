@@ -81,9 +81,46 @@ void PostFeedModel::updatePost(const PostSummary& post)
         return;
     }
 
+    const PostSummary previous = m_posts.at(row);
+    QVector<int> changedRoles;
+    changedRoles.reserve(10);
+
+    if (previous.title != post.title) {
+        changedRoles.append(Qt::DisplayRole);
+        changedRoles.append(TitleRole);
+    }
+    if (previous.thumbnailImagePath != post.thumbnailImagePath) {
+        changedRoles.append(ThumbnailImageRole);
+    }
+    if (previous.thumbnailImageSize != post.thumbnailImageSize) {
+        changedRoles.append(ThumbnailSizeRole);
+    }
+    if (previous.authorId != post.authorId) {
+        changedRoles.append(AuthorIdRole);
+    }
+    if (previous.authorName != post.authorName) {
+        changedRoles.append(AuthorNameRole);
+    }
+    if (previous.authorAvatarPath != post.authorAvatarPath) {
+        changedRoles.append(AuthorAvatarRole);
+    }
+    if (previous.likeCount != post.likeCount) {
+        changedRoles.append(LikeCountRole);
+    }
+    if (previous.commentCount != post.commentCount) {
+        changedRoles.append(CommentCountRole);
+    }
+    if (previous.isLiked != post.isLiked) {
+        changedRoles.append(IsLikedRole);
+    }
+
+    if (changedRoles.isEmpty()) {
+        return;
+    }
+
     m_posts[row] = post;
     const QModelIndex modelIndex = index(row, 0);
-    emit dataChanged(modelIndex, modelIndex);
+    emit dataChanged(modelIndex, modelIndex, changedRoles);
 }
 
 QString PostFeedModel::postIdAt(const QModelIndex& index) const
