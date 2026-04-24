@@ -4,6 +4,7 @@
 
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QPalette>
 
 IconLineEdit::IconLineEdit(QWidget *parent)
         : QWidget(parent)
@@ -21,8 +22,12 @@ IconLineEdit::IconLineEdit(QWidget *parent)
     lineEdit->installEventFilter(this);
     lineEdit->setMouseTracking(true);
     lineEdit->setFont(font);
-    lineEdit->setStyleSheet("QLineEdit{background-color:transparent;} "
-                            "QLineEdit:hover{background:transparent;}");
+    lineEdit->setAutoFillBackground(false);
+    lineEdit->setAttribute(Qt::WA_TranslucentBackground);
+    QPalette lineEditPalette = lineEdit->palette();
+    lineEditPalette.setColor(QPalette::Base, Qt::transparent);
+    lineEditPalette.setColor(QPalette::Window, Qt::transparent);
+    lineEdit->setPalette(lineEditPalette);
     lineEdit->setFrame(QFrame::NoFrame);
     lineEdit->setFocusPolicy(Qt::ClickFocus);
     lineEdit->setPlaceholderText("搜索");

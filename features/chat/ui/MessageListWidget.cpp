@@ -1,6 +1,7 @@
 #include "MessageListWidget.h"
 
 #include <QItemSelectionModel>
+#include <QPalette>
 #include <QTimer>
 
 #include "features/friend/data/UserRepository.h"
@@ -20,7 +21,13 @@ MessageListWidget::MessageListWidget(QWidget* parent)
     setUniformItemSizes(true);
     setSpacing(0);
     setEditTriggers(QAbstractItemView::NoEditTriggers);
-    setStyleSheet("border-width:0px;border-style:solid;background:#ffffff;");
+    setAutoFillBackground(true);
+    viewport()->setAutoFillBackground(true);
+    QPalette palette = this->palette();
+    palette.setColor(QPalette::Base, Qt::white);
+    palette.setColor(QPalette::Window, Qt::white);
+    setPalette(palette);
+    viewport()->setPalette(palette);
     setWheelStepPixels(64);
     setScrollBarInsets(8, 4);
 

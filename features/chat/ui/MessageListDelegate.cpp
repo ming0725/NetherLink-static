@@ -6,6 +6,75 @@
 #include "shared/services/ImageService.h"
 #include "features/chat/model/MessageListModel.h"
 
+namespace {
+
+const QFont& timeFont()
+{
+    static const QFont font = []() {
+        QFont value = QApplication::font();
+        value.setPixelSize(11);
+        return value;
+    }();
+    return font;
+}
+
+const QFontMetrics& timeMetrics()
+{
+    static const QFontMetrics metrics(timeFont());
+    return metrics;
+}
+
+const QFont& nameFont()
+{
+    static const QFont font = []() {
+        QFont value = QApplication::font();
+        value.setPixelSize(14);
+        return value;
+    }();
+    return font;
+}
+
+const QFontMetrics& nameMetrics()
+{
+    static const QFontMetrics metrics(nameFont());
+    return metrics;
+}
+
+const QFont& previewFont()
+{
+    static const QFont font = []() {
+        QFont value = QApplication::font();
+        value.setPixelSize(13);
+        return value;
+    }();
+    return font;
+}
+
+const QFontMetrics& previewMetrics()
+{
+    static const QFontMetrics metrics(previewFont());
+    return metrics;
+}
+
+const QFont& badgeFont()
+{
+    static const QFont font = []() {
+        QFont value = QApplication::font();
+        value.setBold(true);
+        value.setPixelSize(11);
+        return value;
+    }();
+    return font;
+}
+
+const QFontMetrics& badgeMetrics()
+{
+    static const QFontMetrics metrics(badgeFont());
+    return metrics;
+}
+
+} // namespace
+
 MessageListDelegate::MessageListDelegate(QObject* parent)
     : QStyledItemDelegate(parent)
 {
@@ -16,8 +85,6 @@ void MessageListDelegate::paint(QPainter* painter,
                                 const QModelIndex& index) const
 {
     painter->save();
-    painter->setRenderHint(QPainter::Antialiasing);
-    painter->setRenderHint(QPainter::SmoothPixmapTransform);
 
     const bool selected = option.state & QStyle::State_Selected;
     const bool hovered = option.state & QStyle::State_MouseOver;
@@ -31,31 +98,21 @@ void MessageListDelegate::paint(QPainter* painter,
                            option.rect.top() + (kItemHeight - kAvatarSize) / 2,
                            kAvatarSize,
                            kAvatarSize);
+    const qreal devicePixelRatio = painter->device()->devicePixelRatioF();
     const QString avatarPath = index.data(MessageListModel::AvatarPathRole).toString();
     const QPixmap avatar = ImageService::instance().circularAvatar(avatarPath,
                                                                    kAvatarSize,
-                                                                   painter->device()->devicePixelRatioF());
+                                                                   devicePixelRatio);
     painter->drawPixmap(avatarRect, avatar);
 
     const int contentLeft = avatarRect.right() + kContentSpacing + 1;
     const int rightEdge = option.rect.right() - kRightPadding;
 
-    QFont timeFont = option.font;
-    timeFont.setPixelSize(11);
-    painter->setFont(timeFont);
     const QDateTime lastTime = index.data(MessageListModel::LastTimeRole).toDateTime();
     const QString timeText = lastTime.isValid() ? lastTime.toString("HH:mm") : QString();
-    const QFontMetrics timeMetrics(timeFont);
-    const int timeWidth = timeText.isEmpty() ? 0 : timeMetrics.horizontalAdvance(timeText);
-    const int timeHeight = timeMetrics.height();
-
-    const QFont nameFont = [&option]() {
-        QFont font = option.font;
-        font.setPixelSize(14);
-        return font;
-    }();
-    const QFontMetrics nameMetrics(nameFont);
-    const int nameHeight = nameMetrics.height();
+    const int timeWidth = timeText.isEmpty() ? 0 : timeMetrics().horizontalAdvance(timeText);
+    const int timeHeight = timeMetrics().height();
+    const int nameHeight = nameMetrics().height();
     const int nameY = itemCenterY - kLineSpacing / 2 - nameHeight;
 
     const QRect timeRect(rightEdge - timeWidth,
@@ -66,13 +123,7 @@ void MessageListDelegate::paint(QPainter* painter,
     const BadgeLayout badgeLayout = badgeLayoutForItem(index, selected);
     const int badgeX = rightEdge - badgeLayout.size.width();
 
-    const QFont previewFont = [&option]() {
-        QFont font = option.font;
-        font.setPixelSize(13);
-        return font;
-    }();
-    const QFontMetrics previewMetrics(previewFont);
-    const int previewHeight = previewMetrics.height();
+    const int previewHeight = previewMetrics().height();
     const int previewY = itemCenterY + kLineSpacing / 2;
 
     const int previewRight = badgeLayout.size.isValid()
@@ -91,27 +142,27 @@ void MessageListDelegate::paint(QPainter* painter,
                          qMax(0, nameRight - contentLeft),
                          nameHeight);
 
-    painter->setFont(nameFont);
+    painter->setFont(nameFont());
     painter->setPen(selected ? Qt::white : Qt::black);
     painter->drawText(nameRect,
                       Qt::AlignLeft | Qt::AlignVCenter,
-                      nameMetrics.elidedText(index.data(MessageListModel::TitleRole).toString(),
-                                             Qt::ElideRight,
-                                             nameRect.width()));
+                      nameMetrics().elidedText(index.data(MessageListModel::TitleRole).toString(),
+                                               Qt::ElideRight,
+                                               nameRect.width()));
 
     if (!timeText.isEmpty()) {
-        painter->setFont(timeFont);
+        painter->setFont(timeFont());
         painter->setPen(selected ? Qt::white : QColor(0x88, 0x88, 0x88));
         painter->drawText(timeRect, Qt::AlignLeft | Qt::AlignVCenter, timeText);
     }
 
-    painter->setFont(previewFont);
+    painter->setFont(previewFont());
     painter->setPen(selected ? Qt::white : QColor(0x88, 0x88, 0x88));
     painter->drawText(previewRect,
                       Qt::AlignLeft | Qt::AlignVCenter,
-                      previewMetrics.elidedText(index.data(MessageListModel::PreviewTextRole).toString(),
-                                                Qt::ElideRight,
-                                                previewRect.width()));
+                      previewMetrics().elidedText(index.data(MessageListModel::PreviewTextRole).toString(),
+                                                  Qt::ElideRight,
+                                                  previewRect.width()));
 
     if (badgeLayout.size.isValid()) {
         const QRect badgeRect(badgeX,
@@ -150,11 +201,7 @@ MessageListDelegate::BadgeLayout MessageListDelegate::badgeLayoutForItem(const Q
     }
 
     layout.text = unreadCount < 100 ? QString::number(unreadCount) : QStringLiteral("99+");
-    QFont badgeFont = QApplication::font();
-    badgeFont.setBold(true);
-    badgeFont.setPixelSize(11);
-    const QFontMetrics metrics(badgeFont);
-    const int textWidth = metrics.horizontalAdvance(layout.text);
+    const int textWidth = badgeMetrics().horizontalAdvance(layout.text);
     const int width = qMax(kBadgeHeight, textWidth + kBadgeHorizontalPadding * 2);
     layout.size = QSize(width, kBadgeHeight);
     layout.backgroundColor = doNotDisturb ? QColor(0xcc, 0xcc, 0xcc) : QColor(0xf7, 0x4c, 0x30);
@@ -193,10 +240,7 @@ void MessageListDelegate::drawBadge(QPainter* painter,
         painter->drawRoundedRect(rect, rect.height() / 2.0, rect.height() / 2.0);
     }
 
-    QFont badgeFont = QApplication::font();
-    badgeFont.setBold(true);
-    badgeFont.setPixelSize(11);
-    painter->setFont(badgeFont);
+    painter->setFont(badgeFont());
     painter->setPen(badgeLayout.textColor);
     painter->drawText(rect, Qt::AlignCenter, badgeLayout.text);
 }

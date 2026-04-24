@@ -2,6 +2,7 @@
 
 #include <QItemSelectionModel>
 #include <QMouseEvent>
+#include <QPalette>
 
 #include "features/friend/ui/FriendListDelegate.h"
 #include "features/friend/model/FriendListModel.h"
@@ -19,7 +20,13 @@ FriendListWidget::FriendListWidget(QWidget* parent)
     setUniformItemSizes(true);
     setSpacing(0);
     setEditTriggers(QAbstractItemView::NoEditTriggers);
-    setStyleSheet("border-width:0px;border-style:solid;background:#ffffff;");
+    setAutoFillBackground(true);
+    viewport()->setAutoFillBackground(true);
+    QPalette palette = this->palette();
+    palette.setColor(QPalette::Base, Qt::white);
+    palette.setColor(QPalette::Window, Qt::white);
+    setPalette(palette);
+    viewport()->setPalette(palette);
     setWheelStepPixels(64);
     setScrollBarInsets(8, 4);
 

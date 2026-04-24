@@ -21,7 +21,6 @@ FriendApplication::LeftPane::LeftPane(QWidget* parent)
     QFont addFont = m_addButton->font();
     addFont.setPixelSize(18);
     m_addButton->setFont(addFont);
-    m_content->setStyleSheet("border-width:0px;border-style:solid;");
 }
 
 void FriendApplication::LeftPane::resizeEvent(QResizeEvent* ev)

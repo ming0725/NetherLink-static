@@ -14,6 +14,8 @@
 #include <QTimer>
 #include <QResizeEvent>
 #include <QDateTime>
+#include <QFont>
+#include <QPalette>
 
 namespace {
 
@@ -92,9 +94,17 @@ ChatArea::ChatArea(QWidget *parent)
     inputBar->show();
 
     QWidget* chatInfo = new QWidget(this);
+    chatInfo->setAutoFillBackground(true);
     chatInfo->setFixedHeight(24 + 26 + 12);
-    chatInfo->setObjectName("ChatInfo");
-    chatInfo->setStyleSheet("#ChatInfo { background-color: #F2F2F2; border-bottom: 1px solid #E9E9E9; }");
+    QPalette chatInfoPalette = chatInfo->palette();
+    chatInfoPalette.setColor(QPalette::Window, QColor(0xF2, 0xF2, 0xF2));
+    chatInfo->setPalette(chatInfoPalette);
+    QWidget* chatInfoDivider = new QWidget(this);
+    chatInfoDivider->setFixedHeight(1);
+    chatInfoDivider->setAutoFillBackground(true);
+    QPalette dividerPalette = chatInfoDivider->palette();
+    dividerPalette.setColor(QPalette::Window, QColor(0xE9, 0xE9, 0xE9));
+    chatInfoDivider->setPalette(dividerPalette);
 
     // 外层垂直布局：用于将内容推到底部
     QVBoxLayout* outerLayout = new QVBoxLayout(chatInfo);
@@ -111,7 +121,12 @@ ChatArea::ChatArea(QWidget *parent)
 
     // 名字 Label
     nameLabel = new QLabel("", chatInfo);
-    nameLabel->setStyleSheet("font-size: 17px; color: #000000;");
+    QFont nameFont = nameLabel->font();
+    nameFont.setPixelSize(17);
+    nameLabel->setFont(nameFont);
+    QPalette namePalette = nameLabel->palette();
+    namePalette.setColor(QPalette::WindowText, Qt::black);
+    nameLabel->setPalette(namePalette);
 
     // 添加到底部布局
     bottomLayout->addWidget(nameLabel);
@@ -125,6 +140,7 @@ ChatArea::ChatArea(QWidget *parent)
     
     // 添加到主布局
     mainLayout->addWidget(chatInfo);
+    mainLayout->addWidget(chatInfoDivider);
     mainLayout->addWidget(chatView);
     setLayout(mainLayout);
 
@@ -142,12 +158,13 @@ ChatArea::ChatArea(QWidget *parent)
     connect(inputBar, &FloatingInputBar::inputFocused,
             this, &ChatArea::clearMessageSelection);
 
-    // 设置样式
-    chatView->setStyleSheet(
-        "QListView {"
-        "    background-color: #F2F2F2;"
-        "}"
-    );
+    chatView->setAutoFillBackground(true);
+    chatView->viewport()->setAutoFillBackground(true);
+    QPalette chatViewPalette = chatView->palette();
+    chatViewPalette.setColor(QPalette::Base, QColor(0xF2, 0xF2, 0xF2));
+    chatViewPalette.setColor(QPalette::Window, QColor(0xF2, 0xF2, 0xF2));
+    chatView->setPalette(chatViewPalette);
+    chatView->viewport()->setPalette(chatViewPalette);
 }
 
 

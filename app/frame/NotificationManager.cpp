@@ -35,7 +35,9 @@ void NotificationManager::setupUI()
     layout->addWidget(iconLabel);
 
     messageLabel = new QLabel(this);
-    messageLabel->setStyleSheet("QLabel { color: white; }");
+    QPalette messagePalette = messageLabel->palette();
+    messagePalette.setColor(QPalette::WindowText, Qt::white);
+    messageLabel->setPalette(messagePalette);
     layout->addWidget(messageLabel);
 
     animation = new QPropertyAnimation(this, "pos", this);

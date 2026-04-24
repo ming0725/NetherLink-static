@@ -1,10 +1,10 @@
 #pragma once
 #include "AiChatListWidget.h"
 #include "app/frame/DefaultPage.h"
+#include "shared/ui/StatefulPushButton.h"
 #include <QSplitter>
 #include <QWidget>
 #include <QLabel>
-#include <QPushButton>
 
 class AiChatApplication : public QWidget {
     Q_OBJECT
@@ -19,23 +19,22 @@ private:
         explicit LeftPane(QWidget* parent = nullptr)
                 : QWidget(parent)
                 , m_iconLabel(new QLabel(this))
-                , m_button(new QPushButton(this))
+                , m_button(new StatefulPushButton("+", this))
                 , m_aiChatList(new AiChatListWidget(this))
         {
             setMinimumWidth(200);
             setMaximumWidth(400);
-            m_aiChatList->setStyleSheet("border-width:0px;border-style:solid;");
             // 设置图标
             QPixmap pixmap(":/resources/icon/aichat.png");
             m_iconLabel->setPixmap(pixmap);
             m_iconLabel->setScaledContents(true); // 自动缩放
-            m_iconLabel->setStyleSheet("background: transparent;");
             // 设置按钮
-            m_button->setText("＋");
             m_button->setFixedSize(buttonSize * 1.6, buttonSize);
-            m_button->setStyleSheet("border-radius:10px; background-color:#0078D7; color:white;");
-            // 设置列表样式
-            m_aiChatList->setStyleSheet("border-width:0px; border-style:solid;");
+            m_button->setRadius(10);
+            m_button->setNormalColor(QColor(0x00, 0x78, 0xD7));
+            m_button->setHoverColor(QColor(0x10, 0x86, 0xE0));
+            m_button->setPressColor(QColor(0x00, 0x6B, 0xC2));
+            m_button->setTextColor(Qt::white);
         }
     protected:
         void resizeEvent(QResizeEvent* ev) override {
@@ -57,7 +56,7 @@ private:
     private:
         AiChatListWidget* m_aiChatList;
         QLabel* m_iconLabel;
-        QPushButton* m_button;
+        StatefulPushButton* m_button;
         const int topMargin = 20;
         const int leftMargin = 10;
         const int iconSize = 50;
@@ -69,5 +68,4 @@ private:
     DefaultPage*  m_defaultPage;
     QSplitter*    m_splitter;
 };
-
 

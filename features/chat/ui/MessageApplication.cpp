@@ -25,8 +25,6 @@ MessageApplication::LeftPane::LeftPane(QWidget* parent)
     QFont addFont = m_addButton->font();
     addFont.setPixelSize(18);
     m_addButton->setFont(addFont);
-
-    m_msgList->setStyleSheet("border-width:0px;border-style:solid;");
 }
 
 void MessageApplication::LeftPane::resizeEvent(QResizeEvent* event)

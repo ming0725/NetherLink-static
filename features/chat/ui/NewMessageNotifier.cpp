@@ -3,6 +3,7 @@
 #include <QPainterPath>
 #include <QHBoxLayout>
 #include <QResizeEvent>
+#include <QPalette>
 
 NewMessageNotifier::NewMessageNotifier(QWidget *parent) : QWidget(parent)
 {
@@ -13,7 +14,12 @@ NewMessageNotifier::NewMessageNotifier(QWidget *parent) : QWidget(parent)
     layout->setContentsMargins(10, 0, 10, 0);
     
     label = new QLabel(this);
-    label->setStyleSheet("QLabel { color: #FFFFFF; font-size: 13px; }");
+    QFont labelFont = label->font();
+    labelFont.setPixelSize(13);
+    label->setFont(labelFont);
+    QPalette labelPalette = label->palette();
+    labelPalette.setColor(QPalette::WindowText, Qt::white);
+    label->setPalette(labelPalette);
     layout->addWidget(label);
     
     // 初始状态为隐藏

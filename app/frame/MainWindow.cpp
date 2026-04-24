@@ -224,8 +224,10 @@ void MainWindow::onBarItemClicked(ApplicationBarItem *item)
 QWidget* MainWindow::createPlaceholderPage() const
 {
     auto* page = new QWidget(stack);
-    page->setAttribute(Qt::WA_StyledBackground, true);
-    page->setStyleSheet("background:#ffffff;border:none;");
+    page->setAutoFillBackground(true);
+    QPalette pagePalette = page->palette();
+    pagePalette.setColor(QPalette::Window, Qt::white);
+    page->setPalette(pagePalette);
     return page;
 }
 

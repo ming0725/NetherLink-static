@@ -8,6 +8,7 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPalette>
 #include <QScrollBar>
 #include <QStyleOptionViewItem>
 #include <QVariantAnimation>
@@ -29,7 +30,13 @@ AiChatListWidget::AiChatListWidget(QWidget* parent)
     setUniformItemSizes(false);
     setSpacing(0);
     setEditTriggers(QAbstractItemView::NoEditTriggers);
-    setStyleSheet("border-width:0px;border-style:solid;background:#ffffff;");
+    setAutoFillBackground(true);
+    viewport()->setAutoFillBackground(true);
+    QPalette palette = this->palette();
+    palette.setColor(QPalette::Base, Qt::white);
+    palette.setColor(QPalette::Window, Qt::white);
+    setPalette(palette);
+    viewport()->setPalette(palette);
     setWheelStepPixels(64);
     setScrollBarInsets(8, 4);
 

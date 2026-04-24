@@ -1,6 +1,7 @@
 #include "CustomTooltip.h"
 #include <QPainter>
 #include <QPainterPath>
+#include <QPalette>
 #include <QVBoxLayout>
 
 CustomTooltip::CustomTooltip(QWidget *parent)
@@ -13,7 +14,12 @@ CustomTooltip::CustomTooltip(QWidget *parent)
     layout->setContentsMargins(PADDING, PADDING, PADDING, PADDING);
 
     m_label = new QLabel(this);
-    m_label->setStyleSheet("QLabel { color: #333333; font-size: 12px; }");
+    QFont labelFont = m_label->font();
+    labelFont.setPixelSize(12);
+    m_label->setFont(labelFont);
+    QPalette labelPalette = m_label->palette();
+    labelPalette.setColor(QPalette::WindowText, QColor(0x33, 0x33, 0x33));
+    m_label->setPalette(labelPalette);
     layout->addWidget(m_label);
 }
 
