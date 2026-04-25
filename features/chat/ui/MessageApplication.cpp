@@ -1,6 +1,7 @@
 // MessageApplication.cpp
 #include "MessageApplication.h"
 #include "features/chat/data/MessageRepository.h"
+#include "shared/ui/TransparentSplitter.h"
 
 #include <QPainter>
 #include <QResizeEvent>
@@ -64,11 +65,10 @@ MessageApplication::MessageApplication(QWidget* parent)
     m_rightStack->setCurrentWidget(m_defaultPage);
 
     // 整体分割
-    m_splitter = new QSplitter(Qt::Horizontal, this);
+    m_splitter = new TransparentSplitter(Qt::Horizontal, this);
     m_splitter->addWidget(m_leftPane);
     m_splitter->addWidget(m_rightStack);
     m_splitter->setHandleWidth(0);
-    m_splitter->setStyleSheet("QSplitter::handle { background: transparent; border: none; }");
     m_splitter->setChildrenCollapsible(false);
     m_splitter->setStretchFactor(0, 0);
     m_splitter->setStretchFactor(1, 1);

@@ -8,6 +8,21 @@
 
 namespace {
 
+int statusSortRank(UserStatus status)
+{
+    switch (status) {
+    case Online:
+        return 0;
+    case Mining:
+        return 1;
+    case Flying:
+        return 2;
+    case Offline:
+    default:
+        return 3;
+    }
+}
+
 class FriendListRequestOperation final
     : public RepositoryTemplate<FriendListRequest, QVector<FriendSummary>> {
 public:
@@ -25,19 +40,23 @@ private:
         for (const User& user : m_users) {
             if (!query.keyword.isEmpty() &&
                 !user.nick.contains(query.keyword, Qt::CaseInsensitive) &&
+                !user.remark.contains(query.keyword, Qt::CaseInsensitive) &&
                 !user.signature.contains(query.keyword, Qt::CaseInsensitive)) {
                 continue;
             }
 
+            const QString displayName = user.remark.isEmpty() ? user.nick : user.remark;
             result.push_back(FriendSummary{
                     user.id,
-                    user.nick,
+                    displayName,
                     user.avatarPath,
                     user.status,
                     user.signature,
                     user.isDnd,
                     user.friendGroupId,
-                    user.friendGroupName
+                    user.friendGroupName,
+                    user.nick,
+                    user.remark
             });
         }
         return result;
@@ -52,11 +71,10 @@ private:
                 return groupCollator.compare(lhs.groupName, rhs.groupName) < 0;
             }
 
-            if (lhs.status != Offline && rhs.status == Offline) {
-                return true;
-            }
-            if (lhs.status == Offline && rhs.status != Offline) {
-                return false;
+            const int lhsStatusRank = statusSortRank(lhs.status);
+            const int rhsStatusRank = statusSortRank(rhs.status);
+            if (lhsStatusRank != rhsStatusRank) {
+                return lhsStatusRank < rhsStatusRank;
             }
 
             static QCollator localCollator(QLocale::Chinese);
@@ -91,11 +109,11 @@ UserRepository::UserRepository(QObject* parent)
     : QObject(parent)
 {
     const QVector<User> users = {
-            {"u001", "momo", "", ":/resources/avatar/1.jpg", Online, "我是好momo", false, "g001", "常用联系人"},
-            {"u002", "blazer", "", ":/resources/avatar/0.jpg", Mining, "不掉烈焰棒", false, "g001", "常用联系人"},
-            {"u003", "不吃香菜（考研版）", "", ":/resources/avatar/3.jpg", Online, "绝不吃一口香菜！", false, "g001", "常用联系人"},
-            {"u004", "不抽香烟（一路菜花版）", "", ":/resources/avatar/5.jpg", Online, "芝士雪豹", false, "g002", "同学"},
-            {"u005", "不会演戏（许仙版）", "", ":/resources/avatar/4.jpg", Offline, "不碍事的白姑娘", false, "g002", "同学"},
+            {"u001", "momo", "", ":/resources/avatar/1.jpg", Online, "我是好momo", false, "g001", "常用联系人", "上海"},
+            {"u002", "blazer", "", ":/resources/avatar/0.jpg", Mining, "不掉烈焰棒", false, "g001", "常用联系人", "下界要塞"},
+            {"u003", "不吃香菜（考研版）", "", ":/resources/avatar/3.jpg", Online, "绝不吃一口香菜！", false, "g001", "常用联系人", "北京"},
+            {"u004", "不抽香烟（一路菜花版）", "", ":/resources/avatar/5.jpg", Online, "芝士雪豹", false, "g002", "同学", "杭州"},
+            {"u005", "不会演戏（许仙版）", "", ":/resources/avatar/4.jpg", Offline, "不碍事的白姑娘", false, "g002", "同学", "苏州"},
             {"u006", "TralaleroTralala", "", ":/resources/avatar/2.jpg", Online, "不穿Nike（蓝勾版）", false, "g002", "同学"},
             {"u007", "圆头耄耋", "", ":/resources/avatar/6.jpg", Offline, "这只猫很懒，什么都没留下来", false, "g003", "服务器伙伴"},
             {"u008", "歪比巴卜", "", ":/resources/avatar/7.jpg", Mining, "歪比歪比", false, "g003", "服务器伙伴"},
@@ -184,6 +202,16 @@ QString UserRepository::requestUserAvatarPath(const QString& userId) const
     return requestUserDetail({userId}).avatarPath;
 }
 
+QMap<QString, QString> UserRepository::requestFriendGroups() const
+{
+    QMutexLocker locker(&mutex);
+    QMap<QString, QString> groups;
+    for (const User& user : userMap) {
+        groups.insert(user.friendGroupId, user.friendGroupName);
+    }
+    return groups;
+}
+
 void UserRepository::saveUser(const User& user)
 {
     bool changed = false;
@@ -197,7 +225,8 @@ void UserRepository::saveUser(const User& user)
             || userMap.value(user.id).signature != user.signature
             || userMap.value(user.id).isDnd != user.isDnd
             || userMap.value(user.id).friendGroupId != user.friendGroupId
-            || userMap.value(user.id).friendGroupName != user.friendGroupName;
+            || userMap.value(user.id).friendGroupName != user.friendGroupName
+            || userMap.value(user.id).region != user.region;
     userMap[user.id] = user;
     locker.unlock();
 

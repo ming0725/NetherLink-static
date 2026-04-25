@@ -3,10 +3,14 @@
 #include <QFont>
 #include <QWidget>
 #include <QSplitter>
+#include <QStackedWidget>
 #include "shared/ui/IconLineEdit.h"
 #include "shared/ui/StatefulPushButton.h"
 #include "features/friend/ui/FriendListWidget.h"
+#include "features/friend/ui/FriendDetailPage.h"
 #include "app/frame/DefaultPage.h"
+
+class QPushButton;
 
 class FriendApplication : public QWidget {
     Q_OBJECT
@@ -26,12 +30,20 @@ private:
         void resizeEvent(QResizeEvent* ev) override;
 
     private:
+        void updateContentMode(bool animate = true);
+
         IconLineEdit* m_searchInput;
         StatefulPushButton* m_addButton;
+        QWidget* m_modeBar;
+        QPushButton* m_friendModeButton;
+        QPushButton* m_groupModeButton;
         FriendListWidget* m_content;
+        QWidget* m_groupPlaceholder;
     };
 
     LeftPane*    m_leftPane;     // 左侧面板
     DefaultPage* m_defaultPage;  // 右侧默认页
+    FriendDetailPage* m_detailPage;
+    QStackedWidget* m_rightStack;
     QSplitter*   m_splitter;     // 中间分隔器
 };

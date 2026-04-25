@@ -50,9 +50,7 @@ bool shouldClearLineEditFocus(QWidget* watched, const QPoint& globalPos)
     }
 
     auto* focusedInput = iconLineEditForWidget(focusedLineEdit);
-    auto* clickedInput = iconLineEditForWidget(watched);
-
-    if (focusedInput && clickedInput == focusedInput) {
+    if (focusedInput) {
         const QPoint localPos = focusedInput->mapFromGlobal(globalPos);
         return !focusedInput->rect().contains(localPos);
     }

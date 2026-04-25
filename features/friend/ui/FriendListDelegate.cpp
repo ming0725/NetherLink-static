@@ -7,7 +7,11 @@
 #include "features/friend/model/FriendListModel.h"
 #include "shared/types/User.h"
 
+extern const int kContactGroupArrowYOffset = 1;
+
 namespace {
+
+const int kNoticeArrowYOffset = 2;
 
 const QFont& nameFont()
 {
@@ -23,6 +27,52 @@ const QFontMetrics& nameMetrics()
 {
     static const QFontMetrics metrics(nameFont());
     return metrics;
+}
+
+void drawFriendDisplayName(QPainter* painter,
+                           const QRect& rect,
+                           const QModelIndex& index,
+                           bool selected)
+{
+    const QString remark = index.data(FriendListModel::RemarkRole).toString();
+    const QString nickName = index.data(FriendListModel::NickNameRole).toString();
+    const QString displayName = index.data(FriendListModel::DisplayNameRole).toString();
+    const QColor primaryColor = selected ? Qt::white : Qt::black;
+    const QColor secondaryColor = selected ? QColor(0xff, 0xff, 0xff, 165)
+                                           : QColor(0x00, 0x00, 0x00, 120);
+
+    painter->setFont(nameFont());
+    if (remark.isEmpty() || nickName.isEmpty()) {
+        painter->setPen(primaryColor);
+        painter->drawText(rect,
+                          Qt::AlignLeft | Qt::AlignVCenter,
+                          nameMetrics().elidedText(displayName, Qt::ElideRight, rect.width()));
+        return;
+    }
+
+    const QString suffix = QStringLiteral("（%1）").arg(nickName);
+    const int suffixWidth = nameMetrics().horizontalAdvance(suffix);
+    const int gap = 2;
+    const int remarkWidth = qMax(0, rect.width() - suffixWidth - gap);
+    const QString elidedRemark = nameMetrics().elidedText(remark, Qt::ElideRight, remarkWidth);
+    const int usedRemarkWidth = nameMetrics().horizontalAdvance(elidedRemark);
+
+    painter->setPen(primaryColor);
+    painter->drawText(QRect(rect.left(), rect.top(), remarkWidth, rect.height()),
+                      Qt::AlignLeft | Qt::AlignVCenter,
+                      elidedRemark);
+
+    if (rect.width() > usedRemarkWidth + gap) {
+        painter->setPen(secondaryColor);
+        painter->drawText(QRect(rect.left() + usedRemarkWidth + gap,
+                                rect.top(),
+                                qMax(0, rect.width() - usedRemarkWidth - gap),
+                                rect.height()),
+                          Qt::AlignLeft | Qt::AlignVCenter,
+                          nameMetrics().elidedText(suffix,
+                                                   Qt::ElideRight,
+                                                   qMax(0, rect.width() - usedRemarkWidth - gap)));
+    }
 }
 
 const QFont& subtitleFont()
@@ -89,7 +139,36 @@ void FriendListDelegate::paint(QPainter* painter,
     painter->save();
     painter->setClipRect(option.rect);
 
-        const bool isGroup = index.data(FriendListModel::IsGroupRole).toBool();
+    const bool isNotice = index.data(FriendListModel::IsNoticeRole).toBool();
+    if (isNotice) {
+        const bool hovered = option.state & QStyle::State_MouseOver;
+        if (hovered) {
+            const QRect hoverRect = option.rect.adjusted(6, 3, -6, -3);
+            painter->setRenderHint(QPainter::Antialiasing, true);
+            painter->setBrush(QColor(0xe9, 0xe9, 0xe9));
+            painter->setPen(Qt::NoPen);
+            painter->drawRoundedRect(hoverRect, 6, 6);
+        }
+
+        painter->setFont(groupFont());
+        painter->setPen(QColor(0x11, 0x11, 0x11));
+        painter->drawText(option.rect.adjusted(20, 0, -28, 0),
+                          Qt::AlignLeft | Qt::AlignVCenter,
+                          groupMetrics().elidedText(index.data(FriendListModel::DisplayNameRole).toString(),
+                                                     Qt::ElideRight,
+                                                     option.rect.width() - 48));
+
+        const int centerX = option.rect.right() - kGroupCountRightPadding;
+        const int centerY = option.rect.center().y() + kNoticeArrowYOffset;
+        QPen arrowPen(QColor(0x66, 0x66, 0x66), 1.3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+        painter->setPen(arrowPen);
+        painter->drawLine(QPointF(centerX - 2.0, centerY - 4.0), QPointF(centerX + 2.0, centerY));
+        painter->drawLine(QPointF(centerX + 2.0, centerY), QPointF(centerX - 2.0, centerY + 4.0));
+        painter->restore();
+        return;
+    }
+
+    const bool isGroup = index.data(FriendListModel::IsGroupRole).toBool();
     if (isGroup) {
         const bool hovered = option.state & QStyle::State_MouseOver;
         if (hovered) {
@@ -102,7 +181,8 @@ void FriendListDelegate::paint(QPainter* painter,
 
         const qreal progress = index.data(FriendListModel::GroupProgressRole).toReal();
         const QRect arrowRect(option.rect.left() + kLeftPadding,
-                              option.rect.top() + (option.rect.height() - kGroupArrowSize) / 2,
+                              option.rect.top() + (option.rect.height() - kGroupArrowSize) / 2
+                                      + kContactGroupArrowYOffset,
                               kGroupArrowSize,
                               kGroupArrowSize);
 
@@ -164,10 +244,16 @@ void FriendListDelegate::paint(QPainter* painter,
                            kAvatarSize);
     const qreal devicePixelRatio = painter->device()->devicePixelRatioF();
     const QString avatarPath = index.data(FriendListModel::AvatarPathRole).toString();
-    const QPixmap avatar = ImageService::instance().circularAvatar(avatarPath,
-                                                                   kAvatarSize,
-                                                                   devicePixelRatio);
+    QPixmap avatar = ImageService::instance().circularAvatar(avatarPath,
+                                                             kAvatarSize,
+                                                             devicePixelRatio);
+    const UserStatus status = static_cast<UserStatus>(index.data(FriendListModel::StatusRole).toInt());
+    painter->save();
+    if (status == Offline) {
+        painter->setOpacity(painter->opacity() * 0.42);
+    }
     painter->drawPixmap(avatarRect, avatar);
+    painter->restore();
 
     const int contentLeft = avatarRect.right() + kContentSpacing + 1;
     const int rightEdge = option.rect.right() - kRightPadding;
@@ -180,15 +266,8 @@ void FriendListDelegate::paint(QPainter* painter,
                          qMax(0, rightEdge - contentLeft),
                          nameHeight);
 
-    painter->setFont(nameFont());
-    painter->setPen(selected ? Qt::white : Qt::black);
-    painter->drawText(nameRect,
-                      Qt::AlignLeft | Qt::AlignVCenter,
-                      nameMetrics().elidedText(index.data(FriendListModel::DisplayNameRole).toString(),
-                                               Qt::ElideRight,
-                                               nameRect.width()));
+    drawFriendDisplayName(painter, nameRect, index, selected);
 
-    const UserStatus status = static_cast<UserStatus>(index.data(FriendListModel::StatusRole).toInt());
     const QString subtitle = QString("[%1] %2").arg(statusText(status),
                                                     index.data(FriendListModel::SignatureRole).toString());
 
@@ -231,6 +310,7 @@ QSize FriendListDelegate::sizeHint(const QStyleOptionViewItem& option,
         return modelHint;
     }
     return index.data(FriendListModel::IsGroupRole).toBool()
+            || index.data(FriendListModel::IsNoticeRole).toBool()
             ? QSize(0, kGroupHeaderHeight)
             : QSize(0, kItemHeight);
 }

@@ -1,16 +1,14 @@
 #pragma once
 
-#include <QLabel>
 #include <QLineEdit>
 #include <QPainter>
-#include <QWidget>
 
-class IconLineEdit : public QWidget
+class IconLineEdit : public QLineEdit
 {
     Q_OBJECT
 public:
     IconLineEdit(QWidget* parent = nullptr);
-    ~IconLineEdit();
+    ~IconLineEdit() override;
 
     QString currentText() const;
     void keyPressEvent(QKeyEvent* event) Q_DECL_OVERRIDE;
@@ -20,23 +18,25 @@ public:
 
 protected:
     void paintEvent(QPaintEvent*) Q_DECL_OVERRIDE;
-    bool eventFilter(QObject *watched, QEvent *event) Q_DECL_OVERRIDE;
     void resizeEvent(QResizeEvent*) Q_DECL_OVERRIDE;
     void mouseMoveEvent(QMouseEvent* event) Q_DECL_OVERRIDE;
     void leaveEvent(QEvent* event) Q_DECL_OVERRIDE;
     void mousePressEvent(QMouseEvent* event) Q_DECL_OVERRIDE;
     void mouseReleaseEvent(QMouseEvent* event) Q_DECL_OVERRIDE;
+    void focusInEvent(QFocusEvent* event) Q_DECL_OVERRIDE;
+    void focusOutEvent(QFocusEvent* event) Q_DECL_OVERRIDE;
 
 private:
-    QLineEdit* lineEdit = Q_NULLPTR;
-    QLabel* iconLabel = Q_NULLPTR;
     QString iconSource = QStringLiteral(":/resources/icon/search.png");
+    QSize iconSize = QSize(15, 15);
     bool hasFocus = false;
+    QRect iconRect;
     QRect clearButtonRect;
     bool clearHovered = false;
     bool clearPressed = false;
 
-    void refreshIcons();
+    void updateTextMargins();
+    void updateControlRects();
     bool showsClearButton() const;
     void updateClearHoverState(const QPoint& pos);
     void focusInnerLineEdit();

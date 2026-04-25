@@ -18,6 +18,9 @@ public:
         StatusRole,
         SignatureRole,
         DoNotDisturbRole,
+        NickNameRole,
+        RemarkRole,
+        IsNoticeRole,
         IsGroupRole,
         GroupIdRole,
         GroupNameRole,
@@ -43,6 +46,7 @@ public:
     int nextGroupRow(int row) const;
     bool isGroupRow(const QModelIndex& index) const;
     bool isFriendRow(const QModelIndex& index) const;
+    bool isNoticeRow(const QModelIndex& index) const;
     bool isGroupExpanded(const QString& groupId) const;
     qreal groupProgress(const QString& groupId) const;
     void setGroupExpanded(const QString& groupId, bool expanded);
@@ -58,6 +62,13 @@ private:
     };
 
     struct RowEntry {
+        enum Type {
+            Notice,
+            Group,
+            Friend
+        };
+
+        Type type = Group;
         bool isGroup = false;
         int groupIndex = -1;
         int friendIndex = -1;

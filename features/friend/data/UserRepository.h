@@ -14,6 +14,7 @@ public:
 
     QVector<FriendSummary> requestFriendList(const FriendListRequest& query = {}) const;
     User requestUserDetail(const UserDetailRequest& query) const;
+    QMap<QString, QString> requestFriendGroups() const;
     QString requestUserName(const QString& userId) const;
     QString requestUserAvatarPath(const QString& userId) const;
 

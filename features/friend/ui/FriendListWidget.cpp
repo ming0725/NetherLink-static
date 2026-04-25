@@ -13,6 +13,8 @@
 #include "features/friend/model/FriendListModel.h"
 #include "features/friend/data/UserRepository.h"
 
+extern const int kContactGroupArrowYOffset;
+
 namespace {
 
 constexpr int kStickyHeaderHeight = 36;
@@ -159,6 +161,11 @@ void FriendListWidget::mousePressEvent(QMouseEvent* event)
         return;
     }
 
+    if (m_model->isNoticeRow(index)) {
+        event->accept();
+        return;
+    }
+
     if (currentIndex() == index) {
         clearCurrentSelection();
         return;
@@ -180,6 +187,7 @@ void FriendListWidget::onCurrentChanged(const QModelIndex& current, const QModel
 {
     Q_UNUSED(previous);
     m_state.selectedFriendId = m_model->isFriendRow(current) ? m_model->friendIdAt(current) : QString();
+    emit selectedFriendChanged(m_state.selectedFriendId);
 }
 
 void FriendListWidget::reloadFriends()
@@ -450,7 +458,8 @@ void FriendListWidget::drawStickyGroup(QPainter* painter,
     }
 
     const QRect arrowRect(rect.left() + kGroupLeftPadding,
-                          rect.top() + (rect.height() - kGroupArrowSize) / 2,
+                          rect.top() + (rect.height() - kGroupArrowSize) / 2
+                                  + kContactGroupArrowYOffset,
                           kGroupArrowSize,
                           kGroupArrowSize);
 

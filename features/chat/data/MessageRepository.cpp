@@ -2,11 +2,16 @@
 
 #include <QRandomGenerator>
 
+#include <algorithm>
+#include <random>
+
 #include "features/chat/data/GroupRepository.h"
 #include "shared/data/RepositoryTemplate.h"
 #include "features/friend/data/UserRepository.h"
 
 namespace {
+
+constexpr int kFriendConversationSampleCount = 28;
 
 QString buildPreviewText(const QSharedPointer<ChatMessage>& message,
                          bool isGroup)
@@ -22,6 +27,15 @@ QString buildPreviewText(const QSharedPointer<ChatMessage>& message,
         return QString("%1：%2").arg(senderName, message->getContent());
     }
     return message->getContent();
+}
+
+QVector<FriendSummary> sampledFriendsForMessages()
+{
+    QVector<FriendSummary> friends = UserRepository::instance().requestFriendList();
+    std::mt19937 generator(20240521);
+    std::shuffle(friends.begin(), friends.end(), generator);
+    friends.resize(qMin(kFriendConversationSampleCount, friends.size()));
+    return friends;
 }
 
 class ConversationMessagesRequestOperation final
@@ -104,6 +118,10 @@ private:
 
         const QVector<FriendSummary> friends = UserRepository::instance().requestFriendList();
         for (const FriendSummary& friendSummary : friends) {
+            if (!m_store.contains(friendSummary.userId)) {
+                continue;
+            }
+
             const ChatMessageList messages = m_store.value(friendSummary.userId);
             const QSharedPointer<ChatMessage> lastMessage = messages.isEmpty() ? QSharedPointer<ChatMessage>() : messages.last();
             result.push_back(ConversationSummary{
@@ -156,7 +174,7 @@ MessageRepository::MessageRepository(QObject* parent)
         addMessage(group.groupId, msg);
     }
 
-    const QVector<FriendSummary> friends = UserRepository::instance().requestFriendList();
+    const QVector<FriendSummary> friends = sampledFriendsForMessages();
     for (const FriendSummary& friendSummary : friends) {
         auto msg1 = QSharedPointer<ChatMessage>(new TextMessage(
                 QString("你好，我是%1!").arg(friendSummary.displayName),

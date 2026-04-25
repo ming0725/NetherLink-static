@@ -26,6 +26,9 @@ public:
     QString selectedFriendId() const;
     FriendSummary selectedFriend() const;
 
+signals:
+    void selectedFriendChanged(const QString& userId);
+
 protected:
     void leaveEvent(QEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;

@@ -61,6 +61,8 @@ struct FriendSummary {
     bool isDoNotDisturb = false;
     QString groupId = "default";
     QString groupName = "默认分组";
+    QString nickName;
+    QString remark;
 };
 
 struct ConversationSummary {

@@ -2,37 +2,67 @@
 
 #include "shared/services/ImageService.h"
 
+#include <QFocusEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPalette>
+#include <QProxyStyle>
+
+namespace {
+
+constexpr int kRadius = 8;
+constexpr int kMarginLeft = 5;
+constexpr int kMarginRight = 5;
+constexpr int kIconTextSpacing = 5;
+constexpr int kClearButtonSize = 20;
+constexpr int kClearButtonSpacing = 4;
+
+class TextOnlyLineEditStyle final : public QProxyStyle
+{
+public:
+    void drawPrimitive(PrimitiveElement element,
+                       const QStyleOption* option,
+                       QPainter* painter,
+                       const QWidget* widget = nullptr) const override
+    {
+        if (element == PE_PanelLineEdit || element == PE_FrameLineEdit) {
+            return;
+        }
+
+        QProxyStyle::drawPrimitive(element, option, painter, widget);
+    }
+};
+
+} // namespace
 
 IconLineEdit::IconLineEdit(QWidget *parent)
-        : QWidget(parent)
+        : QLineEdit(parent)
 {
     setMouseTracking(true);
+    setFrame(false);
+    setFocusPolicy(Qt::ClickFocus);
+    setPlaceholderText(QStringLiteral("搜索"));
+    setAutoFillBackground(false);
+    setAttribute(Qt::WA_TranslucentBackground);
+    setAttribute(Qt::WA_OpaquePaintEvent, false);
+#ifdef Q_OS_MACOS
+    setAttribute(Qt::WA_MacShowFocusRect, false);
+#endif
 
-    iconLabel = new QLabel(this);
-    iconLabel->setFixedSize(15, 15);
-    iconLabel->setScaledContents(true);
-    iconLabel->setAttribute(Qt::WA_TranslucentBackground);
+    QFont inputFont;
+    inputFont.setPixelSize(12);
+    setFont(inputFont);
 
-    QFont font;
-    font.setPixelSize(12);
-    lineEdit = new QLineEdit(this);
-    lineEdit->installEventFilter(this);
-    lineEdit->setMouseTracking(true);
-    lineEdit->setFont(font);
-    lineEdit->setAutoFillBackground(false);
-    lineEdit->setAttribute(Qt::WA_TranslucentBackground);
-    QPalette lineEditPalette = lineEdit->palette();
-    lineEditPalette.setColor(QPalette::Base, Qt::transparent);
-    lineEditPalette.setColor(QPalette::Window, Qt::transparent);
-    lineEdit->setPalette(lineEditPalette);
-    lineEdit->setFrame(QFrame::NoFrame);
-    lineEdit->setFocusPolicy(Qt::ClickFocus);
-    lineEdit->setPlaceholderText("搜索");
+    QPalette transparentPalette = palette();
+    transparentPalette.setColor(QPalette::Base, Qt::transparent);
+    transparentPalette.setColor(QPalette::Window, Qt::transparent);
+    setPalette(transparentPalette);
 
-    connect(lineEdit, &QLineEdit::textChanged, this, [this](const QString& text) {
+    auto* lineEditStyle = new TextOnlyLineEditStyle;
+    lineEditStyle->setParent(this);
+    setStyle(lineEditStyle);
+
+    connect(this, &QLineEdit::textChanged, this, [this](const QString& text) {
         Q_UNUSED(text);
         if (!showsClearButton()) {
             clearHovered = false;
@@ -42,172 +72,119 @@ IconLineEdit::IconLineEdit(QWidget *parent)
         update();
     });
 
-    refreshIcons();
+    updateControlRects();
+    updateTextMargins();
 }
 
 IconLineEdit::~IconLineEdit() {}
 
-QString IconLineEdit::currentText() const {
-    if (this->lineEdit->text().isEmpty())
-        return "";
-    return this->lineEdit->text();
+QString IconLineEdit::currentText() const
+{
+    return text();
 }
 
-void IconLineEdit::paintEvent(QPaintEvent *ev) {
+void IconLineEdit::paintEvent(QPaintEvent *event)
+{
     QPainter painter(this);
-    int radius = 8;
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(0xF5F5F5));
-    painter.drawRoundedRect(rect(), radius, radius);
+    painter.setBrush(QColor(0xF5, 0xF5, 0xF5));
+    painter.drawRoundedRect(rect(), kRadius, kRadius);
 
     if (hasFocus) {
         QPen pen(QColor(0x0099ff));
         pen.setWidth(2);
         painter.setPen(pen);
         painter.setBrush(Qt::NoBrush);
-        QRect borderRect = rect().adjusted(1, 1, -1, -1);
-        painter.drawRoundedRect(borderRect, radius - 2, radius - 2);
+        painter.drawRoundedRect(rect().adjusted(1, 1, -1, -1), kRadius - 2, kRadius - 2);
     }
+    painter.end();
+
+    QLineEdit::paintEvent(event);
+
+    QPainter foregroundPainter(this);
+    foregroundPainter.setRenderHint(QPainter::SmoothPixmapTransform);
+    foregroundPainter.drawPixmap(iconRect,
+                                 ImageService::instance().scaled(iconSource,
+                                                                 iconRect.size(),
+                                                                 Qt::IgnoreAspectRatio,
+                                                                 foregroundPainter.device()->devicePixelRatioF()));
 
     if (showsClearButton()) {
         const QString clearIconSource = clearPressed
                 ? QStringLiteral(":/resources/icon/hovered_close.png")
                 : QStringLiteral(":/resources/icon/close.png");
-        const QSize iconSize(12, 12);
-        const QRect iconRect(clearButtonRect.x() + (clearButtonRect.width() - iconSize.width()) / 2,
-                             clearButtonRect.y() + (clearButtonRect.height() - iconSize.height()) / 2,
-                             iconSize.width(),
-                             iconSize.height());
-        painter.drawPixmap(iconRect,
-                           ImageService::instance().scaled(clearIconSource,
-                                                           iconSize,
-                                                           Qt::IgnoreAspectRatio,
-                                                           painter.device()->devicePixelRatioF()));
+        const QSize clearIconSize(12, 12);
+        const QRect clearIconRect(clearButtonRect.x() + (clearButtonRect.width() - clearIconSize.width()) / 2,
+                                  clearButtonRect.y() + (clearButtonRect.height() - clearIconSize.height()) / 2,
+                                  clearIconSize.width(),
+                                  clearIconSize.height());
+        foregroundPainter.drawPixmap(clearIconRect,
+                                      ImageService::instance().scaled(clearIconSource,
+                                                                      clearIconSize,
+                                                                      Qt::IgnoreAspectRatio,
+                                                                      foregroundPainter.device()->devicePixelRatioF()));
     }
-
-    QWidget::paintEvent(ev);
 }
 
-QLineEdit *IconLineEdit::getLineEdit() const {
-    return this->lineEdit;
+QLineEdit *IconLineEdit::getLineEdit() const
+{
+    return const_cast<IconLineEdit*>(this);
 }
 
-void IconLineEdit::keyPressEvent(QKeyEvent *event) {
+void IconLineEdit::keyPressEvent(QKeyEvent *event)
+{
     if (event->key() == Qt::Key_Tab) {
         emit requestNextFocus();
+        event->accept();
+        return;
     }
-    else {
-        QWidget::keyPressEvent(event);
-    }
+
+    QLineEdit::keyPressEvent(event);
 }
 
-bool IconLineEdit::eventFilter(QObject *watched, QEvent *event) {
-    if (watched == lineEdit) {
-        if (event->type() == QEvent::FocusIn) {
-            hasFocus = true;
-            update();
-            emit lineEditFocused();
-        }
-        else if (event->type() == QEvent::FocusOut) {
-            hasFocus = false;
-            update();
-            emit lineEditUnfocused();
-        }
-        else if (event->type() == QEvent::MouseMove) {
-            auto* mouseEvent = static_cast<QMouseEvent*>(event);
-            updateClearHoverState(lineEdit->mapToParent(mouseEvent->position().toPoint()));
-        }
-        else if (event->type() == QEvent::Leave) {
-            if (clearHovered || clearPressed) {
-                clearHovered = false;
-                clearPressed = false;
-                unsetCursor();
-                update();
-            }
-        }
-        else if (event->type() == QEvent::MouseButtonPress) {
-            auto* mouseEvent = static_cast<QMouseEvent*>(event);
-            const QPoint parentPos = lineEdit->mapToParent(mouseEvent->position().toPoint());
-            if (mouseEvent->button() == Qt::LeftButton && showsClearButton() && clearButtonRect.contains(parentPos)) {
-                clearPressed = true;
-                clearHovered = true;
-                update();
-                mouseEvent->accept();
-                return true;
-            }
-            if (mouseEvent->button() == Qt::LeftButton) {
-                focusInnerLineEdit();
-            }
-        }
-        else if (event->type() == QEvent::MouseButtonRelease) {
-            auto* mouseEvent = static_cast<QMouseEvent*>(event);
-            const QPoint parentPos = lineEdit->mapToParent(mouseEvent->position().toPoint());
-            if (clearPressed && mouseEvent->button() == Qt::LeftButton) {
-                const bool shouldClear = clearButtonRect.contains(parentPos);
-                clearPressed = false;
-                clearHovered = shouldClear;
-                if (shouldClear) {
-                    lineEdit->clear();
-                    focusInnerLineEdit();
-                }
-                update();
-                mouseEvent->accept();
-                return true;
-            }
-        }
-    }
-    return QWidget::eventFilter(watched, event);
-}
-
-void IconLineEdit::resizeEvent(QResizeEvent *event) {
-    QWidget::resizeEvent(event);
-
-    const int marginLeft = 5;
-    const int marginRight = 5;
-    const int iconLineEditMargin = 5;
-    const int clearButtonSize = 20;
-    const int clearButtonSpacing = 4;
-
-    int w = width();
-    int h = height();
-
-    int iconX = marginLeft;
-    int iconY = (h - iconLabel->height()) / 2;
-    iconLabel->setGeometry(iconX, iconY, iconLabel->width(), iconLabel->height());
-
-    int clearX = w - marginRight - clearButtonSize;
-    int clearY = (h - clearButtonSize) / 2;
-    clearButtonRect = QRect(clearX, clearY, clearButtonSize, clearButtonSize);
-
-    int editX = iconX + iconLabel->width() + iconLineEditMargin;
-    int editWidth = qMax(0, clearX - clearButtonSpacing - editX);
-    lineEdit->setGeometry(editX, 0, editWidth, h);
-
-    refreshIcons();
-}
-
-void IconLineEdit::setIcon(const QString& source) {
-    iconSource = source;
-    refreshIcons();
-}
-
-void IconLineEdit::setIconSize(QSize size) {
-    iconLabel->setFixedSize(size);
-    refreshIcons();
-}
-
-void IconLineEdit::refreshIcons()
+void IconLineEdit::resizeEvent(QResizeEvent *event)
 {
-    iconLabel->setPixmap(ImageService::instance().scaled(iconSource,
-                                                         iconLabel->size(),
-                                                         Qt::IgnoreAspectRatio,
-                                                         devicePixelRatioF()));
+    QLineEdit::resizeEvent(event);
+    updateControlRects();
+    updateTextMargins();
+}
+
+void IconLineEdit::setIcon(const QString& source)
+{
+    iconSource = source;
+    update();
+}
+
+void IconLineEdit::setIconSize(QSize size)
+{
+    iconSize = size;
+    updateControlRects();
+    updateTextMargins();
+    update();
+}
+
+void IconLineEdit::updateTextMargins()
+{
+    const int left = kMarginLeft + iconSize.width() + kIconTextSpacing;
+    const int right = kMarginRight + kClearButtonSize + kClearButtonSpacing;
+    setTextMargins(left, 0, right, 0);
+}
+
+void IconLineEdit::updateControlRects()
+{
+    const int iconX = kMarginLeft;
+    const int iconY = (height() - iconSize.height()) / 2;
+    iconRect = QRect(iconX, iconY, iconSize.width(), iconSize.height());
+
+    const int clearX = width() - kMarginRight - kClearButtonSize;
+    const int clearY = (height() - kClearButtonSize) / 2;
+    clearButtonRect = QRect(clearX, clearY, kClearButtonSize, kClearButtonSize);
 }
 
 bool IconLineEdit::showsClearButton() const
 {
-    return lineEdit && !lineEdit->text().isEmpty();
+    return !text().isEmpty();
 }
 
 void IconLineEdit::updateClearHoverState(const QPoint& pos)
@@ -230,7 +207,7 @@ void IconLineEdit::updateClearHoverState(const QPoint& pos)
 void IconLineEdit::mouseMoveEvent(QMouseEvent* event)
 {
     updateClearHoverState(event->pos());
-    QWidget::mouseMoveEvent(event);
+    QLineEdit::mouseMoveEvent(event);
 }
 
 void IconLineEdit::leaveEvent(QEvent* event)
@@ -241,7 +218,7 @@ void IconLineEdit::leaveEvent(QEvent* event)
         unsetCursor();
         update();
     }
-    QWidget::leaveEvent(event);
+    QLineEdit::leaveEvent(event);
 }
 
 void IconLineEdit::mousePressEvent(QMouseEvent* event)
@@ -258,7 +235,7 @@ void IconLineEdit::mousePressEvent(QMouseEvent* event)
         focusInnerLineEdit();
     }
 
-    QWidget::mousePressEvent(event);
+    QLineEdit::mousePressEvent(event);
 }
 
 void IconLineEdit::mouseReleaseEvent(QMouseEvent* event)
@@ -268,18 +245,38 @@ void IconLineEdit::mouseReleaseEvent(QMouseEvent* event)
         clearPressed = false;
         clearHovered = shouldClear;
         if (shouldClear) {
-            lineEdit->clear();
-            lineEdit->setFocus();
+            clear();
+            focusInnerLineEdit();
         }
         update();
         event->accept();
         return;
     }
-    QWidget::mouseReleaseEvent(event);
+
+    QLineEdit::mouseReleaseEvent(event);
+}
+
+void IconLineEdit::focusInEvent(QFocusEvent* event)
+{
+    QLineEdit::focusInEvent(event);
+    hasFocus = true;
+    update();
+    emit lineEditFocused();
+}
+
+void IconLineEdit::focusOutEvent(QFocusEvent* event)
+{
+    QLineEdit::focusOutEvent(event);
+    hasFocus = false;
+    clearPressed = false;
+    clearHovered = false;
+    unsetCursor();
+    update();
+    emit lineEditUnfocused();
 }
 
 void IconLineEdit::focusInnerLineEdit()
 {
-    lineEdit->setFocus();
-    lineEdit->setCursorPosition(lineEdit->text().size());
+    setFocus();
+    setCursorPosition(text().size());
 }

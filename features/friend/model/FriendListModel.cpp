@@ -36,6 +36,22 @@ QVariant FriendListModel::data(const QModelIndex& index, int role) const
     }
 
     const RowEntry& row = m_rows.at(index.row());
+    if (row.type == RowEntry::Notice) {
+        switch (role) {
+        case Qt::DisplayRole:
+        case DisplayNameRole:
+            return QStringLiteral("好友通知");
+        case IsNoticeRole:
+            return true;
+        case IsGroupRole:
+            return false;
+        case Qt::SizeHintRole:
+            return QSize(0, kGroupHeaderHeight);
+        default:
+            return {};
+        }
+    }
+
     if (row.groupIndex < 0 || row.groupIndex >= m_groups.size()) {
         return {};
     }
@@ -49,6 +65,8 @@ QVariant FriendListModel::data(const QModelIndex& index, int role) const
             return group.groupName;
         case IsGroupRole:
             return true;
+        case IsNoticeRole:
+            return false;
         case GroupIdRole:
             return group.groupId;
         case GroupFriendCountRole:
@@ -83,7 +101,13 @@ QVariant FriendListModel::data(const QModelIndex& index, int role) const
         return friendSummary.signature;
     case DoNotDisturbRole:
         return friendSummary.isDoNotDisturb;
+    case NickNameRole:
+        return friendSummary.nickName.isEmpty() ? friendSummary.displayName : friendSummary.nickName;
+    case RemarkRole:
+        return friendSummary.remark;
     case IsGroupRole:
+        return false;
+    case IsNoticeRole:
         return false;
     case GroupIdRole:
         return group.groupId;
@@ -102,6 +126,10 @@ Qt::ItemFlags FriendListModel::flags(const QModelIndex& index) const
 {
     if (!index.isValid()) {
         return Qt::NoItemFlags;
+    }
+
+    if (isNoticeRow(index)) {
+        return Qt::ItemIsEnabled;
     }
 
     if (isGroupRow(index)) {
@@ -222,7 +250,7 @@ int FriendListModel::groupRowForRow(int row) const
     }
 
     for (int current = row; current >= 0; --current) {
-        if (m_rows.at(current).isGroup) {
+        if (m_rows.at(current).type == RowEntry::Group) {
             return current;
         }
     }
@@ -236,7 +264,7 @@ int FriendListModel::nextGroupRow(int row) const
     }
 
     for (int current = row + 1; current < m_rows.size(); ++current) {
-        if (m_rows.at(current).isGroup) {
+        if (m_rows.at(current).type == RowEntry::Group) {
             return current;
         }
     }
@@ -246,7 +274,7 @@ int FriendListModel::nextGroupRow(int row) const
 bool FriendListModel::isGroupRow(const QModelIndex& index) const
 {
     return index.isValid() && index.row() >= 0 && index.row() < m_rows.size() &&
-           m_rows.at(index.row()).isGroup;
+           m_rows.at(index.row()).type == RowEntry::Group;
 }
 
 bool FriendListModel::isFriendRow(const QModelIndex& index) const
@@ -256,8 +284,14 @@ bool FriendListModel::isFriendRow(const QModelIndex& index) const
     }
 
     const RowEntry& row = m_rows.at(index.row());
-    return !row.isGroup && row.groupIndex >= 0 && row.groupIndex < m_groups.size() &&
+    return row.type == RowEntry::Friend && row.groupIndex >= 0 && row.groupIndex < m_groups.size() &&
            row.friendIndex >= 0 && row.friendIndex < m_groups.at(row.groupIndex).friends.size();
+}
+
+bool FriendListModel::isNoticeRow(const QModelIndex& index) const
+{
+    return index.isValid() && index.row() >= 0 && index.row() < m_rows.size() &&
+           m_rows.at(index.row()).type == RowEntry::Notice;
 }
 
 bool FriendListModel::isGroupExpanded(const QString& groupId) const
@@ -332,11 +366,12 @@ FriendListModel::FriendGroup* FriendListModel::groupForId(const QString& groupId
 void FriendListModel::rebuildRows()
 {
     m_rows.clear();
+    m_rows.push_back(RowEntry{RowEntry::Notice, false, -1, -1});
     for (int groupIndex = 0; groupIndex < m_groups.size(); ++groupIndex) {
-        m_rows.push_back(RowEntry{true, groupIndex, -1});
+        m_rows.push_back(RowEntry{RowEntry::Group, true, groupIndex, -1});
         const FriendGroup& group = m_groups.at(groupIndex);
         for (int friendIndex = 0; friendIndex < group.friends.size(); ++friendIndex) {
-            m_rows.push_back(RowEntry{false, groupIndex, friendIndex});
+            m_rows.push_back(RowEntry{RowEntry::Friend, false, groupIndex, friendIndex});
         }
     }
 }
@@ -345,7 +380,7 @@ int FriendListModel::rowForGroup(const QString& groupId) const
 {
     for (int row = 0; row < m_rows.size(); ++row) {
         const RowEntry& entry = m_rows.at(row);
-        if (entry.isGroup && entry.groupIndex >= 0 && entry.groupIndex < m_groups.size() &&
+        if (entry.type == RowEntry::Group && entry.groupIndex >= 0 && entry.groupIndex < m_groups.size() &&
             m_groups.at(entry.groupIndex).groupId == groupId) {
             return row;
         }
@@ -361,7 +396,7 @@ int FriendListModel::lastRowForGroup(const QString& groupId) const
     }
 
     for (int row = groupRow + 1; row < m_rows.size(); ++row) {
-        if (m_rows.at(row).isGroup) {
+        if (m_rows.at(row).type == RowEntry::Group) {
             return row - 1;
         }
     }

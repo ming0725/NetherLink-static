@@ -220,6 +220,12 @@ void MessageListDelegate::drawBadge(QPainter* painter,
                                     const BadgeLayout& badgeLayout,
                                     bool selected) const
 {
+    painter->save();
+    painter->setRenderHints(QPainter::Antialiasing |
+                            QPainter::TextAntialiasing |
+                            QPainter::SmoothPixmapTransform,
+                            true);
+
     if (badgeLayout.drawIcon) {
         const QString iconPath = selected
                 ? QStringLiteral(":/resources/icon/selected_notification.png")
@@ -229,18 +235,21 @@ void MessageListDelegate::drawBadge(QPainter* painter,
                                                              Qt::KeepAspectRatio,
                                                              painter->device()->devicePixelRatioF());
         painter->drawPixmap(rect, icon);
+        painter->restore();
         return;
     }
 
     painter->setPen(Qt::NoPen);
     painter->setBrush(badgeLayout.backgroundColor);
-    if (rect.width() == rect.height()) {
-        painter->drawEllipse(rect);
+    const QRectF badgeRect = QRectF(rect).adjusted(0.5, 0.5, -0.5, -0.5);
+    if (qFuzzyCompare(badgeRect.width(), badgeRect.height())) {
+        painter->drawEllipse(badgeRect);
     } else {
-        painter->drawRoundedRect(rect, rect.height() / 2.0, rect.height() / 2.0);
+        painter->drawRoundedRect(badgeRect, badgeRect.height() / 2.0, badgeRect.height() / 2.0);
     }
 
     painter->setFont(badgeFont());
     painter->setPen(badgeLayout.textColor);
     painter->drawText(rect, Qt::AlignCenter, badgeLayout.text);
+    painter->restore();
 }
