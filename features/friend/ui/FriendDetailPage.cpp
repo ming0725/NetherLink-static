@@ -13,6 +13,7 @@
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QStyle>
+#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -328,6 +329,7 @@ void FriendDetailPage::setUser(const User& user)
     updateRemarkText();
     updateGroupButtonText();
     updateSignatureText();
+    QTimer::singleShot(0, this, &FriendDetailPage::updateSignatureText);
     rebuildGroupMenu();
 }
 

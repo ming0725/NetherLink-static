@@ -50,15 +50,13 @@ void drawFriendDisplayName(QPainter* painter,
         return;
     }
 
-    const QString suffix = QStringLiteral("（%1）").arg(nickName);
-    const int suffixWidth = nameMetrics().horizontalAdvance(suffix);
+    const QString suffix = QStringLiteral("(%1)").arg(nickName);
     const int gap = 2;
-    const int remarkWidth = qMax(0, rect.width() - suffixWidth - gap);
-    const QString elidedRemark = nameMetrics().elidedText(remark, Qt::ElideRight, remarkWidth);
+    const QString elidedRemark = nameMetrics().elidedText(remark, Qt::ElideRight, rect.width());
     const int usedRemarkWidth = nameMetrics().horizontalAdvance(elidedRemark);
 
     painter->setPen(primaryColor);
-    painter->drawText(QRect(rect.left(), rect.top(), remarkWidth, rect.height()),
+    painter->drawText(QRect(rect.left(), rect.top(), qMin(usedRemarkWidth, rect.width()), rect.height()),
                       Qt::AlignLeft | Qt::AlignVCenter,
                       elidedRemark);
 
