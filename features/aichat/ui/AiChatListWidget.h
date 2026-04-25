@@ -10,7 +10,6 @@ class AiChatListDelegate;
 class AiChatListModel;
 class QMouseEvent;
 class QPaintEvent;
-class QVariantAnimation;
 class QModelIndex;
 
 class AiChatListWidget : public OverlayScrollListView
@@ -43,10 +42,7 @@ private:
 
     AiChatListModel* m_model;
     AiChatListDelegate* m_delegate;
-    QVariantAnimation* m_stickyAnimation;
     QString m_stickyTitle;
-    QString m_previousStickyTitle;
-    qreal m_stickyTransitionProgress = 1.0;
     bool m_stickyVisible = false;
     int m_stickyOffsetY = 0;
     bool m_initialized = false;

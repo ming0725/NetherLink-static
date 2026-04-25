@@ -59,6 +59,8 @@ struct FriendSummary {
     UserStatus status = Offline;
     QString signature;
     bool isDoNotDisturb = false;
+    QString groupId = "default";
+    QString groupName = "默认分组";
 };
 
 struct ConversationSummary {

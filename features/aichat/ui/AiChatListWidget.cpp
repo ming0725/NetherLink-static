@@ -11,7 +11,6 @@
 #include <QPalette>
 #include <QScrollBar>
 #include <QStyleOptionViewItem>
-#include <QVariantAnimation>
 
 #include "features/aichat/data/AiChatRepository.h"
 #include "AiChatListDelegate.h"
@@ -21,7 +20,6 @@ AiChatListWidget::AiChatListWidget(QWidget* parent)
     : OverlayScrollListView(parent)
     , m_model(new AiChatListModel(this))
     , m_delegate(new AiChatListDelegate(this))
-    , m_stickyAnimation(new QVariantAnimation(this))
 {
     setModel(m_model);
     setItemDelegate(m_delegate);
@@ -39,18 +37,6 @@ AiChatListWidget::AiChatListWidget(QWidget* parent)
     viewport()->setPalette(palette);
     setWheelStepPixels(64);
     setScrollBarInsets(8, 4);
-
-    m_stickyAnimation->setDuration(180);
-    m_stickyAnimation->setEasingCurve(QEasingCurve::OutCubic);
-    connect(m_stickyAnimation, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
-        m_stickyTransitionProgress = value.toReal();
-        viewport()->update();
-    });
-    connect(m_stickyAnimation, &QVariantAnimation::finished, this, [this]() {
-        m_previousStickyTitle.clear();
-        m_stickyTransitionProgress = 1.0;
-        viewport()->update();
-    });
 
     connect(selectionModel(), &QItemSelectionModel::currentChanged,
             this, &AiChatListWidget::onCurrentChanged);
@@ -149,29 +135,12 @@ void AiChatListWidget::updateStickyHeader()
     m_stickyOffsetY = state.offsetY;
 
     if (!m_stickyVisible) {
-        m_stickyAnimation->stop();
         m_stickyTitle.clear();
-        m_previousStickyTitle.clear();
-        m_stickyTransitionProgress = 1.0;
         viewport()->update();
         return;
     }
 
-    if (m_stickyTitle != state.title) {
-        m_previousStickyTitle = m_stickyTitle;
-        m_stickyTitle = state.title;
-
-        if (m_previousStickyTitle.isEmpty()) {
-            m_stickyTransitionProgress = 1.0;
-            m_previousStickyTitle.clear();
-        } else {
-            m_stickyAnimation->stop();
-            m_stickyTransitionProgress = 0.0;
-            m_stickyAnimation->setStartValue(0.0);
-            m_stickyAnimation->setEndValue(1.0);
-            m_stickyAnimation->start();
-        }
-    }
+    m_stickyTitle = state.title;
 
     viewport()->update();
 }
@@ -317,29 +286,6 @@ void AiChatListWidget::drawStickyHeader() const
     painter.setFont(headerFont);
 
     const QRect textRect(12, headerRect.top(), headerRect.width() - 24, headerRect.height());
-    const int slideDistance = 10;
-
-    auto drawText = [&painter, &textRect](const QString& text, int offsetY, qreal opacity) {
-        if (text.isEmpty() || opacity <= 0.0) {
-            return;
-        }
-
-        painter.save();
-        painter.setOpacity(opacity);
-        painter.setPen(QColor(0x66, 0x66, 0x66));
-        painter.drawText(textRect.translated(0, offsetY), Qt::AlignLeft | Qt::AlignVCenter, text);
-        painter.restore();
-    };
-
-    if (!m_previousStickyTitle.isEmpty()) {
-        drawText(m_previousStickyTitle,
-                 -qRound(m_stickyTransitionProgress * slideDistance),
-                 1.0 - m_stickyTransitionProgress);
-        drawText(m_stickyTitle,
-                 qRound((1.0 - m_stickyTransitionProgress) * slideDistance),
-                 m_stickyTransitionProgress);
-        return;
-    }
-
-    drawText(m_stickyTitle, 0, 1.0);
+    painter.setPen(QColor(0x66, 0x66, 0x66));
+    painter.drawText(textRect, Qt::AlignLeft | Qt::AlignVCenter, m_stickyTitle);
 }

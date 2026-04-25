@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <QHash>
 #include <QVector>
 
 #include "shared/types/RepositoryTypes.h"
@@ -16,7 +17,13 @@ public:
         AvatarPathRole,
         StatusRole,
         SignatureRole,
-        DoNotDisturbRole
+        DoNotDisturbRole,
+        IsGroupRole,
+        GroupIdRole,
+        GroupNameRole,
+        GroupFriendCountRole,
+        GroupExpandedRole,
+        GroupProgressRole
     };
 
     explicit FriendListModel(QObject* parent = nullptr);
@@ -27,9 +34,41 @@ public:
 
     void setFriends(QVector<FriendSummary> friends);
     QString friendIdAt(const QModelIndex& index) const;
+    QString groupIdAt(const QModelIndex& index) const;
+    QString groupIdForFriend(const QString& userId) const;
     FriendSummary friendAt(const QModelIndex& index) const;
     int indexOfFriend(const QString& userId) const;
+    int groupRowForId(const QString& groupId) const;
+    int groupRowForRow(int row) const;
+    int nextGroupRow(int row) const;
+    bool isGroupRow(const QModelIndex& index) const;
+    bool isFriendRow(const QModelIndex& index) const;
+    bool isGroupExpanded(const QString& groupId) const;
+    qreal groupProgress(const QString& groupId) const;
+    void setGroupExpanded(const QString& groupId, bool expanded);
+    void setGroupProgress(const QString& groupId, qreal progress);
 
 private:
-    QVector<FriendSummary> m_friends;
+    struct FriendGroup {
+        QString groupId;
+        QString groupName;
+        QVector<FriendSummary> friends;
+        bool expanded = true;
+        qreal progress = 1.0;
+    };
+
+    struct RowEntry {
+        bool isGroup = false;
+        int groupIndex = -1;
+        int friendIndex = -1;
+    };
+
+    const FriendGroup* groupForId(const QString& groupId) const;
+    FriendGroup* groupForId(const QString& groupId);
+    void rebuildRows();
+    int rowForGroup(const QString& groupId) const;
+    int lastRowForGroup(const QString& groupId) const;
+
+    QVector<FriendGroup> m_groups;
+    QVector<RowEntry> m_rows;
 };
