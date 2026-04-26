@@ -1,5 +1,6 @@
 #include "GroupListWidget.h"
 
+#include <QAbstractItemView>
 #include <QApplication>
 #include <QCursor>
 #include <QItemSelectionModel>
@@ -68,6 +69,11 @@ GroupListWidget::GroupListWidget(QWidget* parent)
 
     connect(selectionModel(), &QItemSelectionModel::currentChanged,
             this, &GroupListWidget::onCurrentChanged);
+    connect(this, &QAbstractItemView::doubleClicked, this, [this](const QModelIndex& index) {
+        if (m_model->isGroupRow(index)) {
+            emit requestMessage(m_model->groupIdAt(index));
+        }
+    });
     connect(&GroupRepository::instance(), &GroupRepository::groupListChanged,
             this, &GroupListWidget::reloadGroups);
     m_searchDebounceTimer->setSingleShot(true);

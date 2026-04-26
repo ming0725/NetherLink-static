@@ -31,6 +31,7 @@ public:
 
 signals:
     void selectedGroupChanged(const QString& groupId);
+    void requestMessage(const QString& groupId);
 
 protected:
     void leaveEvent(QEvent* event) override;

@@ -12,6 +12,7 @@ public:
     void addBottomItem(ApplicationBarItem*);
     void setAvatarSource(const QString& source);
     void setTopInset(int inset);
+    void setCurrentTopIndex(int index);
     int topItemsCount() const { return topItems.size(); }
     int indexOfTopItem(ApplicationBarItem* item) const {
         return topItems.indexOf(item);

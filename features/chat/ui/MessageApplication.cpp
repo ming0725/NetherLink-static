@@ -3,8 +3,15 @@
 #include "features/chat/data/MessageRepository.h"
 #include "shared/ui/TransparentSplitter.h"
 
+#include <QDateTime>
 #include <QPainter>
 #include <QResizeEvent>
+
+namespace {
+
+constexpr int kInitialMessagePageSize = 30;
+
+} // namespace
 
 MessageApplication::LeftPane::LeftPane(QWidget* parent)
         : QWidget(parent)
@@ -54,6 +61,8 @@ MessageApplication::MessageApplication(QWidget* parent)
         : QWidget(parent)
 {
     m_leftPane = new LeftPane(this);
+    connect(m_leftPane->searchInput()->getLineEdit(), &QLineEdit::textChanged,
+            m_leftPane->messageList(), &MessageListWidget::setKeyword);
     connect(m_leftPane->messageList(), &MessageListWidget::conversationActivated,
             this, &MessageApplication::onMessageClicked);
 
@@ -109,7 +118,22 @@ void MessageApplication::onMessageClicked(const QString& conversationId)
 
     ensureChatArea();
     m_rightStack->setCurrentWidget(m_chatArea);
-    m_chatArea->openConversation(MessageRepository::instance().requestConversationThread({conversationId}));
+    m_chatArea->openConversation(MessageRepository::instance().requestConversationThread({
+            conversationId,
+            0,
+            kInitialMessagePageSize
+    }));
+}
+
+void MessageApplication::openConversationFromContact(const QString& conversationId)
+{
+    if (conversationId.isEmpty()) {
+        return;
+    }
+
+    MessageRepository::instance().touchConversation(conversationId, QDateTime::currentDateTime());
+    m_leftPane->messageList()->setCurrentConversation(conversationId);
+    onMessageClicked(conversationId);
 }
 
 void MessageApplication::ensureChatArea()

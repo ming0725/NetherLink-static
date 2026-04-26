@@ -22,7 +22,7 @@ int ChatListModel::rowCount(const QModelIndex& parent) const
 
 QVariant ChatListModel::data(const QModelIndex& index, int role) const
 {
-    if (!index.isValid() || index.row() >= static_cast<int>(items.size()))
+    if (!index.isValid() || index.row() < 0 || index.row() >= static_cast<int>(items.size()))
         return QVariant();
 
     const ListItem& item = items[index.row()];
@@ -44,10 +44,13 @@ QVariant ChatListModel::data(const QModelIndex& index, int role) const
 
 bool ChatListModel::setData(const QModelIndex& index, const QVariant& value, int role)
 {
-    if (!index.isValid() || index.row() >= static_cast<int>(items.size()))
+    if (!index.isValid() || index.row() < 0 || index.row() >= static_cast<int>(items.size()))
         return false;
 
-    if (role == Qt::UserRole + 1 && !items[index.row()].isHeader) { // 用于选中状态
+    if (role == Qt::UserRole + 1 &&
+        !items[index.row()].isHeader &&
+        !items[index.row()].isBottomSpace &&
+        items[index.row()].message) {
         bool selected = value.toBool();
         if (selected && selectedMessageIndex != index.row()) {
             // 清除之前选中的消息
@@ -87,59 +90,52 @@ void ChatListModel::addMessage(QSharedPointer<ChatMessage> message)
         return;
     }
 
-    // 如果有底部空白，先移除它
-    if (!items.empty() && items.back().isBottomSpace) {
-        beginRemoveRows(QModelIndex(), items.size() - 1, items.size() - 1);
-        items.pop_back();
-        endRemoveRows();
+    beginResetModel();
+    messages.push_back(std::move(message));
+    rebuildItems();
+    endResetModel();
+}
+
+void ChatListModel::setMessages(QVector<QSharedPointer<ChatMessage>> nextMessages)
+{
+    beginResetModel();
+    messages = std::move(nextMessages);
+    rebuildItems();
+    endResetModel();
+}
+
+void ChatListModel::prependMessages(QVector<QSharedPointer<ChatMessage>> olderMessages)
+{
+    if (olderMessages.isEmpty()) {
+        return;
     }
 
-    // 检查是否需要添加时间标识
-    bool needTimeHeader = true;  // 默认需要添加时间标识
-    if (!items.empty()) {
-        // 获取最后一个消息的时间戳
-        QDateTime lastTime;
-        for (auto it = items.rbegin(); it != items.rend(); ++it) {
-            if (!it->isHeader && !it->isBottomSpace && it->message) {
-                lastTime = it->message->getTimestamp();
-                if (lastTime.isValid()) {
-                    needTimeHeader = shouldAddTimeHeader(lastTime, message->getTimestamp());
-                    break;
-                }
-            }
-        }
-    }
-
-    // 如果是第一条消息或需要添加时间标识，添加时间标识
-    if (items.empty() || needTimeHeader) {
-        beginInsertRows(QModelIndex(), items.size(), items.size());
-        ListItem timeItem;
-        timeItem.isHeader = true;
-        timeItem.timeHeader = QSharedPointer<TimeHeader>::create();
-        timeItem.timeHeader->timestamp = message->getTimestamp();
-        timeItem.timeHeader->type = getTimeHeaderType(message->getTimestamp());
-        timeItem.timeHeader->text = formatTimeHeader(message->getTimestamp());
-        items.push_back(timeItem);
-        endInsertRows();
-    }
-
-    // 添加消息
-    beginInsertRows(QModelIndex(), items.size(), items.size());
-    ListItem messageItem;
-    messageItem.isHeader = false;
-    messageItem.message = std::move(message);
-    items.push_back(std::move(messageItem));
-    endInsertRows();
-
-    // 确保底部空白存在
-    ensureBottomSpace();
+    beginResetModel();
+    messages = olderMessages + messages;
+    rebuildItems();
+    endResetModel();
 }
 
 const ChatMessage* ChatListModel::messageAt(int index) const
 {
-    if (index >= 0 && index < static_cast<int>(items.size()) && !items[index].isHeader)
+    if (index >= 0 &&
+        index < static_cast<int>(items.size()) &&
+        !items[index].isHeader &&
+        !items[index].isBottomSpace) {
         return items[index].message.get();
+    }
     return nullptr;
+}
+
+QSharedPointer<ChatMessage> ChatListModel::sharedMessageAt(int index) const
+{
+    if (index >= 0 &&
+        index < static_cast<int>(items.size()) &&
+        !items[index].isHeader &&
+        !items[index].isBottomSpace) {
+        return items[index].message;
+    }
+    return {};
 }
 
 void ChatListModel::clearSelection()
@@ -163,18 +159,16 @@ bool ChatListModel::removeMessage(int index)
         return false;
     }
 
-    // 删除消息
-    beginRemoveRows(QModelIndex(), index, index);
-    items.erase(items.begin() + index);
-    if (selectedMessageIndex == index) {
-        selectedMessageIndex = -1;
-    } else if (selectedMessageIndex > index) {
-        selectedMessageIndex--;
+    const int messageIndex = messageIndexForRow(index);
+    if (messageIndex < 0 || messageIndex >= messages.size()) {
+        return false;
     }
-    endRemoveRows();
 
-    // 确保底部空白存在
-    ensureBottomSpace();
+    beginResetModel();
+    messages.removeAt(messageIndex);
+    selectedMessageIndex = -1;
+    rebuildItems();
+    endResetModel();
     return true;
 }
 
@@ -260,6 +254,7 @@ void ChatListModel::ensureBottomSpace()
         beginInsertRows(QModelIndex(), items.size(), items.size());
         ListItem bottomSpace;
         bottomSpace.isBottomSpace = true;
+        bottomSpace.bottomSpaceHeight = bottomSpaceHeight;
         items.push_back(std::move(bottomSpace));
         endInsertRows();
     }
@@ -267,9 +262,10 @@ void ChatListModel::ensureBottomSpace()
 
 void ChatListModel::setBottomSpaceHeight(int height)
 {
+    bottomSpaceHeight = height;
     // 更新底部空白的高度
     if (!items.empty() && items.back().isBottomSpace) {
-        items.back().bottomSpaceHeight = height;
+        items.back().bottomSpaceHeight = bottomSpaceHeight;
         QModelIndex lastIndex = index(items.size() - 1, 0);
         emit dataChanged(lastIndex, lastIndex);
     }
@@ -278,5 +274,57 @@ void ChatListModel::setBottomSpaceHeight(int height)
 void ChatListModel::clear() {
     beginResetModel();
     items.clear();
+    messages.clear();
+    selectedMessageIndex = -1;
     endResetModel();
+}
+
+void ChatListModel::rebuildItems()
+{
+    items.clear();
+    selectedMessageIndex = -1;
+
+    QDateTime previousTime;
+    for (const QSharedPointer<ChatMessage>& message : messages) {
+        if (!message || !message->getTimestamp().isValid()) {
+            continue;
+        }
+
+        const bool needTimeHeader = !previousTime.isValid() ||
+                shouldAddTimeHeader(previousTime, message->getTimestamp());
+        if (needTimeHeader) {
+            ListItem timeItem;
+            timeItem.isHeader = true;
+            timeItem.timeHeader = QSharedPointer<TimeHeader>::create();
+            timeItem.timeHeader->timestamp = message->getTimestamp();
+            timeItem.timeHeader->type = getTimeHeaderType(message->getTimestamp());
+            timeItem.timeHeader->text = formatTimeHeader(message->getTimestamp());
+            items.push_back(std::move(timeItem));
+        }
+
+        ListItem messageItem;
+        messageItem.message = message;
+        items.push_back(std::move(messageItem));
+        previousTime = message->getTimestamp();
+    }
+
+    ListItem bottomSpace;
+    bottomSpace.isBottomSpace = true;
+    bottomSpace.bottomSpaceHeight = bottomSpaceHeight;
+    items.push_back(std::move(bottomSpace));
+}
+
+int ChatListModel::messageIndexForRow(int row) const
+{
+    if (row < 0 || row >= items.size() || items.at(row).isHeader || items.at(row).isBottomSpace) {
+        return -1;
+    }
+
+    const ChatMessage* target = items.at(row).message.get();
+    for (int index = 0; index < messages.size(); ++index) {
+        if (messages.at(index).get() == target) {
+            return index;
+        }
+    }
+    return -1;
 }

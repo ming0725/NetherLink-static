@@ -22,6 +22,7 @@ public:
     Qt::ItemFlags flags(const QModelIndex& index) const override;
 
     void setEntries(QVector<AiChatListEntry> entries);
+    void appendEntries(const QVector<AiChatListEntry>& entries);
 
     AiChatListEntry entryAt(const QModelIndex& index) const;
     int rowOfConversation(const QString& conversationId) const;

@@ -32,7 +32,7 @@ public:
     void markConversationRead(const QString& conversationId);
     void updateConversationPreview(const QString& conversationId,
                                    const QString& previewText,
-                                   const QDateTime& timestamp);
+                                   const QDateTime& lastMessageTime);
 
     QString conversationIdAt(const QModelIndex& index) const;
     ConversationSummary conversationAt(const QModelIndex& index) const;

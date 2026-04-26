@@ -9,6 +9,7 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMap>
+#include <QMessageBox>
 #include <QPainter>
 #include <QResizeEvent>
 #include <QSizePolicy>
@@ -17,6 +18,7 @@
 #include <QVBoxLayout>
 
 #include "features/chat/data/GroupRepository.h"
+#include "features/chat/data/MessageRepository.h"
 #include "shared/services/ImageService.h"
 #include "shared/ui/StatefulPushButton.h"
 
@@ -234,11 +236,13 @@ GroupDetailPage::GroupDetailPage(QWidget* parent)
     nameFont.setWeight(QFont::DemiBold);
     m_nameLabel->setFont(nameFont);
     m_nameLabel->setStyleSheet(QStringLiteral("color: #111111;"));
+    m_nameLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
     QFont secondaryFont = m_idLabel->font();
     secondaryFont.setPixelSize(13);
     m_idLabel->setFont(secondaryFont);
     m_idLabel->setStyleSheet(QStringLiteral("color: #777777;"));
+    m_idLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_idLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     m_idLabel->setFixedHeight(QFontMetrics(secondaryFont).height() + 2);
     m_nameLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
@@ -300,12 +304,7 @@ GroupDetailPage::GroupDetailPage(QWidget* parent)
         }
     });
     connect(m_exitButton, &StatefulPushButton::clicked, this, [this]() {
-        if (!m_hasGroup) {
-            return;
-        }
-        GroupRepository::instance().removeGroup(m_group.groupId);
-        clear();
-        emit groupExited();
+        confirmExitGroup();
     });
 
     auto* categoryMenu = new QMenu(m_categoryButton);
@@ -337,6 +336,7 @@ void GroupDetailPage::clear()
 {
     m_group = {};
     m_hasGroup = false;
+    updateExitButtonState();
 }
 
 void GroupDetailPage::resizeEvent(QResizeEvent* event)
@@ -376,6 +376,7 @@ void GroupDetailPage::setGroup(const Group& group)
     updateIntroText();
     updateAnnouncementText();
     updateMemberCountText();
+    updateExitButtonState();
     QTimer::singleShot(0, this, &GroupDetailPage::updateIntroText);
     QTimer::singleShot(0, this, &GroupDetailPage::updateAnnouncementText);
 }
@@ -496,4 +497,31 @@ void GroupDetailPage::changeCategory(const QString& categoryId, const QString& c
     m_group.listGroupName = categoryName;
     GroupRepository::instance().saveGroup(m_group);
     updateCategoryButtonText();
+}
+
+void GroupDetailPage::updateExitButtonState()
+{
+    const bool canExit = m_hasGroup && !GroupRepository::instance().isCurrentUserGroupOwner(m_group);
+    m_exitButton->setEnabled(canExit);
+}
+
+void GroupDetailPage::confirmExitGroup()
+{
+    if (!m_hasGroup || GroupRepository::instance().isCurrentUserGroupOwner(m_group)) {
+        return;
+    }
+
+    const int result = QMessageBox::question(this,
+                                             QStringLiteral("退出群聊"),
+                                             QStringLiteral("确认退出该群聊吗？"),
+                                             QMessageBox::Yes | QMessageBox::No,
+                                             QMessageBox::No);
+    if (result != QMessageBox::Yes) {
+        return;
+    }
+
+    MessageRepository::instance().removeConversation(m_group.groupId);
+    GroupRepository::instance().removeGroup(m_group.groupId);
+    clear();
+    emit groupExited();
 }

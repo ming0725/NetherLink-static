@@ -5,36 +5,6 @@
 
 #include <algorithm>
 
-#include "shared/data/RepositoryTemplate.h"
-
-namespace {
-
-class AiChatListRequestOperation final
-    : public RepositoryTemplate<AiChatListRequest, QVector<AiChatListEntry>> {
-public:
-    explicit AiChatListRequestOperation(QVector<AiChatListEntry> entries)
-        : m_entries(std::move(entries))
-    {
-    }
-
-private:
-    QVector<AiChatListEntry> doRequest(const AiChatListRequest&) const override
-    {
-        return m_entries;
-    }
-
-    void onAfterRequest(const AiChatListRequest&, QVector<AiChatListEntry>& result) const override
-    {
-        std::sort(result.begin(), result.end(), [](const AiChatListEntry& lhs, const AiChatListEntry& rhs) {
-            return lhs.time > rhs.time;
-        });
-    }
-
-    QVector<AiChatListEntry> m_entries;
-};
-
-} // namespace
-
 AiChatRepository::AiChatRepository(QObject* parent)
     : QObject(parent)
 {
@@ -73,7 +43,18 @@ AiChatRepository& AiChatRepository::instance()
 QVector<AiChatListEntry> AiChatRepository::requestAiChatList(const AiChatListRequest& query) const
 {
     QMutexLocker locker(&m_mutex);
-    return AiChatListRequestOperation(m_entries).request(query);
+    if (query.limit <= 0 || query.offset < 0 || query.offset >= m_entries.size()) {
+        return {};
+    }
+
+    QVector<AiChatListEntry> sortedEntries = m_entries;
+    std::sort(sortedEntries.begin(), sortedEntries.end(), [](const AiChatListEntry& lhs, const AiChatListEntry& rhs) {
+        return lhs.time > rhs.time;
+    });
+
+    const int offset = qBound(0, query.offset, sortedEntries.size());
+    const int limit = qMax(0, query.limit);
+    return sortedEntries.mid(offset, limit);
 }
 
 QString AiChatRepository::createAiChatConversation(const QString& title, const QDateTime& time)

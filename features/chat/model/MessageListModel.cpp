@@ -32,7 +32,7 @@ QVariant MessageListModel::data(const QModelIndex& index, int role) const
     case PreviewTextRole:
         return conversation.previewText;
     case LastTimeRole:
-        return conversation.lastMessageTime;
+        return conversation.messageListTime;
     case UnreadCountRole:
         return conversation.unreadCount;
     case DoNotDisturbRole:
@@ -67,7 +67,11 @@ void MessageListModel::setConversations(QVector<ConversationSummary> conversatio
 void MessageListModel::markConversationRead(const QString& conversationId)
 {
     const int row = indexOfConversation(conversationId);
-    if (row < 0 || m_conversations[row].unreadCount == 0) {
+    if (row < 0) {
+        return;
+    }
+
+    if (m_conversations[row].unreadCount == 0) {
         return;
     }
 
@@ -78,7 +82,7 @@ void MessageListModel::markConversationRead(const QString& conversationId)
 
 void MessageListModel::updateConversationPreview(const QString& conversationId,
                                                  const QString& previewText,
-                                                 const QDateTime& timestamp)
+                                                 const QDateTime& lastMessageTime)
 {
     const int row = indexOfConversation(conversationId);
     if (row < 0) {
@@ -86,11 +90,9 @@ void MessageListModel::updateConversationPreview(const QString& conversationId,
     }
 
     m_conversations[row].previewText = previewText;
-    m_conversations[row].lastMessageTime = timestamp;
-
-    beginResetModel();
-    sortConversations();
-    endResetModel();
+    m_conversations[row].lastMessageTime = lastMessageTime;
+    const QModelIndex modelIndex = index(row, 0);
+    emit dataChanged(modelIndex, modelIndex, {PreviewTextRole});
 }
 
 QString MessageListModel::conversationIdAt(const QModelIndex& index) const
@@ -132,6 +134,6 @@ void MessageListModel::sortConversations()
 {
     std::sort(m_conversations.begin(), m_conversations.end(),
               [](const ConversationSummary& lhs, const ConversationSummary& rhs) {
-                  return lhs.lastMessageTime > rhs.lastMessageTime;
+                  return lhs.messageListTime > rhs.messageListTime;
               });
 }

@@ -48,8 +48,11 @@ public:
     bool setData(const QModelIndex& index, const QVariant& value, int role = Qt::EditRole) override;
     Qt::ItemFlags flags(const QModelIndex& index) const override;
     
+    void setMessages(QVector<QSharedPointer<ChatMessage>> messages);
+    void prependMessages(QVector<QSharedPointer<ChatMessage>> messages);
     void addMessage(QSharedPointer<ChatMessage> message);
     const ChatMessage* messageAt(int index) const;
+    QSharedPointer<ChatMessage> sharedMessageAt(int index) const;
     void clearSelection();
     bool removeMessage(int index);
 
@@ -71,8 +74,12 @@ private:
         int bottomSpaceHeight = BottomSpace::DEFAULT_HEIGHT;  // 使用默认高度
     };
     QVector<ListItem> items;
+    QVector<QSharedPointer<ChatMessage>> messages;
     int selectedMessageIndex = -1;
+    int bottomSpaceHeight = BottomSpace::DEFAULT_HEIGHT;
 
+    void rebuildItems();
+    int messageIndexForRow(int row) const;
     QString formatTimeHeader(const QDateTime& timestamp) const;
     TimeHeaderType getTimeHeaderType(const QDateTime& timestamp) const;
     bool shouldAddTimeHeader(const QDateTime& prevTime, const QDateTime& currTime) const;

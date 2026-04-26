@@ -9,6 +9,7 @@ class QLineEdit;
 class StatefulPushButton;
 class QToolButton;
 class QVBoxLayout;
+class QWidget;
 
 class FriendDetailPage : public QWidget
 {
@@ -41,6 +42,7 @@ private:
     void saveRemark();
     void rebuildGroupMenu();
     void changeGroup(const QString& groupId, const QString& groupName);
+    void confirmDeleteFriend();
 
     User m_user;
     bool m_hasUser = false;
@@ -48,6 +50,7 @@ private:
     AvatarLabel* m_avatarLabel;
     QLabel* m_nameLabel;
     QLabel* m_idLabel;
+    QWidget* m_regionRow;
     QLabel* m_regionLabel;
     QLabel* m_statusIcon;
     QLabel* m_statusLabel;

@@ -29,6 +29,7 @@ public:
 
 signals:
     void selectedFriendChanged(const QString& userId);
+    void requestMessage(const QString& userId);
 
 protected:
     void leaveEvent(QEvent* event) override;

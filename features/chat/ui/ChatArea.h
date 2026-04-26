@@ -35,12 +35,17 @@ private slots:
     void onSendImage(const QString &path);
     void onSendText(const QString &text);
     void onSendTextAsPeer(const QString &text);
+    void onDeleteMessageRequested(int row);
 
 private:
     struct ConversationState {
         ConversationMeta meta;
         int unreadMessageCount = 0;
+        int loadedMessageCount = 0;
         bool isAtBottom = true;
+        bool hasMoreBefore = false;
+        bool loadingOlderMessages = false;
+        bool allowOlderMessageFetch = false;
     };
 
     ChatListView* chatView;
@@ -62,6 +67,7 @@ private:
     void updateInputBarPosition();
     void applyConversationMeta();
     void clearConversation();
+    void loadOlderMessages();
     QString conversationId() const;
     bool isGroupMode() const;
 };

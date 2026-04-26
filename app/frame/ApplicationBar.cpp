@@ -129,6 +129,15 @@ void ApplicationBar::setTopInset(int inset)
     update();
 }
 
+void ApplicationBar::setCurrentTopIndex(int index)
+{
+    if (index < 0 || index >= topItems.size()) {
+        return;
+    }
+
+    onItemClicked(topItems.at(index));
+}
+
 
 void ApplicationBar::layoutItems() {
     int y = topInset + marginTop + spacing + avatarSize + avatarAndItemDist;

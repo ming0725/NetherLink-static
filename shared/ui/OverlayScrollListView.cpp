@@ -2,6 +2,7 @@
 
 #include <QCursor>
 #include <QDateTime>
+#include <QMouseEvent>
 #include <QScrollBar>
 #include <QWheelEvent>
 
@@ -101,6 +102,17 @@ void OverlayScrollListView::leaveEvent(QEvent* event)
     if (!rect().contains(localPos) && !m_overlayScrollBar->geometry().contains(localPos)) {
         m_overlayScrollBar->startFadeOut();
     }
+}
+
+void OverlayScrollListView::mouseMoveEvent(QMouseEvent* event)
+{
+    if (event->buttons() & Qt::LeftButton) {
+        showOverlayScrollBar();
+        event->accept();
+        return;
+    }
+
+    QListView::mouseMoveEvent(event);
 }
 
 bool OverlayScrollListView::viewportEvent(QEvent* event)

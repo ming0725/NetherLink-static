@@ -51,10 +51,13 @@ struct GroupDetailRequest {
 };
 
 struct ConversationListRequest {
+    QString keyword;
 };
 
 struct ConversationMessagesRequest {
     QString conversationId;
+    int offsetFromLatest = 0;
+    int limit = 30;
 };
 
 struct ConversationMetaRequest {
@@ -63,9 +66,13 @@ struct ConversationMetaRequest {
 
 struct ConversationThreadRequest {
     QString conversationId;
+    int offsetFromLatest = 0;
+    int limit = 30;
 };
 
 struct AiChatListRequest {
+    int offset = 0;
+    int limit = 20;
 };
 
 struct PostFeedRequest {
@@ -109,10 +116,19 @@ struct ConversationSummary {
     QString avatarPath;
     QString previewText;
     QDateTime lastMessageTime;
+    QDateTime messageListTime;
     int unreadCount = 0;
     bool isDoNotDisturb = false;
     bool isGroup = false;
     int memberCount = 0;
+};
+
+struct ConversationSyncState {
+    QString conversationId;
+    int unreadCount = 0;
+    bool isDoNotDisturb = false;
+    QDateTime messageListTime;
+    QDateTime lastReadAt;
 };
 
 struct ConversationMeta {
@@ -130,6 +146,8 @@ using ChatMessageList = QVector<QSharedPointer<ChatMessage>>;
 struct ConversationThreadData {
     ConversationMeta meta;
     ChatMessageList messages;
+    int loadedMessageCount = 0;
+    bool hasMoreBefore = false;
 };
 
 struct AiChatListEntry {

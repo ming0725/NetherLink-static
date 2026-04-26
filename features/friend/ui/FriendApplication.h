@@ -18,6 +18,10 @@ class FriendApplication : public QWidget {
     Q_OBJECT
 public:
     explicit FriendApplication(QWidget* parent = nullptr);
+
+signals:
+    void requestOpenConversation(const QString& conversationId);
+
 protected:
     void resizeEvent(QResizeEvent* event) override;
     void paintEvent(QPaintEvent* event) override;

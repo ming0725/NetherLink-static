@@ -25,6 +25,7 @@ protected:
 
 private:
     void reloadEntries(const QString& selectedConversationId = {});
+    void loadMoreEntries();
     void onCurrentChanged(const QModelIndex& current, const QModelIndex& previous);
     void updateStickyHeader();
     struct StickyHeaderState {
@@ -46,4 +47,8 @@ private:
     bool m_stickyVisible = false;
     int m_stickyOffsetY = 0;
     bool m_initialized = false;
+    int m_nextOffset = 0;
+    bool m_hasMore = true;
+
+    static constexpr int kPageSize = 20;
 };

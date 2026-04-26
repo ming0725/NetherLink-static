@@ -21,6 +21,7 @@ protected:
     void wheelEvent(QWheelEvent* event) override;
     void enterEvent(QEnterEvent* event) override;
     void leaveEvent(QEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
     bool viewportEvent(QEvent* event) override;
 
     void showOverlayScrollBar();

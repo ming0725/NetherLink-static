@@ -19,19 +19,27 @@ public:
     ConversationThreadData requestConversationThread(const ConversationThreadRequest& query) const;
 
 public slots:
+    void touchConversation(const QString& conversationId,
+                           const QDateTime& timestamp = QDateTime::currentDateTime());
+    void markConversationRead(const QString& conversationId);
+    void removeConversation(const QString& conversationId);
     void addMessage(const QString& conversationId,
                     QSharedPointer<ChatMessage> message);
     void removeMessage(const QString& conversationId, int index);
+    bool removeMessage(const QString& conversationId,
+                       const QSharedPointer<ChatMessage>& message);
 
 signals:
     // conversationId 对应的最后一条消息已更新（nullptr 表示已无消息）
     void lastMessageChanged(const QString& conversationId,
                             QSharedPointer<ChatMessage> lastMessage);
+    void conversationListChanged(const QString& conversationId);
 
 private:
     explicit MessageRepository(QObject* parent = nullptr);
     Q_DISABLE_COPY(MessageRepository)
 
     QMap<QString, QVector<QSharedPointer<ChatMessage>>> m_store;
+    QMap<QString, ConversationSyncState> m_conversationStates;
     mutable QMutex m_mutex;
 };

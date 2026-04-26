@@ -43,6 +43,8 @@ private:
     void saveRemark();
     void rebuildCategoryMenu();
     void changeCategory(const QString& categoryId, const QString& categoryName);
+    void updateExitButtonState();
+    void confirmExitGroup();
 
     Group m_group;
     bool m_hasGroup = false;

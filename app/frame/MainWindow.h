@@ -30,6 +30,8 @@ private:
     QWidget* createPlaceholderPage() const;
     void replaceStackPage(int index, QWidget* widget);
     void ensureApplicationLoaded(int index);
+    void connectFriendConversationRequests();
+    void openConversationFromContacts(const QString& conversationId);
     void layoutWindow();
 
     ApplicationBar *appBar;

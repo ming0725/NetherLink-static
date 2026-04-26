@@ -56,6 +56,18 @@ void AiChatListModel::setEntries(QVector<AiChatListEntry> entries)
     endResetModel();
 }
 
+void AiChatListModel::appendEntries(const QVector<AiChatListEntry>& entries)
+{
+    if (entries.isEmpty()) {
+        return;
+    }
+
+    const int firstRow = m_entries.size();
+    beginInsertRows(QModelIndex(), firstRow, firstRow + entries.size() - 1);
+    m_entries += entries;
+    endInsertRows();
+}
+
 AiChatListEntry AiChatListModel::entryAt(const QModelIndex& index) const
 {
     if (!index.isValid() || index.row() < 0 || index.row() >= m_entries.size()) {

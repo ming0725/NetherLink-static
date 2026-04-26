@@ -8,6 +8,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMessageBox>
 #include <QPainter>
 #include <QResizeEvent>
 #include <QScrollArea>
@@ -17,6 +18,7 @@
 #include <QVBoxLayout>
 
 #include "features/friend/data/UserRepository.h"
+#include "features/chat/data/MessageRepository.h"
 #include "shared/services/ImageService.h"
 #include "shared/ui/StatefulPushButton.h"
 
@@ -156,6 +158,7 @@ FriendDetailPage::FriendDetailPage(QWidget* parent)
     , m_avatarLabel(new AvatarLabel(this))
     , m_nameLabel(new QLabel(this))
     , m_idLabel(new QLabel(this))
+    , m_regionRow(new QWidget(this))
     , m_regionLabel(new QLabel(this))
     , m_statusIcon(new QLabel(this))
     , m_statusLabel(new QLabel(this))
@@ -196,6 +199,7 @@ FriendDetailPage::FriendDetailPage(QWidget* parent)
     nameFont.setWeight(QFont::DemiBold);
     m_nameLabel->setFont(nameFont);
     m_nameLabel->setStyleSheet(QStringLiteral("color: #111111;"));
+    m_nameLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
     QFont secondaryFont = m_idLabel->font();
     secondaryFont.setPixelSize(13);
@@ -203,7 +207,9 @@ FriendDetailPage::FriendDetailPage(QWidget* parent)
     m_regionLabel->setFont(secondaryFont);
     m_statusLabel->setFont(secondaryFont);
     m_idLabel->setStyleSheet(QStringLiteral("color: #777777;"));
+    m_idLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_regionLabel->setStyleSheet(QStringLiteral("color: #777777;"));
+    m_regionLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_statusLabel->setStyleSheet(QStringLiteral("color: #222222;"));
 
     auto* statusRow = new QHBoxLayout;
@@ -216,7 +222,6 @@ FriendDetailPage::FriendDetailPage(QWidget* parent)
 
     identity->addWidget(m_nameLabel);
     identity->addWidget(m_idLabel);
-    identity->addWidget(m_regionLabel);
     identity->addLayout(statusRow);
     identity->addStretch();
     header->addLayout(identity, 1);
@@ -225,6 +230,15 @@ FriendDetailPage::FriendDetailPage(QWidget* parent)
     contentLayout->addSpacing(54);
     contentLayout->addWidget(makeSeparator());
     contentLayout->addSpacing(34);
+
+    auto* regionHost = new QWidget(this);
+    auto* regionLayout = new QHBoxLayout(regionHost);
+    regionLayout->setContentsMargins(0, 0, 0, 0);
+    regionLayout->addWidget(m_regionLabel, 1);
+    contentLayout->addWidget(m_regionRow);
+    m_regionRow->setLayout(makeInfoRow(QStringLiteral("地区"), regionHost));
+    m_regionRow->layout()->setContentsMargins(0, 0, 0, 28);
+    m_regionRow->hide();
 
     m_remarkEdit->setPlaceholderText(QStringLiteral("设置好友备注"));
     m_remarkEdit->setFixedHeight(34);
@@ -272,12 +286,7 @@ FriendDetailPage::FriendDetailPage(QWidget* parent)
         }
     });
     connect(m_deleteButton, &StatefulPushButton::clicked, this, [this]() {
-        if (!m_hasUser) {
-            return;
-        }
-        UserRepository::instance().removeUser(m_user.id);
-        clear();
-        emit friendDeleted();
+        confirmDeleteFriend();
     });
 
     auto* groupMenu = new QMenu(m_groupButton);
@@ -309,6 +318,11 @@ void FriendDetailPage::clear()
 {
     m_user = {};
     m_hasUser = false;
+    m_nameLabel->clear();
+    m_idLabel->clear();
+    m_regionLabel->clear();
+    m_regionRow->hide();
+    m_statusLabel->clear();
 }
 
 void FriendDetailPage::resizeEvent(QResizeEvent* event)
@@ -342,7 +356,7 @@ void FriendDetailPage::setUser(const User& user)
     m_nameLabel->setText(m_user.nick);
     m_idLabel->setText(QStringLiteral("ID %1").arg(m_user.id));
     m_regionLabel->setText(m_user.region);
-    m_regionLabel->setVisible(!m_user.region.isEmpty());
+    m_regionRow->setVisible(!m_user.region.isEmpty());
     m_statusLabel->setText(statusText(m_user.status));
     updateAvatar();
     updateRemarkText();
@@ -448,4 +462,25 @@ void FriendDetailPage::changeGroup(const QString& groupId, const QString& groupN
     m_user.friendGroupName = groupName;
     UserRepository::instance().saveUser(m_user);
     updateGroupButtonText();
+}
+
+void FriendDetailPage::confirmDeleteFriend()
+{
+    if (!m_hasUser) {
+        return;
+    }
+
+    const int result = QMessageBox::question(this,
+                                             QStringLiteral("删除好友"),
+                                             QStringLiteral("确认删除该好友吗？"),
+                                             QMessageBox::Yes | QMessageBox::No,
+                                             QMessageBox::No);
+    if (result != QMessageBox::Yes) {
+        return;
+    }
+
+    MessageRepository::instance().removeConversation(m_user.id);
+    UserRepository::instance().removeUser(m_user.id);
+    clear();
+    emit friendDeleted();
 }

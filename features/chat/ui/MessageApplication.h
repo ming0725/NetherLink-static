@@ -13,6 +13,10 @@ class MessageApplication : public QWidget {
 public:
     explicit MessageApplication(QWidget* parent = nullptr);
     void handleGlobalMousePress(const QPoint& globalPos);
+
+public slots:
+    void openConversationFromContact(const QString& conversationId);
+
 protected:
     void resizeEvent(QResizeEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
@@ -23,6 +27,7 @@ private:
     public:
         explicit LeftPane(QWidget* parent = nullptr);
         MessageListWidget* messageList() const { return m_msgList; }
+        IconLineEdit* searchInput() const { return m_searchInput; }
 
     protected:
         void resizeEvent(QResizeEvent* event) override;

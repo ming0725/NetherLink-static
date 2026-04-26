@@ -560,10 +560,9 @@ void ChatItemDelegate::showContextMenu(const QPoint& pos, const QModelIndex& ind
     // 添加删除选项
     QAction* deleteAction = menu->addAction("删除");
     connect(deleteAction, &QAction::triggered, [this, index, model = index.model()]() {
-        if (ChatListModel* chatModel = qobject_cast<ChatListModel*>(const_cast<QAbstractItemModel*>(model))) {
-            chatModel->removeMessage(index.row());
-            showSuccessNotificationForDelegate(this, QStringLiteral("删除成功！"));
-        }
+        Q_UNUSED(model);
+        emit const_cast<ChatItemDelegate*>(this)->deleteRequested(index.row());
+        showSuccessNotificationForDelegate(this, QStringLiteral("删除成功！"));
     });
 
     // 显示菜单

@@ -258,6 +258,7 @@ void MainWindow::ensureApplicationLoaded(int index)
         if (!m_friendApp) {
             m_friendApp = new FriendApplication(this);
             replaceStackPage(index, m_friendApp);
+            connectFriendConversationRequests();
         }
         break;
     case 2:
@@ -274,6 +275,31 @@ void MainWindow::ensureApplicationLoaded(int index)
         break;
     default:
         break;
+    }
+}
+
+void MainWindow::connectFriendConversationRequests()
+{
+    if (!m_friendApp) {
+        return;
+    }
+
+    connect(m_friendApp, &FriendApplication::requestOpenConversation,
+            this, &MainWindow::openConversationFromContacts,
+            Qt::UniqueConnection);
+}
+
+void MainWindow::openConversationFromContacts(const QString& conversationId)
+{
+    if (conversationId.isEmpty()) {
+        return;
+    }
+
+    ensureApplicationLoaded(0);
+    appBar->setCurrentTopIndex(0);
+    stack->setCurrentIndex(0);
+    if (m_messageApp) {
+        m_messageApp->openConversationFromContact(conversationId);
     }
 }
 

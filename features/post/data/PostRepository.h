@@ -24,9 +24,15 @@ private:
     explicit PostRepository(QObject* parent = nullptr);
     Q_DISABLE_COPY(PostRepository)
 
-    void generateSamplePosts();
+    struct PostLikeState {
+        int likes = 0;
+        bool isLiked = false;
+    };
+
+    Post buildPostAt(int index) const;
+    int postIndexForId(const QString& postId) const;
     PostSummary buildSummary(const Post& post) const;
 
-    QVector<Post> postList;
+    QMap<QString, PostLikeState> m_likeStates;
     mutable QMutex mutex;
 };

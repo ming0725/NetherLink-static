@@ -15,6 +15,7 @@ public:
     void setModel(QAbstractItemModel *model) override;
     void scrollToBottom();
     void jumpToBottom();
+    void preserveScrollPositionAfterPrepend(int previousValue, int previousMaximum);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;

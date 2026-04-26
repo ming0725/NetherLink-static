@@ -73,6 +73,61 @@ const QFontMetrics& badgeMetrics()
     return metrics;
 }
 
+int fullMonthsBetween(const QDate& from, const QDate& to)
+{
+    int months = (to.year() - from.year()) * 12 + (to.month() - from.month());
+    if (to.day() < from.day()) {
+        --months;
+    }
+    return months;
+}
+
+int fullYearsBetween(const QDate& from, const QDate& to)
+{
+    int years = to.year() - from.year();
+    if (to.month() < from.month() ||
+        (to.month() == from.month() && to.day() < from.day())) {
+        --years;
+    }
+    return years;
+}
+
+QString formatConversationTime(const QDateTime& timestamp)
+{
+    if (!timestamp.isValid()) {
+        return {};
+    }
+
+    const QDateTime now = QDateTime::currentDateTime();
+    if (timestamp > now) {
+        return timestamp.toString(QStringLiteral("HH:mm"));
+    }
+
+    const QString minuteText = timestamp.toString(QStringLiteral("HH:mm"));
+    const int dayDiff = timestamp.date().daysTo(now.date());
+    if (dayDiff <= 0) {
+        return minuteText;
+    }
+    if (dayDiff == 1) {
+        return QStringLiteral("昨天 %1").arg(minuteText);
+    }
+    if (dayDiff < 30) {
+        return QStringLiteral("%1天前").arg(dayDiff);
+    }
+
+    const int monthDiff = fullMonthsBetween(timestamp.date(), now.date());
+    if (monthDiff > 0 && monthDiff < 12) {
+        return QStringLiteral("%1个月前").arg(monthDiff);
+    }
+
+    const int yearDiff = fullYearsBetween(timestamp.date(), now.date());
+    if (yearDiff > 0) {
+        return QStringLiteral("%1年前").arg(yearDiff);
+    }
+
+    return QStringLiteral("%1天前").arg(dayDiff);
+}
+
 } // namespace
 
 MessageListDelegate::MessageListDelegate(QObject* parent)
@@ -109,7 +164,7 @@ void MessageListDelegate::paint(QPainter* painter,
     const int rightEdge = option.rect.right() - kRightPadding;
 
     const QDateTime lastTime = index.data(MessageListModel::LastTimeRole).toDateTime();
-    const QString timeText = lastTime.isValid() ? lastTime.toString("HH:mm") : QString();
+    const QString timeText = formatConversationTime(lastTime);
     const int timeWidth = timeText.isEmpty() ? 0 : timeMetrics().horizontalAdvance(timeText);
     const int timeHeight = timeMetrics().height();
     const int nameHeight = nameMetrics().height();
@@ -190,13 +245,11 @@ MessageListDelegate::BadgeLayout MessageListDelegate::badgeLayoutForItem(const Q
     const bool doNotDisturb = index.data(MessageListModel::DoNotDisturbRole).toBool();
 
     BadgeLayout layout;
-    if (unreadCount <= 0 && !doNotDisturb) {
-        return layout;
-    }
-
-    if (unreadCount <= 0 && doNotDisturb) {
-        layout.drawIcon = true;
-        layout.size = QSize(kBadgeHeight, kBadgeHeight);
+    if (unreadCount <= 0) {
+        if (doNotDisturb) {
+            layout.drawIcon = true;
+            layout.size = QSize(kBadgeHeight, kBadgeHeight);
+        }
         return layout;
     }
 

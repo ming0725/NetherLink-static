@@ -40,8 +40,12 @@ AiChatListWidget::AiChatListWidget(QWidget* parent)
 
     connect(selectionModel(), &QItemSelectionModel::currentChanged,
             this, &AiChatListWidget::onCurrentChanged);
-    connect(verticalScrollBar(), &QScrollBar::valueChanged,
-            this, &AiChatListWidget::updateStickyHeader);
+    connect(verticalScrollBar(), &QScrollBar::valueChanged, this, [this]() {
+        updateStickyHeader();
+        if (verticalScrollBar()->value() >= verticalScrollBar()->maximum() - 160) {
+            loadMoreEntries();
+        }
+    });
     connect(m_model, &QAbstractItemModel::modelReset,
             this, [this]() { updateStickyHeader(); });
     connect(m_model, &QAbstractItemModel::rowsInserted,
@@ -68,7 +72,9 @@ void AiChatListWidget::ensureInitialized()
 
 void AiChatListWidget::reloadEntries(const QString& selectedConversationId)
 {
-    m_model->setEntries(AiChatRepository::instance().requestAiChatList());
+    m_nextOffset = 0;
+    m_hasMore = true;
+    loadMoreEntries();
 
     if (selectedConversationId.isEmpty()) {
         clearSelection();
@@ -77,6 +83,10 @@ void AiChatListWidget::reloadEntries(const QString& selectedConversationId)
         }
         setCurrentIndex(QModelIndex());
         return;
+    }
+
+    while (m_model->rowOfConversation(selectedConversationId) < 0 && m_hasMore) {
+        loadMoreEntries();
     }
 
     const int row = m_model->rowOfConversation(selectedConversationId);
@@ -91,6 +101,31 @@ void AiChatListWidget::reloadEntries(const QString& selectedConversationId)
 
     selectionModel()->setCurrentIndex(m_model->index(row, 0),
                                       QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+}
+
+void AiChatListWidget::loadMoreEntries()
+{
+    if (!m_hasMore) {
+        return;
+    }
+
+    QVector<AiChatListEntry> entries = AiChatRepository::instance().requestAiChatList({
+            m_nextOffset,
+            kPageSize + 1
+    });
+    const bool hasMore = entries.size() > kPageSize;
+    if (hasMore) {
+        entries.resize(kPageSize);
+    }
+
+    if (m_nextOffset == 0) {
+        m_model->setEntries(std::move(entries));
+    } else {
+        m_model->appendEntries(entries);
+    }
+
+    m_nextOffset += entries.size();
+    m_hasMore = hasMore;
 }
 
 void AiChatListWidget::mousePressEvent(QMouseEvent* event)

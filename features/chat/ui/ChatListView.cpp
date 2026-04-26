@@ -95,6 +95,21 @@ void ChatListView::jumpToBottom()
     updateOverlayScrollBar();
 }
 
+void ChatListView::preserveScrollPositionAfterPrepend(int previousValue, int previousMaximum)
+{
+    m_scrollAnimation->stop();
+    QTimer::singleShot(0, this, [this, previousValue, previousMaximum]() {
+        doItemsLayout();
+        updateGeometries();
+        QScrollBar* scrollBar = verticalScrollBar();
+        const int addedHeight = qMax(0, scrollBar->maximum() - previousMaximum);
+        scrollBar->setValue(qBound(scrollBar->minimum(),
+                                   previousValue + addedHeight,
+                                   scrollBar->maximum()));
+        updateOverlayScrollBar();
+    });
+}
+
 void ChatListView::resizeEvent(QResizeEvent* event)
 {
     const bool wasNearBottom = verticalScrollBar()->maximum() - verticalScrollBar()->value() <= 5;

@@ -1,14 +1,14 @@
 #include "PostRepository.h"
 
 #include <QImageReader>
-#include <QRandomGenerator>
 #include <QTimer>
 #include <QUuid>
 
-#include "shared/data/RepositoryTemplate.h"
 #include "features/friend/data/UserRepository.h"
 
 namespace {
+
+constexpr int kSamplePostCount = 40;
 
 const QString kPostContent = QString(
         "救命！今天下班路上抬头一看\n"
@@ -96,94 +96,11 @@ QSize imageSizeForSource(const QString& source)
     return reader.size();
 }
 
-class PostFeedRequestOperation final
-    : public RepositoryTemplate<PostFeedRequest, QVector<PostSummary>> {
-public:
-    explicit PostFeedRequestOperation(QVector<Post> posts)
-        : m_posts(std::move(posts))
-    {
-    }
-
-private:
-    QVector<PostSummary> doRequest(const PostFeedRequest& query) const override
-    {
-        QVector<PostSummary> result;
-        if (query.limit <= 0 || query.offset < 0 || query.offset >= m_posts.size()) {
-            return result;
-        }
-
-        const int end = qMin(m_posts.size(), query.offset + query.limit);
-        result.reserve(end - query.offset);
-
-        for (int index = query.offset; index < end; ++index) {
-            const Post& post = m_posts.at(index);
-            const User author = UserRepository::instance().requestUserDetail({post.authorID});
-            result.push_back(PostSummary{
-                    post.postID,
-                    post.title,
-                    post.thumbnailPath,
-                    post.thumbnailSize,
-                    post.authorID,
-                    author.nick,
-                    author.avatarPath,
-                    post.likes,
-                    post.commentCount,
-                    post.isLiked
-            });
-        }
-        return result;
-    }
-
-    QVector<Post> m_posts;
-};
-
-class PostDetailRequestOperation final
-    : public RepositoryTemplate<PostDetailRequest, PostDetailData> {
-public:
-    explicit PostDetailRequestOperation(QVector<Post> posts)
-        : m_posts(std::move(posts))
-    {
-    }
-
-private:
-    void validate(const PostDetailRequest& query) const override
-    {
-        Q_UNUSED(query);
-    }
-
-    PostDetailData doRequest(const PostDetailRequest& query) const override
-    {
-        for (const Post& post : m_posts) {
-            if (post.postID != query.postId) {
-                continue;
-            }
-
-            const User author = UserRepository::instance().requestUserDetail({post.authorID});
-            return PostDetailData{
-                    post.postID,
-                    post.title,
-                    post.content,
-                    post.authorID,
-                    author.nick,
-                    author.avatarPath,
-                    post.picturesPath,
-                    post.likes,
-                    post.commentCount,
-                    post.isLiked
-            };
-        }
-        return {};
-    }
-
-    QVector<Post> m_posts;
-};
-
 } // namespace
 
 PostRepository::PostRepository(QObject* parent)
         : QObject(parent)
 {
-    generateSamplePosts();
 }
 
 PostRepository& PostRepository::instance()
@@ -195,13 +112,41 @@ PostRepository& PostRepository::instance()
 QVector<PostSummary> PostRepository::requestPostFeed(const PostFeedRequest& query) const
 {
     QMutexLocker locker(&mutex);
-    return PostFeedRequestOperation(postList).request(query);
+    QVector<PostSummary> result;
+    if (query.limit <= 0 || query.offset < 0 || query.offset >= kSamplePostCount) {
+        return result;
+    }
+
+    const int end = qMin(kSamplePostCount, query.offset + query.limit);
+    result.reserve(end - query.offset);
+    for (int index = query.offset; index < end; ++index) {
+        result.push_back(buildSummary(buildPostAt(index)));
+    }
+    return result;
 }
 
 PostDetailData PostRepository::requestPostDetail(const PostDetailRequest& query) const
 {
     QMutexLocker locker(&mutex);
-    return PostDetailRequestOperation(postList).request(query);
+    const int index = postIndexForId(query.postId);
+    if (index < 0) {
+        return {};
+    }
+
+    const Post post = buildPostAt(index);
+    const User author = UserRepository::instance().requestUserDetail({post.authorID});
+    return PostDetailData{
+            post.postID,
+            post.title,
+            post.content,
+            post.authorID,
+            author.nick,
+            author.avatarPath,
+            post.picturesPath,
+            post.likes,
+            post.commentCount,
+            post.isLiked
+    };
 }
 
 QString PostRepository::requestPostDetailAsync(const PostDetailRequest& query, int delayMs)
@@ -216,38 +161,33 @@ QString PostRepository::requestPostDetailAsync(const PostDetailRequest& query, i
 bool PostRepository::setPostLiked(const QString& postId, bool liked)
 {
     PostSummary summary;
-    bool updated = false;
 
     {
         QMutexLocker locker(&mutex);
-        for (Post& post : postList) {
-            if (post.postID != postId) {
-                continue;
-            }
-
-            if (post.isLiked == liked) {
-                summary = buildSummary(post);
-                updated = true;
-                break;
-            }
-
-            post.isLiked = liked;
-            post.likes += liked ? 1 : -1;
-            post.likes = qMax(0, post.likes);
-            summary = buildSummary(post);
-            updated = true;
-            break;
+        const int index = postIndexForId(postId);
+        if (index < 0) {
+            return false;
         }
+
+        Post post = buildPostAt(index);
+        if (post.isLiked != liked) {
+            post.isLiked = liked;
+            post.likes = qMax(0, post.likes + (liked ? 1 : -1));
+            m_likeStates.insert(post.postID, {post.likes, post.isLiked});
+        }
+        summary = buildSummary(post);
     }
 
-    if (updated) {
-        emit postUpdated(summary);
-    }
-    return updated;
+    emit postUpdated(summary);
+    return true;
 }
 
-void PostRepository::generateSamplePosts()
+Post PostRepository::buildPostAt(int index) const
 {
+    if (index < 0 || index >= kSamplePostCount) {
+        return {};
+    }
+
     const QStringList authorIDs = {
             "u001", "u002", "u003", "u004", "u005",
             "u006", "u007", "u008", "u009", "u010"
@@ -255,22 +195,37 @@ void PostRepository::generateSamplePosts()
 
     const QDateTime baseTime = QDateTime::fromString("2024-05-21T18:00:00", Qt::ISODate);
 
-    for (int i = 0; i < 40; ++i) {
-        Post post;
-        post.postID = QString("p%1").arg(i + 1, 3, 10, QChar('0'));
-        post.title = QString("Post 标题 %1").arg(i + 1);
-        post.content = kPostContent;
-        post.likes = QRandomGenerator::global()->bounded(1000);
-        post.commentCount = QRandomGenerator::global()->bounded(200);
-        post.authorID = authorIDs[QRandomGenerator::global()->bounded(authorIDs.size())];
-        post.createdAt = baseTime.addSecs(-i * 1800);
-        const QString imagePath = QString(":/resources/post/%1.jpg")
-                                          .arg(QRandomGenerator::global()->bounded(10));
-        post.thumbnailPath = imagePath;
-        post.thumbnailSize = imageSizeForSource(imagePath);
-        post.picturesPath.append(imagePath);
-        postList.append(post);
+    Post post;
+    post.postID = QString("p%1").arg(index + 1, 3, 10, QChar('0'));
+    post.title = QString("Post 标题 %1").arg(index + 1);
+    post.content = kPostContent;
+    post.likes = (index * 137 + 211) % 1000;
+    post.commentCount = (index * 29 + 17) % 200;
+    post.authorID = authorIDs.at((index * 3 + 1) % authorIDs.size());
+    post.createdAt = baseTime.addSecs(-index * 1800);
+    const QString imagePath = QString(":/resources/post/%1.jpg").arg((index * 7 + 3) % 10);
+    post.thumbnailPath = imagePath;
+    post.thumbnailSize = imageSizeForSource(imagePath);
+    post.picturesPath.append(imagePath);
+
+    const auto likeIt = m_likeStates.constFind(post.postID);
+    if (likeIt != m_likeStates.constEnd()) {
+        post.likes = likeIt->likes;
+        post.isLiked = likeIt->isLiked;
     }
+    return post;
+}
+
+int PostRepository::postIndexForId(const QString& postId) const
+{
+    if (!postId.startsWith(QLatin1Char('p'))) {
+        return -1;
+    }
+
+    bool ok = false;
+    const int serial = postId.mid(1).toInt(&ok);
+    const int index = serial - 1;
+    return ok && index >= 0 && index < kSamplePostCount ? index : -1;
 }
 
 PostSummary PostRepository::buildSummary(const Post& post) const

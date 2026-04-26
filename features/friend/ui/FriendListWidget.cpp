@@ -1,5 +1,6 @@
 #include "FriendListWidget.h"
 
+#include <QAbstractItemView>
 #include <QApplication>
 #include <QCursor>
 #include <QItemSelectionModel>
@@ -68,6 +69,11 @@ FriendListWidget::FriendListWidget(QWidget* parent)
 
     connect(selectionModel(), &QItemSelectionModel::currentChanged,
             this, &FriendListWidget::onCurrentChanged);
+    connect(this, &QAbstractItemView::doubleClicked, this, [this](const QModelIndex& index) {
+        if (m_model->isFriendRow(index)) {
+            emit requestMessage(m_model->friendIdAt(index));
+        }
+    });
     connect(&UserRepository::instance(), &UserRepository::friendListChanged,
             this, &FriendListWidget::reloadFriends);
     m_searchDebounceTimer->setSingleShot(true);

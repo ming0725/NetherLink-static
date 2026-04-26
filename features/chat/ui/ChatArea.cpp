@@ -27,6 +27,8 @@ static constexpr int kChatListBottomSpacePadding = 10;
 static constexpr int kNewMessageNotifierBottomMargin = 26;
 static constexpr int kInputBarBottomGradientFadeHeight = 32;
 static constexpr int kInputBarBottomGradientSolidAlpha = 192;
+static constexpr int kOlderMessagePageSize = 24;
+static constexpr int kFetchOlderTopThreshold = 8;
 
 class BottomGapGradientOverlay : public QWidget
 {
@@ -157,6 +159,8 @@ ChatArea::ChatArea(QWidget *parent)
             this, &ChatArea::onSendTextAsPeer);
     connect(inputBar, &FloatingInputBar::inputFocused,
             this, &ChatArea::clearMessageSelection);
+    connect(chatDelegate, &ChatItemDelegate::deleteRequested,
+            this, &ChatArea::onDeleteMessageRequested);
 
     chatView->setAutoFillBackground(true);
     chatView->viewport()->setAutoFillBackground(true);
@@ -178,6 +182,7 @@ void ChatArea::addMessage(QSharedPointer<ChatMessage> message)
     // 添加消息
     chatModel->addMessage(message);
     MessageRepository::instance().addMessage(conversationId(), message);
+    ++m_state.loadedMessageCount;
 
     // 调整底部空白
     adjustBottomSpace();
@@ -212,6 +217,13 @@ void ChatArea::onScrollValueChanged(int)
     if (m_state.isAtBottom) {
         m_state.unreadMessageCount = 0;
         updateNewMessageNotifier();
+    }
+
+    if (m_state.allowOlderMessageFetch &&
+        m_state.hasMoreBefore &&
+        !m_state.loadingOlderMessages &&
+        chatView->verticalScrollBar()->value() <= kFetchOlderTopThreshold) {
+        loadOlderMessages();
     }
 }
 
@@ -408,6 +420,27 @@ void ChatArea::onSendTextAsPeer(const QString& text)
     addMessage(ptr);
 }
 
+void ChatArea::onDeleteMessageRequested(int row)
+{
+    if (conversationId().isEmpty() || !chatModel) {
+        return;
+    }
+
+    const QSharedPointer<ChatMessage> message = chatModel->sharedMessageAt(row);
+    if (message.isNull()) {
+        return;
+    }
+
+    if (!MessageRepository::instance().removeMessage(conversationId(), message)) {
+        return;
+    }
+
+    if (chatModel->removeMessage(row) && m_state.loadedMessageCount > 0) {
+        --m_state.loadedMessageCount;
+    }
+    adjustBottomSpace();
+}
+
 void ChatArea::clearConversation()
 {
     chatModel->clear();
@@ -416,6 +449,37 @@ void ChatArea::clearConversation()
     nameLabel->clear();
     statusIcon->hide();
     newMessageNotifier->hide();
+}
+
+void ChatArea::loadOlderMessages()
+{
+    if (conversationId().isEmpty() || !m_state.hasMoreBefore || m_state.loadingOlderMessages) {
+        return;
+    }
+
+    m_state.loadingOlderMessages = true;
+    QScrollBar* scrollBar = chatView->verticalScrollBar();
+    const int previousValue = scrollBar->value();
+    const int previousMaximum = scrollBar->maximum();
+
+    const ConversationThreadData olderPage = MessageRepository::instance().requestConversationThread({
+            conversationId(),
+            m_state.loadedMessageCount,
+            kOlderMessagePageSize
+    });
+
+    if (olderPage.messages.isEmpty()) {
+        m_state.hasMoreBefore = false;
+        m_state.loadingOlderMessages = false;
+        return;
+    }
+
+    chatModel->prependMessages(olderPage.messages);
+    m_state.loadedMessageCount = olderPage.loadedMessageCount;
+    m_state.hasMoreBefore = olderPage.hasMoreBefore;
+    adjustBottomSpace();
+    chatView->preserveScrollPositionAfterPrepend(previousValue, previousMaximum);
+    m_state.loadingOlderMessages = false;
 }
 
 QString ChatArea::conversationId() const
@@ -432,12 +496,16 @@ void ChatArea::openConversation(const ConversationThreadData& conversation)
 {
     clearConversation();
     m_state.meta = conversation.meta;
+    m_state.loadedMessageCount = conversation.loadedMessageCount;
+    m_state.hasMoreBefore = conversation.hasMoreBefore;
+    m_state.allowOlderMessageFetch = false;
     applyConversationMeta();
-    for (const auto& message : conversation.messages) {
-        chatModel->addMessage(message);
-    }
+    chatModel->setMessages(conversation.messages);
     adjustBottomSpace();
-    QTimer::singleShot(0, chatView, &ChatListView::jumpToBottom);
+    QTimer::singleShot(0, this, [this]() {
+        chatView->jumpToBottom();
+        m_state.allowOlderMessageFetch = true;
+    });
     QTimer::singleShot(0, inputBar, &FloatingInputBar::focusInput);
 }
 

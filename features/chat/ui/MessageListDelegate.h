@@ -39,5 +39,5 @@ private:
     static constexpr int kTimeGap = 12;
     static constexpr int kBadgeGap = 8;
     static constexpr int kBadgeHeight = 16;
-    static constexpr int kBadgeHorizontalPadding = 6;
+    static constexpr int kBadgeHorizontalPadding = 4;
 };

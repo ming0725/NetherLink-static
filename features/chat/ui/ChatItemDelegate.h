@@ -21,6 +21,9 @@ public:
                        const QModelIndex& index,
                        const QPoint& viewportPos) const;
 
+signals:
+    void deleteRequested(int row);
+
 private:
     static constexpr int AVATAR_SIZE = 40;
     static constexpr int BUBBLE_MARGIN = 10;

@@ -254,6 +254,14 @@ FriendApplication::FriendApplication(QWidget* parent)
                 m_groupDetailPage->setGroupId(groupId);
                 m_rightStack->setCurrentWidget(m_groupDetailPage);
             });
+    connect(m_leftPane->friendList(), &FriendListWidget::requestMessage,
+            this, &FriendApplication::requestOpenConversation);
+    connect(m_leftPane->groupList(), &GroupListWidget::requestMessage,
+            this, &FriendApplication::requestOpenConversation);
+    connect(m_detailPage, &FriendDetailPage::requestMessage,
+            this, &FriendApplication::requestOpenConversation);
+    connect(m_groupDetailPage, &GroupDetailPage::requestMessage,
+            this, &FriendApplication::requestOpenConversation);
     connect(m_detailPage, &FriendDetailPage::friendDeleted,
             this, [this]() {
                 m_rightStack->setCurrentWidget(m_defaultPage);
