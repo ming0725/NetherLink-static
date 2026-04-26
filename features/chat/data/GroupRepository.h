@@ -12,6 +12,8 @@ public:
     static GroupRepository& instance();
 
     QVector<Group> requestGroupList(const GroupListRequest& query = {}) const;
+    QVector<GroupCategorySummary> requestGroupCategorySummaries(const GroupCategoryListRequest& query = {}) const;
+    QVector<Group> requestGroupsInCategory(const GroupCategoryItemsRequest& query) const;
     Group requestGroupDetail(const GroupDetailRequest& query) const;
     QString requestGroupAvatarPath(const QString& groupId) const;
     QMap<QString, QString> requestGroupCategories() const;

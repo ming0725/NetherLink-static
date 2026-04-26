@@ -12,6 +12,7 @@ class FriendListModel;
 class QEvent;
 class QPaintEvent;
 class QPainter;
+class QTimer;
 class QVariantAnimation;
 
 class FriendListWidget : public OverlayScrollListView
@@ -39,6 +40,7 @@ protected:
 private:
     struct ViewState {
         QString keyword;
+        QString loadedKeyword;
         QString selectedFriendId;
         bool initialized = false;
     };
@@ -67,6 +69,8 @@ private:
     void toggleGroupById(const QString& groupId, bool keepGroupAtTop = false);
     void collapseGroupById(const QString& groupId, bool keepGroupAtTop = false);
     void setGroupExpandedAnimated(const QString& groupId, bool expanded, bool keepGroupAtTop = false);
+    void loadNextFriendPage(const QString& groupId);
+    void loadMoreForVisibleGroup();
     bool isGroupPinnedAtTop(const QString& groupId) const;
     void scrollGroupToTop(const QString& groupId);
     void clearCurrentSelection();
@@ -80,9 +84,11 @@ private:
 
     FriendListModel* m_model;
     FriendListDelegate* m_delegate;
+    QTimer* m_searchDebounceTimer;
     ViewState m_state;
     QHash<QString, QPointer<QVariantAnimation>> m_groupAnimations;
     StickyGroupData m_stickyGroup;
     bool m_stickyVisible = false;
+    bool m_preservingSelection = false;
     int m_stickyOffsetY = 0;
 };

@@ -308,6 +308,14 @@ GroupDetailPage::GroupDetailPage(QWidget* parent)
         emit groupExited();
     });
 
+    auto* categoryMenu = new QMenu(m_categoryButton);
+    categoryMenu->setStyleSheet(QStringLiteral(
+            "QMenu { background: #f0f0f0; border: 1px solid #d6d6d6; padding: 4px; }"
+            "QMenu::item { padding: 6px 26px 6px 24px; border-radius: 4px; }"
+            "QMenu::item:selected { background: #e2e2e2; }"));
+    connect(categoryMenu, &QMenu::aboutToShow, this, &GroupDetailPage::rebuildCategoryMenu);
+    m_categoryButton->setMenu(categoryMenu);
+
     qApp->installEventFilter(this);
 }
 
@@ -370,7 +378,6 @@ void GroupDetailPage::setGroup(const Group& group)
     updateMemberCountText();
     QTimer::singleShot(0, this, &GroupDetailPage::updateIntroText);
     QTimer::singleShot(0, this, &GroupDetailPage::updateAnnouncementText);
-    rebuildCategoryMenu();
 }
 
 void GroupDetailPage::updateAvatar()
@@ -443,11 +450,15 @@ void GroupDetailPage::saveRemark()
 
 void GroupDetailPage::rebuildCategoryMenu()
 {
-    auto* menu = new QMenu(m_categoryButton);
-    menu->setStyleSheet(QStringLiteral(
-            "QMenu { background: #f0f0f0; border: 1px solid #d6d6d6; padding: 4px; }"
-            "QMenu::item { padding: 6px 26px 6px 24px; border-radius: 4px; }"
-            "QMenu::item:selected { background: #e2e2e2; }"));
+    QMenu* menu = m_categoryButton->menu();
+    if (!menu) {
+        return;
+    }
+    menu->clear();
+    const QList<QActionGroup*> oldGroups = menu->findChildren<QActionGroup*>(QString(), Qt::FindDirectChildrenOnly);
+    for (QActionGroup* oldGroup : oldGroups) {
+        delete oldGroup;
+    }
 
     auto* group = new QActionGroup(menu);
     group->setExclusive(true);
@@ -470,10 +481,6 @@ void GroupDetailPage::rebuildCategoryMenu()
         addCategoryAction(categoryId, categories.value(categoryId));
     }
 
-    if (QMenu* oldMenu = m_categoryButton->menu()) {
-        oldMenu->deleteLater();
-    }
-    m_categoryButton->setMenu(menu);
 }
 
 void GroupDetailPage::changeCategory(const QString& categoryId, const QString& categoryName)
@@ -489,5 +496,4 @@ void GroupDetailPage::changeCategory(const QString& categoryId, const QString& c
     m_group.listGroupName = categoryName;
     GroupRepository::instance().saveGroup(m_group);
     updateCategoryButtonText();
-    rebuildCategoryMenu();
 }

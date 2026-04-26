@@ -341,6 +341,51 @@ QPixmap ImageService::circularAvatar(const QString& source,
                        true);
 }
 
+QPixmap ImageService::circularAvatarPreview(const QString& source,
+                                            int size,
+                                            qreal devicePixelRatio) const
+{
+    if (size <= 0) {
+        return {};
+    }
+
+    const QSize targetSize(size, size);
+    const QString key = variantKey("avatar-preview",
+                                   source,
+                                   targetSize,
+                                   devicePixelRatio,
+                                   Qt::KeepAspectRatioByExpanding,
+                                   size / 2);
+    QPixmap pixmap;
+    if (QPixmapCache::find(key, &pixmap)) {
+        return pixmap;
+    }
+
+    const QString sourceKey = previewSourceKey(source, targetSize, devicePixelRatio);
+    QImage image;
+    {
+        QMutexLocker locker(&m_mutex);
+        if (QImage* cached = m_previewCache.object(sourceKey)) {
+            image = *cached;
+        }
+    }
+    if (image.isNull()) {
+        const_cast<ImageService*>(this)->requestPreviewWarmup(source, targetSize, devicePixelRatio);
+        return {};
+    }
+
+    pixmap = renderPixmap(image,
+                          targetSize,
+                          devicePixelRatio,
+                          Qt::KeepAspectRatioByExpanding,
+                          size / 2,
+                          true);
+    if (!pixmap.isNull()) {
+        QPixmapCache::insert(key, pixmap);
+    }
+    return pixmap;
+}
+
 void ImageService::invalidateSource(const QString& source)
 {
     if (source.isEmpty()) {

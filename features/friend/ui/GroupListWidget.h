@@ -14,6 +14,7 @@ class QMouseEvent;
 class QPaintEvent;
 class QPainter;
 class QShowEvent;
+class QTimer;
 class QVariantAnimation;
 
 class GroupListWidget : public OverlayScrollListView
@@ -41,6 +42,7 @@ protected:
 private:
     struct ViewState {
         QString keyword;
+        QString loadedKeyword;
         QString selectedGroupId;
         bool initialized = false;
     };
@@ -69,6 +71,8 @@ private:
     void toggleCategoryById(const QString& categoryId, bool keepCategoryAtTop = false);
     void collapseCategoryById(const QString& categoryId, bool keepCategoryAtTop = false);
     void setCategoryExpandedAnimated(const QString& categoryId, bool expanded, bool keepCategoryAtTop = false);
+    void loadNextGroupPage(const QString& categoryId);
+    void loadMoreForVisibleCategory();
     bool isCategoryPinnedAtTop(const QString& categoryId) const;
     void scrollCategoryToTop(const QString& categoryId);
     void clearCurrentSelection();
@@ -82,9 +86,11 @@ private:
 
     GroupListModel* m_model;
     GroupListDelegate* m_delegate;
+    QTimer* m_searchDebounceTimer;
     ViewState m_state;
     QHash<QString, QPointer<QVariantAnimation>> m_categoryAnimations;
     StickyCategoryData m_stickyCategory;
     bool m_stickyVisible = false;
+    bool m_preservingSelection = false;
     int m_stickyOffsetY = 0;
 };

@@ -5,6 +5,7 @@
 #include <QVector>
 
 #include "shared/types/Group.h"
+#include "shared/types/RepositoryTypes.h"
 
 class GroupListModel : public QAbstractListModel
 {
@@ -34,7 +35,11 @@ public:
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     Qt::ItemFlags flags(const QModelIndex& index) const override;
 
-    void setGroups(QVector<Group> groups);
+    void setCategories(QVector<GroupCategorySummary> categories, bool preserveLoadedItems = true);
+    void appendGroupsToCategory(const QString& categoryId, QVector<Group> groups, bool hasMore);
+    int loadedGroupCount(const QString& categoryId) const;
+    bool hasMoreGroups(const QString& categoryId) const;
+    void pruneCollapsedRows();
     QString groupIdAt(const QModelIndex& index) const;
     QString categoryIdAt(const QModelIndex& index) const;
     QString categoryIdForGroup(const QString& groupId) const;
@@ -56,8 +61,10 @@ private:
         QString categoryId;
         QString categoryName;
         QVector<Group> groups;
-        bool expanded = true;
-        qreal progress = 1.0;
+        int totalCount = 0;
+        bool hasMore = false;
+        bool expanded = false;
+        qreal progress = 0.0;
     };
 
     struct RowEntry {

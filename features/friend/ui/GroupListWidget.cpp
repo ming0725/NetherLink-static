@@ -7,11 +7,13 @@
 #include <QPainter>
 #include <QPalette>
 #include <QScrollBar>
+#include <QTimer>
 #include <QVariantAnimation>
 
 #include "features/chat/data/GroupRepository.h"
 #include "features/friend/model/GroupListModel.h"
 #include "features/friend/ui/GroupListDelegate.h"
+#include "shared/services/ImageService.h"
 
 extern const int kContactGroupArrowYOffset;
 
@@ -21,6 +23,7 @@ constexpr int kStickyHeaderHeight = 36;
 constexpr int kCategoryLeftPadding = 12;
 constexpr int kCategoryCountRightPadding = 18;
 constexpr int kCategoryArrowSize = 12;
+constexpr int kGroupPageSize = 80;
 
 QFont stickyCategoryFont()
 {
@@ -44,6 +47,7 @@ GroupListWidget::GroupListWidget(QWidget* parent)
     : OverlayScrollListView(parent)
     , m_model(new GroupListModel(this))
     , m_delegate(new GroupListDelegate(this))
+    , m_searchDebounceTimer(new QTimer(this))
 {
     setModel(m_model);
     setItemDelegate(m_delegate);
@@ -66,8 +70,17 @@ GroupListWidget::GroupListWidget(QWidget* parent)
             this, &GroupListWidget::onCurrentChanged);
     connect(&GroupRepository::instance(), &GroupRepository::groupListChanged,
             this, &GroupListWidget::reloadGroups);
-    connect(verticalScrollBar(), &QScrollBar::valueChanged,
-            this, &GroupListWidget::updateStickyHeader);
+    m_searchDebounceTimer->setSingleShot(true);
+    m_searchDebounceTimer->setInterval(180);
+
+    connect(m_searchDebounceTimer, &QTimer::timeout,
+            this, &GroupListWidget::reloadGroups);
+    connect(&ImageService::instance(), &ImageService::previewReady,
+            viewport(), QOverload<>::of(&QWidget::update));
+    connect(verticalScrollBar(), &QScrollBar::valueChanged, this, [this]() {
+        updateStickyHeader();
+        loadMoreForVisibleCategory();
+    });
     connect(m_model, &QAbstractItemModel::modelReset,
             this, [this]() { updateStickyHeader(); });
     connect(m_model, &QAbstractItemModel::rowsInserted,
@@ -99,7 +112,7 @@ void GroupListWidget::setKeyword(const QString& keyword)
 
     m_state.keyword = keyword;
     if (m_state.initialized) {
-        reloadGroups();
+        m_searchDebounceTimer->start();
     }
 }
 
@@ -186,7 +199,17 @@ void GroupListWidget::mouseMoveEvent(QMouseEvent* event)
 void GroupListWidget::onCurrentChanged(const QModelIndex& current, const QModelIndex& previous)
 {
     Q_UNUSED(previous);
-    m_state.selectedGroupId = m_model->isGroupRow(current) ? m_model->groupIdAt(current) : QString();
+    const QString nextGroupId = m_model->isGroupRow(current) ? m_model->groupIdAt(current) : QString();
+
+    if (m_preservingSelection) {
+        return;
+    }
+
+    if (nextGroupId.isEmpty()) {
+        return;
+    }
+
+    m_state.selectedGroupId = nextGroupId;
     emit selectedGroupChanged(m_state.selectedGroupId);
 }
 
@@ -196,8 +219,14 @@ void GroupListWidget::reloadGroups()
         return;
     }
 
-    m_model->setGroups(GroupRepository::instance().requestGroupList({m_state.keyword}));
+    m_searchDebounceTimer->stop();
+    const bool preserveLoadedItems = m_state.loadedKeyword == m_state.keyword;
+    m_preservingSelection = true;
+    m_model->setCategories(GroupRepository::instance().requestGroupCategorySummaries({m_state.keyword}),
+                           preserveLoadedItems);
+    m_state.loadedKeyword = m_state.keyword;
     restoreSelection();
+    m_preservingSelection = false;
     updateStickyHeader();
 }
 
@@ -211,7 +240,6 @@ void GroupListWidget::restoreSelection()
 
     const int row = m_model->indexOfGroup(m_state.selectedGroupId);
     if (row < 0) {
-        m_state.selectedGroupId.clear();
         clearSelection();
         setCurrentIndex(QModelIndex());
         return;
@@ -219,13 +247,15 @@ void GroupListWidget::restoreSelection()
 
     const QModelIndex index = m_model->index(row, 0);
     if (index.data(GroupListModel::CategoryProgressRole).toReal() <= 0.01) {
-        m_state.selectedGroupId.clear();
         clearSelection();
         setCurrentIndex(QModelIndex());
         return;
     }
 
-    selectionModel()->setCurrentIndex(index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+    const int scrollValue = verticalScrollBar()->value();
+    selectionModel()->clearSelection();
+    selectionModel()->select(index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+    verticalScrollBar()->setValue(scrollValue);
 }
 
 void GroupListWidget::toggleCategory(const QModelIndex& index)
@@ -287,7 +317,14 @@ void GroupListWidget::setCategoryExpandedAnimated(const QString& categoryId, boo
         running->deleteLater();
     }
 
+    const bool wasPreservingSelection = m_preservingSelection;
+    m_preservingSelection = true;
     m_model->setCategoryExpanded(categoryId, targetExpanded);
+    if (targetExpanded) {
+        loadNextGroupPage(categoryId);
+    }
+    restoreSelection();
+    m_preservingSelection = wasPreservingSelection;
     if (shouldKeepAtTop) {
         scrollCategoryToTop(categoryId);
     }
@@ -311,6 +348,13 @@ void GroupListWidget::setCategoryExpandedAnimated(const QString& categoryId, boo
     });
     connect(animation, &QVariantAnimation::finished, this, [this, categoryId, endProgress, animation, shouldKeepAtTop]() {
         m_model->setCategoryProgress(categoryId, endProgress);
+        const bool wasPreservingSelection = m_preservingSelection;
+        m_preservingSelection = true;
+        if (endProgress <= 0.01) {
+            m_model->pruneCollapsedRows();
+        }
+        restoreSelection();
+        m_preservingSelection = wasPreservingSelection;
         m_categoryAnimations.remove(categoryId);
         animation->deleteLater();
         doItemsLayout();
@@ -323,6 +367,45 @@ void GroupListWidget::setCategoryExpandedAnimated(const QString& categoryId, boo
     });
 
     animation->start();
+}
+
+void GroupListWidget::loadNextGroupPage(const QString& categoryId)
+{
+    if (categoryId.isEmpty() || !m_model->isCategoryExpanded(categoryId) || !m_model->hasMoreGroups(categoryId)) {
+        return;
+    }
+
+    const int offset = m_model->loadedGroupCount(categoryId);
+    QVector<Group> groups = GroupRepository::instance().requestGroupsInCategory({
+            categoryId,
+            m_state.keyword,
+            offset,
+            kGroupPageSize + 1
+    });
+    const bool hasMore = groups.size() > kGroupPageSize;
+    if (hasMore) {
+        groups.resize(kGroupPageSize);
+    }
+    const bool wasPreservingSelection = m_preservingSelection;
+    m_preservingSelection = true;
+    m_model->appendGroupsToCategory(categoryId, groups, hasMore);
+    restoreSelection();
+    m_preservingSelection = wasPreservingSelection;
+    updateStickyHeader();
+}
+
+void GroupListWidget::loadMoreForVisibleCategory()
+{
+    if (!m_state.initialized || verticalScrollBar()->value() < verticalScrollBar()->maximum() - 160) {
+        return;
+    }
+
+    QModelIndex index = indexAt(QPoint(viewport()->width() / 2, qMax(0, viewport()->height() - 2)));
+    if (!index.isValid() && m_model->rowCount() > 0) {
+        index = m_model->index(m_model->rowCount() - 1, 0);
+    }
+    const QString categoryId = m_model->categoryIdAt(index);
+    loadNextGroupPage(categoryId);
 }
 
 bool GroupListWidget::isCategoryPinnedAtTop(const QString& categoryId) const
@@ -349,9 +432,13 @@ void GroupListWidget::scrollCategoryToTop(const QString& categoryId)
 
 void GroupListWidget::clearCurrentSelection()
 {
+    const bool wasPreservingSelection = m_preservingSelection;
+    m_preservingSelection = true;
     clearSelection();
     setCurrentIndex(QModelIndex());
+    m_preservingSelection = wasPreservingSelection;
     m_state.selectedGroupId.clear();
+    emit selectedGroupChanged(QString());
 }
 
 void GroupListWidget::updateStickyHeader()

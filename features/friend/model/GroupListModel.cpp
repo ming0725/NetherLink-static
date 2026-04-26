@@ -75,7 +75,7 @@ QVariant GroupListModel::data(const QModelIndex& index, int role) const
         case CategoryIdRole:
             return category.categoryId;
         case CategoryGroupCountRole:
-            return category.groups.size();
+            return category.totalCount;
         case CategoryExpandedRole:
             return category.expanded;
         case CategoryProgressRole:
@@ -142,39 +142,90 @@ Qt::ItemFlags GroupListModel::flags(const QModelIndex& index) const
     return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
 }
 
-void GroupListModel::setGroups(QVector<Group> groups)
+void GroupListModel::setCategories(QVector<GroupCategorySummary> categories, bool preserveLoadedItems)
 {
     QHash<QString, bool> expandedByCategory;
     QHash<QString, qreal> progressByCategory;
+    QHash<QString, QVector<Group>> groupsByCategory;
+    QHash<QString, bool> hasMoreByCategory;
     for (const GroupCategory& category : m_categories) {
         expandedByCategory.insert(category.categoryId, category.expanded);
         progressByCategory.insert(category.categoryId, category.progress);
+        groupsByCategory.insert(category.categoryId, category.groups);
+        hasMoreByCategory.insert(category.categoryId, category.hasMore);
     }
 
     beginResetModel();
     m_categories.clear();
-    QHash<QString, int> categoryRows;
-    for (const Group& group : groups) {
-        const QString categoryId = normalizedCategoryId(group);
-        const QString categoryName = normalizedCategoryName(group);
-        int categoryIndex = categoryRows.value(categoryId, -1);
-        if (categoryIndex < 0) {
-            GroupCategory category;
-            category.categoryId = categoryId;
-            category.categoryName = categoryName;
-            category.expanded = expandedByCategory.value(categoryId, false);
-            category.progress = progressByCategory.value(categoryId, category.expanded ? 1.0 : 0.0);
-            m_categories.push_back(category);
-            categoryIndex = m_categories.size() - 1;
-            categoryRows.insert(categoryId, categoryIndex);
+    for (const GroupCategorySummary& summary : std::as_const(categories)) {
+        GroupCategory category;
+        category.categoryId = summary.categoryId.isEmpty() ? QStringLiteral("gg_joined") : summary.categoryId;
+        category.categoryName = summary.categoryName.isEmpty() ? QStringLiteral("我加入的群聊") : summary.categoryName;
+        category.totalCount = summary.groupCount;
+        category.expanded = preserveLoadedItems && expandedByCategory.value(category.categoryId, false);
+        category.progress = progressByCategory.value(category.categoryId, category.expanded ? 1.0 : 0.0);
+        if (preserveLoadedItems) {
+            category.groups = groupsByCategory.value(category.categoryId);
         }
-
-        Group normalized = group;
-        normalized.listGroupId = categoryId;
-        normalized.listGroupName = categoryName;
-        m_categories[categoryIndex].groups.push_back(normalized);
+        if (category.groups.size() > category.totalCount) {
+            category.groups.resize(category.totalCount);
+        }
+        category.hasMore = preserveLoadedItems
+                ? hasMoreByCategory.value(category.categoryId, category.groups.size() < category.totalCount)
+                : category.totalCount > 0;
+        if (!category.expanded && category.progress <= 0.01) {
+            category.groups.clear();
+            category.hasMore = category.totalCount > 0;
+        }
+        m_categories.push_back(category);
     }
 
+    rebuildRows();
+    endResetModel();
+}
+
+void GroupListModel::appendGroupsToCategory(const QString& categoryId, QVector<Group> groups, bool hasMore)
+{
+    GroupCategory* category = categoryForId(categoryId);
+    if (!category || groups.isEmpty() && category->hasMore == hasMore) {
+        return;
+    }
+
+    beginResetModel();
+    for (Group& group : groups) {
+        group.listGroupId = category->categoryId;
+        group.listGroupName = category->categoryName;
+        bool duplicate = false;
+        for (const Group& loaded : std::as_const(category->groups)) {
+            if (loaded.groupId == group.groupId) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate) {
+            category->groups.push_back(group);
+        }
+    }
+    category->hasMore = hasMore && category->groups.size() < category->totalCount;
+    rebuildRows();
+    endResetModel();
+}
+
+int GroupListModel::loadedGroupCount(const QString& categoryId) const
+{
+    const GroupCategory* category = categoryForId(categoryId);
+    return category ? category->groups.size() : 0;
+}
+
+bool GroupListModel::hasMoreGroups(const QString& categoryId) const
+{
+    const GroupCategory* category = categoryForId(categoryId);
+    return category ? category->hasMore : false;
+}
+
+void GroupListModel::pruneCollapsedRows()
+{
+    beginResetModel();
     rebuildRows();
     endResetModel();
 }
@@ -323,12 +374,10 @@ void GroupListModel::setCategoryExpanded(const QString& categoryId, bool expande
         return;
     }
 
+    beginResetModel();
     category->expanded = expanded;
-    const int categoryRow = rowForCategory(categoryId);
-    if (categoryRow >= 0) {
-        const QModelIndex changed = index(categoryRow, 0);
-        emit dataChanged(changed, changed, {CategoryExpandedRole});
-    }
+    rebuildRows();
+    endResetModel();
 }
 
 void GroupListModel::setCategoryProgress(const QString& categoryId, qreal progress)
@@ -380,6 +429,9 @@ void GroupListModel::rebuildRows()
     for (int categoryIndex = 0; categoryIndex < m_categories.size(); ++categoryIndex) {
         m_rows.push_back(RowEntry{RowEntry::Category, categoryIndex, -1});
         const GroupCategory& category = m_categories.at(categoryIndex);
+        if (!category.expanded && category.progress <= 0.01) {
+            continue;
+        }
         for (int groupIndex = 0; groupIndex < category.groups.size(); ++groupIndex) {
             m_rows.push_back(RowEntry{RowEntry::GroupChat, categoryIndex, groupIndex});
         }

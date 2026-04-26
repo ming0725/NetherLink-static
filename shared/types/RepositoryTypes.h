@@ -16,8 +16,30 @@ struct FriendListRequest {
     QString keyword;
 };
 
+struct FriendGroupListRequest {
+    QString keyword;
+};
+
+struct FriendGroupItemsRequest {
+    QString groupId;
+    QString keyword;
+    int offset = 0;
+    int limit = 64;
+};
+
 struct GroupListRequest {
     QString keyword;
+};
+
+struct GroupCategoryListRequest {
+    QString keyword;
+};
+
+struct GroupCategoryItemsRequest {
+    QString categoryId;
+    QString keyword;
+    int offset = 0;
+    int limit = 64;
 };
 
 struct UserDetailRequest {
@@ -67,6 +89,18 @@ struct FriendSummary {
     QString groupName = "默认分组";
     QString nickName;
     QString remark;
+};
+
+struct FriendGroupSummary {
+    QString groupId = "default";
+    QString groupName = "默认分组";
+    int friendCount = 0;
+};
+
+struct GroupCategorySummary {
+    QString categoryId = "gg_joined";
+    QString categoryName = "我加入的群聊";
+    int groupCount = 0;
 };
 
 struct ConversationSummary {

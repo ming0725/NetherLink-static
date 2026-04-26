@@ -118,6 +118,35 @@ QString groupVisibleSubtitle(const Group& group)
     return QStringLiteral("%1人").arg(group.memberNum);
 }
 
+void sortGroupList(QVector<Group>& result)
+{
+    std::sort(result.begin(), result.end(), [](const Group& lhs, const Group& rhs) {
+        const int lhsCategoryRank = categorySortRank(lhs.listGroupId);
+        const int rhsCategoryRank = categorySortRank(rhs.listGroupId);
+        if (lhsCategoryRank != rhsCategoryRank) {
+            return lhsCategoryRank < rhsCategoryRank;
+        }
+        if (lhs.listGroupName != rhs.listGroupName) {
+            static QCollator groupCollator(QLocale::Chinese);
+            groupCollator.setNumericMode(true);
+            return groupCollator.compare(lhs.listGroupName, rhs.listGroupName) < 0;
+        }
+
+        static QCollator localCollator(QLocale::Chinese);
+        localCollator.setNumericMode(true);
+        const int nameOrder = localCollator.compare(groupVisibleName(lhs), groupVisibleName(rhs));
+        if (nameOrder != 0) {
+            return nameOrder < 0;
+        }
+
+        const int subtitleOrder = localCollator.compare(groupVisibleSubtitle(lhs), groupVisibleSubtitle(rhs));
+        if (subtitleOrder != 0) {
+            return subtitleOrder < 0;
+        }
+        return lhs.groupId < rhs.groupId;
+    });
+}
+
 class GroupListRequestOperation final
     : public RepositoryTemplate<GroupListRequest, QVector<Group>> {
 public:
@@ -154,31 +183,80 @@ private:
 
     void onAfterRequest(const GroupListRequest&, QVector<Group>& result) const override
     {
-        std::sort(result.begin(), result.end(), [](const Group& lhs, const Group& rhs) {
-            const int lhsCategoryRank = categorySortRank(lhs.listGroupId);
-            const int rhsCategoryRank = categorySortRank(rhs.listGroupId);
-            if (lhsCategoryRank != rhsCategoryRank) {
-                return lhsCategoryRank < rhsCategoryRank;
-            }
-            if (lhs.listGroupName != rhs.listGroupName) {
-                static QCollator groupCollator(QLocale::Chinese);
-                groupCollator.setNumericMode(true);
-                return groupCollator.compare(lhs.listGroupName, rhs.listGroupName) < 0;
+        sortGroupList(result);
+    }
+
+    QVector<Group> m_groups;
+};
+
+class GroupCategoryListRequestOperation final
+    : public RepositoryTemplate<GroupCategoryListRequest, QVector<GroupCategorySummary>> {
+public:
+    explicit GroupCategoryListRequestOperation(QVector<Group> groups)
+        : m_groups(std::move(groups))
+    {
+    }
+
+private:
+    QVector<GroupCategorySummary> doRequest(const GroupCategoryListRequest& query) const override
+    {
+        const QVector<Group> groups = GroupListRequestOperation(m_groups).request({query.keyword});
+        QMap<QString, GroupCategorySummary> categories;
+        for (const Group& group : groups) {
+            GroupCategorySummary summary = categories.value(group.listGroupId);
+            summary.categoryId = group.listGroupId;
+            summary.categoryName = group.listGroupName;
+            ++summary.groupCount;
+            categories.insert(group.listGroupId, summary);
+        }
+        return QVector<GroupCategorySummary>::fromList(categories.values());
+    }
+
+    void onAfterRequest(const GroupCategoryListRequest&, QVector<GroupCategorySummary>& result) const override
+    {
+        std::sort(result.begin(), result.end(), [](const GroupCategorySummary& lhs, const GroupCategorySummary& rhs) {
+            const int lhsRank = categorySortRank(lhs.categoryId);
+            const int rhsRank = categorySortRank(rhs.categoryId);
+            if (lhsRank != rhsRank) {
+                return lhsRank < rhsRank;
             }
 
-            static QCollator localCollator(QLocale::Chinese);
-            localCollator.setNumericMode(true);
-            const int nameOrder = localCollator.compare(groupVisibleName(lhs), groupVisibleName(rhs));
-            if (nameOrder != 0) {
-                return nameOrder < 0;
-            }
-
-            const int subtitleOrder = localCollator.compare(groupVisibleSubtitle(lhs), groupVisibleSubtitle(rhs));
-            if (subtitleOrder != 0) {
-                return subtitleOrder < 0;
-            }
-            return lhs.groupId < rhs.groupId;
+            static QCollator collator(QLocale::Chinese);
+            collator.setNumericMode(true);
+            const int order = collator.compare(lhs.categoryName, rhs.categoryName);
+            return order == 0 ? lhs.categoryId < rhs.categoryId : order < 0;
         });
+    }
+
+    QVector<Group> m_groups;
+};
+
+class GroupCategoryItemsRequestOperation final
+    : public RepositoryTemplate<GroupCategoryItemsRequest, QVector<Group>> {
+public:
+    explicit GroupCategoryItemsRequestOperation(QVector<Group> groups)
+        : m_groups(std::move(groups))
+    {
+    }
+
+private:
+    QVector<Group> doRequest(const GroupCategoryItemsRequest& query) const override
+    {
+        QVector<Group> result;
+        const QVector<Group> groups = GroupListRequestOperation(m_groups).request({query.keyword});
+        for (const Group& group : groups) {
+            if (group.listGroupId == query.categoryId) {
+                result.push_back(group);
+            }
+        }
+        return result;
+    }
+
+    void onAfterRequest(const GroupCategoryItemsRequest& query, QVector<Group>& result) const override
+    {
+        const int offset = qBound(0, query.offset, result.size());
+        const int limit = query.limit < 0 ? result.size() - offset : qMax(0, query.limit);
+        result = result.mid(offset, limit);
     }
 
     QVector<Group> m_groups;
@@ -318,6 +396,18 @@ QVector<Group> GroupRepository::requestGroupList(const GroupListRequest& query) 
 {
     QMutexLocker locker(&mutex);
     return GroupListRequestOperation(QVector<Group>::fromList(groupMap.values())).request(query);
+}
+
+QVector<GroupCategorySummary> GroupRepository::requestGroupCategorySummaries(const GroupCategoryListRequest& query) const
+{
+    QMutexLocker locker(&mutex);
+    return GroupCategoryListRequestOperation(QVector<Group>::fromList(groupMap.values())).request(query);
+}
+
+QVector<Group> GroupRepository::requestGroupsInCategory(const GroupCategoryItemsRequest& query) const
+{
+    QMutexLocker locker(&mutex);
+    return GroupCategoryItemsRequestOperation(QVector<Group>::fromList(groupMap.values())).request(query);
 }
 
 Group GroupRepository::requestGroupDetail(const GroupDetailRequest& query) const

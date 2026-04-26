@@ -40,6 +40,10 @@ public:
                            int size,
                            qreal devicePixelRatio = 1.0) const;
 
+    QPixmap circularAvatarPreview(const QString& source,
+                                  int size,
+                                  qreal devicePixelRatio = 1.0) const;
+
     void invalidateSource(const QString& source);
 
 signals:

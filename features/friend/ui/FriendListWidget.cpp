@@ -7,11 +7,13 @@
 #include <QPainter>
 #include <QPalette>
 #include <QScrollBar>
+#include <QTimer>
 #include <QVariantAnimation>
 
 #include "features/friend/ui/FriendListDelegate.h"
 #include "features/friend/model/FriendListModel.h"
 #include "features/friend/data/UserRepository.h"
+#include "shared/services/ImageService.h"
 
 extern const int kContactGroupArrowYOffset;
 
@@ -21,6 +23,7 @@ constexpr int kStickyHeaderHeight = 36;
 constexpr int kGroupLeftPadding = 12;
 constexpr int kGroupCountRightPadding = 18;
 constexpr int kGroupArrowSize = 12;
+constexpr int kFriendPageSize = 80;
 
 QFont stickyGroupFont()
 {
@@ -44,6 +47,7 @@ FriendListWidget::FriendListWidget(QWidget* parent)
     : OverlayScrollListView(parent)
     , m_model(new FriendListModel(this))
     , m_delegate(new FriendListDelegate(this))
+    , m_searchDebounceTimer(new QTimer(this))
 {
     setModel(m_model);
     setItemDelegate(m_delegate);
@@ -66,8 +70,17 @@ FriendListWidget::FriendListWidget(QWidget* parent)
             this, &FriendListWidget::onCurrentChanged);
     connect(&UserRepository::instance(), &UserRepository::friendListChanged,
             this, &FriendListWidget::reloadFriends);
-    connect(verticalScrollBar(), &QScrollBar::valueChanged,
-            this, &FriendListWidget::updateStickyHeader);
+    m_searchDebounceTimer->setSingleShot(true);
+    m_searchDebounceTimer->setInterval(180);
+
+    connect(m_searchDebounceTimer, &QTimer::timeout,
+            this, &FriendListWidget::reloadFriends);
+    connect(&ImageService::instance(), &ImageService::previewReady,
+            viewport(), QOverload<>::of(&QWidget::update));
+    connect(verticalScrollBar(), &QScrollBar::valueChanged, this, [this]() {
+        updateStickyHeader();
+        loadMoreForVisibleGroup();
+    });
     connect(m_model, &QAbstractItemModel::modelReset,
             this, [this]() { updateStickyHeader(); });
     connect(m_model, &QAbstractItemModel::rowsInserted,
@@ -99,7 +112,7 @@ void FriendListWidget::setKeyword(const QString& keyword)
 
     m_state.keyword = keyword;
     if (m_state.initialized) {
-        reloadFriends();
+        m_searchDebounceTimer->start();
     }
 }
 
@@ -186,7 +199,17 @@ void FriendListWidget::mouseMoveEvent(QMouseEvent* event)
 void FriendListWidget::onCurrentChanged(const QModelIndex& current, const QModelIndex& previous)
 {
     Q_UNUSED(previous);
-    m_state.selectedFriendId = m_model->isFriendRow(current) ? m_model->friendIdAt(current) : QString();
+    const QString nextFriendId = m_model->isFriendRow(current) ? m_model->friendIdAt(current) : QString();
+
+    if (m_preservingSelection) {
+        return;
+    }
+
+    if (nextFriendId.isEmpty()) {
+        return;
+    }
+
+    m_state.selectedFriendId = nextFriendId;
     emit selectedFriendChanged(m_state.selectedFriendId);
 }
 
@@ -196,8 +219,14 @@ void FriendListWidget::reloadFriends()
         return;
     }
 
-    m_model->setFriends(UserRepository::instance().requestFriendList({m_state.keyword}));
+    m_searchDebounceTimer->stop();
+    const bool preserveLoadedItems = m_state.loadedKeyword == m_state.keyword;
+    m_preservingSelection = true;
+    m_model->setGroups(UserRepository::instance().requestFriendGroupSummaries({m_state.keyword}),
+                       preserveLoadedItems);
+    m_state.loadedKeyword = m_state.keyword;
     restoreSelection();
+    m_preservingSelection = false;
     updateStickyHeader();
 }
 
@@ -211,7 +240,6 @@ void FriendListWidget::restoreSelection()
 
     const int row = m_model->indexOfFriend(m_state.selectedFriendId);
     if (row < 0) {
-        m_state.selectedFriendId.clear();
         clearSelection();
         setCurrentIndex(QModelIndex());
         return;
@@ -219,13 +247,15 @@ void FriendListWidget::restoreSelection()
 
     const QModelIndex index = m_model->index(row, 0);
     if (index.data(FriendListModel::GroupProgressRole).toReal() <= 0.01) {
-        m_state.selectedFriendId.clear();
         clearSelection();
         setCurrentIndex(QModelIndex());
         return;
     }
 
-    selectionModel()->setCurrentIndex(index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+    const int scrollValue = verticalScrollBar()->value();
+    selectionModel()->clearSelection();
+    selectionModel()->select(index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+    verticalScrollBar()->setValue(scrollValue);
 }
 
 void FriendListWidget::toggleGroup(const QModelIndex& index)
@@ -287,7 +317,14 @@ void FriendListWidget::setGroupExpandedAnimated(const QString& groupId, bool tar
         running->deleteLater();
     }
 
+    const bool wasPreservingSelection = m_preservingSelection;
+    m_preservingSelection = true;
     m_model->setGroupExpanded(groupId, targetExpanded);
+    if (targetExpanded) {
+        loadNextFriendPage(groupId);
+    }
+    restoreSelection();
+    m_preservingSelection = wasPreservingSelection;
     if (shouldKeepAtTop) {
         scrollGroupToTop(groupId);
     }
@@ -311,6 +348,13 @@ void FriendListWidget::setGroupExpandedAnimated(const QString& groupId, bool tar
     });
     connect(animation, &QVariantAnimation::finished, this, [this, groupId, endProgress, animation, shouldKeepAtTop]() {
         m_model->setGroupProgress(groupId, endProgress);
+        const bool wasPreservingSelection = m_preservingSelection;
+        m_preservingSelection = true;
+        if (endProgress <= 0.01) {
+            m_model->pruneCollapsedRows();
+        }
+        restoreSelection();
+        m_preservingSelection = wasPreservingSelection;
         m_groupAnimations.remove(groupId);
         animation->deleteLater();
         doItemsLayout();
@@ -323,6 +367,45 @@ void FriendListWidget::setGroupExpandedAnimated(const QString& groupId, bool tar
     });
 
     animation->start();
+}
+
+void FriendListWidget::loadNextFriendPage(const QString& groupId)
+{
+    if (groupId.isEmpty() || !m_model->isGroupExpanded(groupId) || !m_model->hasMoreFriends(groupId)) {
+        return;
+    }
+
+    const int offset = m_model->loadedFriendCount(groupId);
+    QVector<FriendSummary> friends = UserRepository::instance().requestFriendsInGroup({
+            groupId,
+            m_state.keyword,
+            offset,
+            kFriendPageSize + 1
+    });
+    const bool hasMore = friends.size() > kFriendPageSize;
+    if (hasMore) {
+        friends.resize(kFriendPageSize);
+    }
+    const bool wasPreservingSelection = m_preservingSelection;
+    m_preservingSelection = true;
+    m_model->appendFriendsToGroup(groupId, friends, hasMore);
+    restoreSelection();
+    m_preservingSelection = wasPreservingSelection;
+    updateStickyHeader();
+}
+
+void FriendListWidget::loadMoreForVisibleGroup()
+{
+    if (!m_state.initialized || verticalScrollBar()->value() < verticalScrollBar()->maximum() - 160) {
+        return;
+    }
+
+    QModelIndex index = indexAt(QPoint(viewport()->width() / 2, qMax(0, viewport()->height() - 2)));
+    if (!index.isValid() && m_model->rowCount() > 0) {
+        index = m_model->index(m_model->rowCount() - 1, 0);
+    }
+    const QString groupId = m_model->groupIdAt(index);
+    loadNextFriendPage(groupId);
 }
 
 bool FriendListWidget::isGroupPinnedAtTop(const QString& groupId) const
@@ -349,9 +432,13 @@ void FriendListWidget::scrollGroupToTop(const QString& groupId)
 
 void FriendListWidget::clearCurrentSelection()
 {
+    const bool wasPreservingSelection = m_preservingSelection;
+    m_preservingSelection = true;
     clearSelection();
     setCurrentIndex(QModelIndex());
+    m_preservingSelection = wasPreservingSelection;
     m_state.selectedFriendId.clear();
+    emit selectedFriendChanged(QString());
 }
 
 void FriendListWidget::updateStickyHeader()

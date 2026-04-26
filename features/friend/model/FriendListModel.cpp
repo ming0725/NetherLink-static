@@ -70,7 +70,7 @@ QVariant FriendListModel::data(const QModelIndex& index, int role) const
         case GroupIdRole:
             return group.groupId;
         case GroupFriendCountRole:
-            return group.friends.size();
+            return group.totalCount;
         case GroupExpandedRole:
             return group.expanded;
         case GroupProgressRole:
@@ -143,39 +143,90 @@ Qt::ItemFlags FriendListModel::flags(const QModelIndex& index) const
     return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
 }
 
-void FriendListModel::setFriends(QVector<FriendSummary> friends)
+void FriendListModel::setGroups(QVector<FriendGroupSummary> groups, bool preserveLoadedItems)
 {
     QHash<QString, bool> expandedByGroup;
     QHash<QString, qreal> progressByGroup;
+    QHash<QString, QVector<FriendSummary>> friendsByGroup;
+    QHash<QString, bool> hasMoreByGroup;
     for (const FriendGroup& group : std::as_const(m_groups)) {
         expandedByGroup.insert(group.groupId, group.expanded);
         progressByGroup.insert(group.groupId, group.progress);
+        friendsByGroup.insert(group.groupId, group.friends);
+        hasMoreByGroup.insert(group.groupId, group.hasMore);
     }
 
     beginResetModel();
     m_groups.clear();
-    QHash<QString, int> groupRows;
-    for (const FriendSummary& friendSummary : std::as_const(friends)) {
-        const QString groupId = normalizedGroupId(friendSummary);
-        const QString groupName = normalizedGroupName(friendSummary);
-        int groupIndex = groupRows.value(groupId, -1);
-        if (groupIndex < 0) {
-            FriendGroup group;
-            group.groupId = groupId;
-            group.groupName = groupName;
-            group.expanded = expandedByGroup.value(groupId, false);
-            group.progress = progressByGroup.value(groupId, group.expanded ? 1.0 : 0.0);
-            m_groups.push_back(group);
-            groupIndex = m_groups.size() - 1;
-            groupRows.insert(groupId, groupIndex);
+    for (const FriendGroupSummary& summary : std::as_const(groups)) {
+        FriendGroup group;
+        group.groupId = summary.groupId.isEmpty() ? QStringLiteral("default") : summary.groupId;
+        group.groupName = summary.groupName.isEmpty() ? QStringLiteral("默认分组") : summary.groupName;
+        group.totalCount = summary.friendCount;
+        group.expanded = preserveLoadedItems && expandedByGroup.value(group.groupId, false);
+        group.progress = progressByGroup.value(group.groupId, group.expanded ? 1.0 : 0.0);
+        if (preserveLoadedItems) {
+            group.friends = friendsByGroup.value(group.groupId);
         }
-
-        FriendSummary normalized = friendSummary;
-        normalized.groupId = groupId;
-        normalized.groupName = groupName;
-        m_groups[groupIndex].friends.push_back(normalized);
+        if (group.friends.size() > group.totalCount) {
+            group.friends.resize(group.totalCount);
+        }
+        group.hasMore = preserveLoadedItems
+                ? hasMoreByGroup.value(group.groupId, group.friends.size() < group.totalCount)
+                : group.totalCount > 0;
+        if (!group.expanded && group.progress <= 0.01) {
+            group.friends.clear();
+            group.hasMore = group.totalCount > 0;
+        }
+        m_groups.push_back(group);
     }
 
+    rebuildRows();
+    endResetModel();
+}
+
+void FriendListModel::appendFriendsToGroup(const QString& groupId, QVector<FriendSummary> friends, bool hasMore)
+{
+    FriendGroup* group = groupForId(groupId);
+    if (!group || friends.isEmpty() && group->hasMore == hasMore) {
+        return;
+    }
+
+    beginResetModel();
+    for (FriendSummary& friendSummary : friends) {
+        friendSummary.groupId = group->groupId;
+        friendSummary.groupName = group->groupName;
+        bool duplicate = false;
+        for (const FriendSummary& loaded : std::as_const(group->friends)) {
+            if (loaded.userId == friendSummary.userId) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate) {
+            group->friends.push_back(friendSummary);
+        }
+    }
+    group->hasMore = hasMore && group->friends.size() < group->totalCount;
+    rebuildRows();
+    endResetModel();
+}
+
+int FriendListModel::loadedFriendCount(const QString& groupId) const
+{
+    const FriendGroup* group = groupForId(groupId);
+    return group ? group->friends.size() : 0;
+}
+
+bool FriendListModel::hasMoreFriends(const QString& groupId) const
+{
+    const FriendGroup* group = groupForId(groupId);
+    return group ? group->hasMore : false;
+}
+
+void FriendListModel::pruneCollapsedRows()
+{
+    beginResetModel();
     rebuildRows();
     endResetModel();
 }
@@ -313,12 +364,10 @@ void FriendListModel::setGroupExpanded(const QString& groupId, bool expanded)
         return;
     }
 
+    beginResetModel();
     group->expanded = expanded;
-    const int groupRow = rowForGroup(groupId);
-    if (groupRow >= 0) {
-        const QModelIndex changed = index(groupRow, 0);
-        emit dataChanged(changed, changed, {GroupExpandedRole});
-    }
+    rebuildRows();
+    endResetModel();
 }
 
 void FriendListModel::setGroupProgress(const QString& groupId, qreal progress)
@@ -370,6 +419,9 @@ void FriendListModel::rebuildRows()
     for (int groupIndex = 0; groupIndex < m_groups.size(); ++groupIndex) {
         m_rows.push_back(RowEntry{RowEntry::Group, true, groupIndex, -1});
         const FriendGroup& group = m_groups.at(groupIndex);
+        if (!group.expanded && group.progress <= 0.01) {
+            continue;
+        }
         for (int friendIndex = 0; friendIndex < group.friends.size(); ++friendIndex) {
             m_rows.push_back(RowEntry{RowEntry::Friend, false, groupIndex, friendIndex});
         }

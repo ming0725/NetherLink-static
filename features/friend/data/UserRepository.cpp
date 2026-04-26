@@ -3,6 +3,8 @@
 #include <QCollator>
 #include <QStringList>
 
+#include <algorithm>
+
 #include "shared/services/ImageService.h"
 #include "shared/data/RepositoryTemplate.h"
 
@@ -36,6 +38,72 @@ QString friendVisibleSubtitle(const FriendSummary& friendSummary)
     return QStringLiteral("[%1] %2").arg(statusText(friendSummary.status), friendSummary.signature);
 }
 
+QString normalizedFriendGroupId(const User& user)
+{
+    return user.friendGroupId.isEmpty() ? QStringLiteral("default") : user.friendGroupId;
+}
+
+QString normalizedFriendGroupName(const User& user)
+{
+    return user.friendGroupName.isEmpty() ? QStringLiteral("默认分组") : user.friendGroupName;
+}
+
+bool matchesFriendKeyword(const User& user, const QString& keyword)
+{
+    return keyword.isEmpty() ||
+           user.nick.contains(keyword, Qt::CaseInsensitive) ||
+           user.remark.contains(keyword, Qt::CaseInsensitive) ||
+           user.signature.contains(keyword, Qt::CaseInsensitive) ||
+           normalizedFriendGroupName(user).contains(keyword, Qt::CaseInsensitive);
+}
+
+FriendSummary makeFriendSummary(const User& user)
+{
+    const QString displayName = user.remark.isEmpty() ? user.nick : user.remark;
+    return FriendSummary{
+            user.id,
+            displayName,
+            user.avatarPath,
+            user.status,
+            user.signature,
+            user.isDnd,
+            normalizedFriendGroupId(user),
+            normalizedFriendGroupName(user),
+            user.nick,
+            user.remark
+    };
+}
+
+void sortFriendSummaries(QVector<FriendSummary>& result)
+{
+    std::sort(result.begin(), result.end(), [](const FriendSummary& lhs, const FriendSummary& rhs) {
+        if (lhs.groupName != rhs.groupName) {
+            static QCollator groupCollator(QLocale::Chinese);
+            groupCollator.setNumericMode(true);
+            return groupCollator.compare(lhs.groupName, rhs.groupName) < 0;
+        }
+
+        const int lhsStatusRank = statusSortRank(lhs.status);
+        const int rhsStatusRank = statusSortRank(rhs.status);
+        if (lhsStatusRank != rhsStatusRank) {
+            return lhsStatusRank < rhsStatusRank;
+        }
+
+        static QCollator localCollator(QLocale::Chinese);
+        localCollator.setNumericMode(true);
+        const int nameOrder = localCollator.compare(friendVisibleName(lhs), friendVisibleName(rhs));
+        if (nameOrder != 0) {
+            return nameOrder < 0;
+        }
+
+        const int subtitleOrder = localCollator.compare(friendVisibleSubtitle(lhs), friendVisibleSubtitle(rhs));
+        if (subtitleOrder != 0) {
+            return subtitleOrder < 0;
+        }
+        return lhs.userId < rhs.userId;
+    });
+}
+
 class FriendListRequestOperation final
     : public RepositoryTemplate<FriendListRequest, QVector<FriendSummary>> {
 public:
@@ -51,58 +119,91 @@ private:
         result.reserve(m_users.size());
 
         for (const User& user : m_users) {
-            if (!query.keyword.isEmpty() &&
-                !user.nick.contains(query.keyword, Qt::CaseInsensitive) &&
-                !user.remark.contains(query.keyword, Qt::CaseInsensitive) &&
-                !user.signature.contains(query.keyword, Qt::CaseInsensitive)) {
+            if (!matchesFriendKeyword(user, query.keyword)) {
                 continue;
             }
 
-            const QString displayName = user.remark.isEmpty() ? user.nick : user.remark;
-            result.push_back(FriendSummary{
-                    user.id,
-                    displayName,
-                    user.avatarPath,
-                    user.status,
-                    user.signature,
-                    user.isDnd,
-                    user.friendGroupId,
-                    user.friendGroupName,
-                    user.nick,
-                    user.remark
-            });
+            result.push_back(makeFriendSummary(user));
         }
         return result;
     }
 
     void onAfterRequest(const FriendListRequest&, QVector<FriendSummary>& result) const override
     {
-        std::sort(result.begin(), result.end(), [](const FriendSummary& lhs, const FriendSummary& rhs) {
-            if (lhs.groupName != rhs.groupName) {
-                static QCollator groupCollator(QLocale::Chinese);
-                groupCollator.setNumericMode(true);
-                return groupCollator.compare(lhs.groupName, rhs.groupName) < 0;
+        sortFriendSummaries(result);
+    }
+
+    QVector<User> m_users;
+};
+
+class FriendGroupListRequestOperation final
+    : public RepositoryTemplate<FriendGroupListRequest, QVector<FriendGroupSummary>> {
+public:
+    explicit FriendGroupListRequestOperation(QVector<User> users)
+        : m_users(std::move(users))
+    {
+    }
+
+private:
+    QVector<FriendGroupSummary> doRequest(const FriendGroupListRequest& query) const override
+    {
+        QMap<QString, FriendGroupSummary> groups;
+        for (const User& user : m_users) {
+            if (!matchesFriendKeyword(user, query.keyword)) {
+                continue;
             }
 
-            const int lhsStatusRank = statusSortRank(lhs.status);
-            const int rhsStatusRank = statusSortRank(rhs.status);
-            if (lhsStatusRank != rhsStatusRank) {
-                return lhsStatusRank < rhsStatusRank;
-            }
+            const QString groupId = normalizedFriendGroupId(user);
+            FriendGroupSummary summary = groups.value(groupId);
+            summary.groupId = groupId;
+            summary.groupName = normalizedFriendGroupName(user);
+            ++summary.friendCount;
+            groups.insert(groupId, summary);
+        }
+        return QVector<FriendGroupSummary>::fromList(groups.values());
+    }
 
-            static QCollator localCollator(QLocale::Chinese);
-            localCollator.setNumericMode(true);
-            const int nameOrder = localCollator.compare(friendVisibleName(lhs), friendVisibleName(rhs));
-            if (nameOrder != 0) {
-                return nameOrder < 0;
-            }
-
-            const int subtitleOrder = localCollator.compare(friendVisibleSubtitle(lhs), friendVisibleSubtitle(rhs));
-            if (subtitleOrder != 0) {
-                return subtitleOrder < 0;
-            }
-            return lhs.userId < rhs.userId;
+    void onAfterRequest(const FriendGroupListRequest&, QVector<FriendGroupSummary>& result) const override
+    {
+        std::sort(result.begin(), result.end(), [](const FriendGroupSummary& lhs, const FriendGroupSummary& rhs) {
+            static QCollator collator(QLocale::Chinese);
+            collator.setNumericMode(true);
+            const int order = collator.compare(lhs.groupName, rhs.groupName);
+            return order == 0 ? lhs.groupId < rhs.groupId : order < 0;
         });
+    }
+
+    QVector<User> m_users;
+};
+
+class FriendGroupItemsRequestOperation final
+    : public RepositoryTemplate<FriendGroupItemsRequest, QVector<FriendSummary>> {
+public:
+    explicit FriendGroupItemsRequestOperation(QVector<User> users)
+        : m_users(std::move(users))
+    {
+    }
+
+private:
+    QVector<FriendSummary> doRequest(const FriendGroupItemsRequest& query) const override
+    {
+        QVector<FriendSummary> result;
+        for (const User& user : m_users) {
+            if (normalizedFriendGroupId(user) != query.groupId ||
+                !matchesFriendKeyword(user, query.keyword)) {
+                continue;
+            }
+            result.push_back(makeFriendSummary(user));
+        }
+        return result;
+    }
+
+    void onAfterRequest(const FriendGroupItemsRequest& query, QVector<FriendSummary>& result) const override
+    {
+        sortFriendSummaries(result);
+        const int offset = qBound(0, query.offset, result.size());
+        const int limit = query.limit < 0 ? result.size() - offset : qMax(0, query.limit);
+        result = result.mid(offset, limit);
     }
 
     QVector<User> m_users;
@@ -206,6 +307,18 @@ QVector<FriendSummary> UserRepository::requestFriendList(const FriendListRequest
 {
     QMutexLocker locker(&mutex);
     return FriendListRequestOperation(QVector<User>::fromList(userMap.values())).request(query);
+}
+
+QVector<FriendGroupSummary> UserRepository::requestFriendGroupSummaries(const FriendGroupListRequest& query) const
+{
+    QMutexLocker locker(&mutex);
+    return FriendGroupListRequestOperation(QVector<User>::fromList(userMap.values())).request(query);
+}
+
+QVector<FriendSummary> UserRepository::requestFriendsInGroup(const FriendGroupItemsRequest& query) const
+{
+    QMutexLocker locker(&mutex);
+    return FriendGroupItemsRequestOperation(QVector<User>::fromList(userMap.values())).request(query);
 }
 
 User UserRepository::requestUserDetail(const UserDetailRequest& query) const

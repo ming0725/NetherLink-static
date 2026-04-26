@@ -241,10 +241,16 @@ void GroupListDelegate::paint(QPainter* painter,
                            kAvatarSize);
     const qreal devicePixelRatio = painter->device()->devicePixelRatioF();
     const QString avatarPath = index.data(GroupListModel::AvatarPathRole).toString();
-    const QPixmap avatar = ImageService::instance().circularAvatar(avatarPath,
-                                                                   kAvatarSize,
-                                                                   devicePixelRatio);
-    painter->drawPixmap(avatarRect, avatar);
+    const QPixmap avatar = ImageService::instance().circularAvatarPreview(avatarPath,
+                                                                          kAvatarSize,
+                                                                          devicePixelRatio);
+    if (avatar.isNull()) {
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(QColor(0xea, 0xea, 0xea));
+        painter->drawEllipse(avatarRect);
+    } else {
+        painter->drawPixmap(avatarRect, avatar);
+    }
 
     const int contentLeft = avatarRect.right() + kContentSpacing + 1;
     const int rightEdge = option.rect.right() - kRightPadding;

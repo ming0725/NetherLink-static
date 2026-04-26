@@ -35,7 +35,11 @@ public:
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     Qt::ItemFlags flags(const QModelIndex& index) const override;
 
-    void setFriends(QVector<FriendSummary> friends);
+    void setGroups(QVector<FriendGroupSummary> groups, bool preserveLoadedItems = true);
+    void appendFriendsToGroup(const QString& groupId, QVector<FriendSummary> friends, bool hasMore);
+    int loadedFriendCount(const QString& groupId) const;
+    bool hasMoreFriends(const QString& groupId) const;
+    void pruneCollapsedRows();
     QString friendIdAt(const QModelIndex& index) const;
     QString groupIdAt(const QModelIndex& index) const;
     QString groupIdForFriend(const QString& userId) const;
@@ -57,8 +61,10 @@ private:
         QString groupId;
         QString groupName;
         QVector<FriendSummary> friends;
-        bool expanded = true;
-        qreal progress = 1.0;
+        int totalCount = 0;
+        bool hasMore = false;
+        bool expanded = false;
+        qreal progress = 0.0;
     };
 
     struct RowEntry {

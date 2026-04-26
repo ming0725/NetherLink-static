@@ -280,6 +280,14 @@ FriendDetailPage::FriendDetailPage(QWidget* parent)
         emit friendDeleted();
     });
 
+    auto* groupMenu = new QMenu(m_groupButton);
+    groupMenu->setStyleSheet(QStringLiteral(
+            "QMenu { background: #f0f0f0; border: 1px solid #d6d6d6; padding: 4px; }"
+            "QMenu::item { padding: 6px 26px 6px 24px; border-radius: 4px; }"
+            "QMenu::item:selected { background: #e2e2e2; }"));
+    connect(groupMenu, &QMenu::aboutToShow, this, &FriendDetailPage::rebuildGroupMenu);
+    m_groupButton->setMenu(groupMenu);
+
     qApp->installEventFilter(this);
 }
 
@@ -341,7 +349,6 @@ void FriendDetailPage::setUser(const User& user)
     updateGroupButtonText();
     updateSignatureText();
     QTimer::singleShot(0, this, &FriendDetailPage::updateSignatureText);
-    rebuildGroupMenu();
 }
 
 void FriendDetailPage::updateAvatar()
@@ -397,11 +404,15 @@ void FriendDetailPage::saveRemark()
 
 void FriendDetailPage::rebuildGroupMenu()
 {
-    auto* menu = new QMenu(m_groupButton);
-    menu->setStyleSheet(QStringLiteral(
-            "QMenu { background: #f0f0f0; border: 1px solid #d6d6d6; padding: 4px; }"
-            "QMenu::item { padding: 6px 26px 6px 24px; border-radius: 4px; }"
-            "QMenu::item:selected { background: #e2e2e2; }"));
+    QMenu* menu = m_groupButton->menu();
+    if (!menu) {
+        return;
+    }
+    menu->clear();
+    const QList<QActionGroup*> oldGroups = menu->findChildren<QActionGroup*>(QString(), Qt::FindDirectChildrenOnly);
+    for (QActionGroup* oldGroup : oldGroups) {
+        delete oldGroup;
+    }
 
     auto* group = new QActionGroup(menu);
     group->setExclusive(true);
@@ -425,10 +436,6 @@ void FriendDetailPage::rebuildGroupMenu()
         addGroupAction(it.key(), it.value());
     }
 
-    if (QMenu* oldMenu = m_groupButton->menu()) {
-        oldMenu->deleteLater();
-    }
-    m_groupButton->setMenu(menu);
 }
 
 void FriendDetailPage::changeGroup(const QString& groupId, const QString& groupName)
@@ -441,5 +448,4 @@ void FriendDetailPage::changeGroup(const QString& groupId, const QString& groupN
     m_user.friendGroupName = groupName;
     UserRepository::instance().saveUser(m_user);
     updateGroupButtonText();
-    rebuildGroupMenu();
 }

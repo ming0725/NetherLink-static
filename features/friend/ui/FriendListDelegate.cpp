@@ -242,15 +242,21 @@ void FriendListDelegate::paint(QPainter* painter,
                            kAvatarSize);
     const qreal devicePixelRatio = painter->device()->devicePixelRatioF();
     const QString avatarPath = index.data(FriendListModel::AvatarPathRole).toString();
-    QPixmap avatar = ImageService::instance().circularAvatar(avatarPath,
-                                                             kAvatarSize,
-                                                             devicePixelRatio);
+    QPixmap avatar = ImageService::instance().circularAvatarPreview(avatarPath,
+                                                                    kAvatarSize,
+                                                                    devicePixelRatio);
     const UserStatus status = static_cast<UserStatus>(index.data(FriendListModel::StatusRole).toInt());
     painter->save();
     if (status == Offline) {
         painter->setOpacity(painter->opacity() * 0.42);
     }
-    painter->drawPixmap(avatarRect, avatar);
+    if (avatar.isNull()) {
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(QColor(0xea, 0xea, 0xea));
+        painter->drawEllipse(avatarRect);
+    } else {
+        painter->drawPixmap(avatarRect, avatar);
+    }
     painter->restore();
 
     const int contentLeft = avatarRect.right() + kContentSpacing + 1;
