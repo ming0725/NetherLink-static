@@ -241,6 +241,7 @@ FriendDetailPage::FriendDetailPage(QWidget* parent)
     m_regionRow->hide();
 
     m_remarkEdit->setPlaceholderText(QStringLiteral("设置好友备注"));
+    m_remarkEdit->setFocusPolicy(Qt::ClickFocus);
     m_remarkEdit->setFixedHeight(34);
     m_remarkEdit->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_remarkEdit->setStyleSheet(QStringLiteral(
@@ -352,6 +353,7 @@ void FriendDetailPage::setUser(const User& user)
 
     m_user = user;
     m_hasUser = true;
+    m_remarkEdit->clearFocus();
 
     m_nameLabel->setText(m_user.nick);
     m_idLabel->setText(QStringLiteral("ID %1").arg(m_user.id));

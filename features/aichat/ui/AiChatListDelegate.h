@@ -33,5 +33,6 @@ private:
     static constexpr int kTextLeftPadding = 12;
     static constexpr int kTextRightPadding = 8;
     static constexpr int kMoreButtonSize = 24;
-    static constexpr int kMoreIconSize = 16;
+    static constexpr int kMoreDotSize = 3;
+    static constexpr int kMoreDotGap = 3;
 };

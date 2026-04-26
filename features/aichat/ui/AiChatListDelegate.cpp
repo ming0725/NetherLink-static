@@ -1,10 +1,10 @@
 #include "AiChatListDelegate.h"
 
 #include <QApplication>
+#include <QCursor>
 #include <QPainter>
 
 #include "features/aichat/model/AiChatListModel.h"
-#include "shared/services/ImageService.h"
 
 AiChatListDelegate::AiChatListDelegate(QObject* parent)
     : QStyledItemDelegate(parent)
@@ -56,16 +56,29 @@ void AiChatListDelegate::paint(QPainter* painter,
                                                          textRect.width()));
 
     if (hovered || selected) {
-        const QRect iconRect = moreButtonRect(option, index);
-        const QRect drawRect(iconRect.center().x() - kMoreIconSize / 2,
-                             iconRect.center().y() - kMoreIconSize / 2,
-                             kMoreIconSize,
-                             kMoreIconSize);
-        const QPixmap icon = ImageService::instance().scaled(QStringLiteral(":/resources/icon/more.png"),
-                                                             drawRect.size(),
-                                                             Qt::KeepAspectRatio,
-                                                             painter->device()->devicePixelRatioF());
-        painter->drawPixmap(drawRect, icon);
+        const QRect buttonRect = moreButtonRect(option, index);
+        const QRect drawButtonRect = buttonRect.translated(0, 2);
+        const QPoint cursorPos = option.widget
+                ? option.widget->mapFromGlobal(QCursor::pos())
+                : QPoint(-1, -1);
+        const bool buttonHovered = buttonRect.contains(cursorPos);
+        if (buttonHovered) {
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(QColor(0xdf, 0xdf, 0xdf));
+            painter->drawRoundedRect(drawButtonRect, 5, 5);
+        }
+
+        const int dotsWidth = kMoreDotSize * 3 + kMoreDotGap * 2;
+        const int startX = drawButtonRect.center().x() - dotsWidth / 2;
+        const int y = drawButtonRect.center().y() - kMoreDotSize / 2;
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(buttonHovered ? QColor(0x33, 0x33, 0x33) : QColor(0x66, 0x66, 0x66));
+        for (int dot = 0; dot < 3; ++dot) {
+            painter->drawRect(startX + dot * (kMoreDotSize + kMoreDotGap),
+                              y,
+                              kMoreDotSize,
+                              kMoreDotSize);
+        }
     }
 
     painter->restore();

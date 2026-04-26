@@ -11,6 +11,7 @@
 #include <QPalette>
 #include <QScrollBar>
 #include <QStyleOptionViewItem>
+#include <QTimer>
 
 #include "features/aichat/data/AiChatRepository.h"
 #include "AiChatListDelegate.h"
@@ -28,8 +29,10 @@ AiChatListWidget::AiChatListWidget(QWidget* parent)
     setUniformItemSizes(false);
     setSpacing(0);
     setEditTriggers(QAbstractItemView::NoEditTriggers);
+    setMouseTracking(true);
     setAutoFillBackground(true);
     viewport()->setAutoFillBackground(true);
+    viewport()->setMouseTracking(true);
     QPalette palette = this->palette();
     palette.setColor(QPalette::Base, Qt::white);
     palette.setColor(QPalette::Window, Qt::white);
@@ -67,6 +70,18 @@ void AiChatListWidget::ensureInitialized()
 
     m_initialized = true;
     reloadEntries();
+    updateStickyHeader();
+}
+
+void AiChatListWidget::createNewConversation()
+{
+    const QString conversationId = AiChatRepository::instance().createAiChatConversation(QStringLiteral("新对话"));
+    if (conversationId.isEmpty()) {
+        return;
+    }
+
+    m_initialized = true;
+    reloadEntries(conversationId);
     updateStickyHeader();
 }
 
@@ -143,6 +158,26 @@ void AiChatListWidget::mousePressEvent(QMouseEvent* event)
     }
 
     OverlayScrollListView::mousePressEvent(event);
+}
+
+void AiChatListWidget::mouseMoveEvent(QMouseEvent* event)
+{
+    const QModelIndex index = indexAt(event->pos());
+    bool overMoreButton = false;
+    if (index.isValid()) {
+        const QStyleOptionViewItem option = viewOptionForIndex(index);
+        overMoreButton = m_delegate->moreButtonRect(option, index).contains(event->pos());
+    }
+
+    viewport()->setCursor(overMoreButton ? Qt::PointingHandCursor : Qt::ArrowCursor);
+    OverlayScrollListView::mouseMoveEvent(event);
+    viewport()->update();
+}
+
+void AiChatListWidget::leaveEvent(QEvent* event)
+{
+    viewport()->unsetCursor();
+    OverlayScrollListView::leaveEvent(event);
 }
 
 void AiChatListWidget::paintEvent(QPaintEvent* event)
@@ -282,8 +317,9 @@ void AiChatListWidget::deleteItem(const QModelIndex& index)
     }
 
     const int removedRow = index.row();
-    const bool wasCurrent = currentIndex() == index;
     const QString removedId = index.data(AiChatListModel::ConversationIdRole).toString();
+    const QString currentSelectionId = currentIndex().data(AiChatListModel::ConversationIdRole).toString();
+    const bool wasCurrent = currentSelectionId == removedId;
     QString nextSelectionId;
     if (m_model->rowCount() > 1) {
         const int nextRow = qBound(0, removedRow, m_model->rowCount() - 2);
@@ -298,8 +334,10 @@ void AiChatListWidget::deleteItem(const QModelIndex& index)
         return;
     }
 
-    reloadEntries(wasCurrent ? nextSelectionId
-                             : currentIndex().data(AiChatListModel::ConversationIdRole).toString());
+    const QString restoredSelectionId = wasCurrent ? nextSelectionId : currentSelectionId;
+    QTimer::singleShot(0, this, [this, restoredSelectionId, removedId]() {
+        reloadEntries(restoredSelectionId == removedId ? QString() : restoredSelectionId);
+    });
 }
 
 void AiChatListWidget::drawStickyHeader() const

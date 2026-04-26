@@ -17,9 +17,12 @@ class AiChatListWidget : public OverlayScrollListView
 public:
     explicit AiChatListWidget(QWidget* parent = nullptr);
     void ensureInitialized();
+    void createNewConversation();
 
 protected:
     void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void leaveEvent(QEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void showEvent(QShowEvent* event) override;
 

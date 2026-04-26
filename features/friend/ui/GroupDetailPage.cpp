@@ -259,6 +259,7 @@ GroupDetailPage::GroupDetailPage(QWidget* parent)
     contentLayout->addItem(makeCompressibleSpacing(34));
 
     m_remarkEdit->setPlaceholderText(QStringLiteral("设置群备注"));
+    m_remarkEdit->setFocusPolicy(Qt::ClickFocus);
     m_remarkEdit->setFixedHeight(34);
     m_remarkEdit->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_remarkEdit->setStyleSheet(QStringLiteral(
@@ -367,6 +368,7 @@ void GroupDetailPage::setGroup(const Group& group)
 
     m_group = group;
     m_hasGroup = true;
+    m_remarkEdit->clearFocus();
 
     m_nameLabel->setText(m_group.groupName);
     m_idLabel->setText(QStringLiteral("ID %1").arg(m_group.groupId));
