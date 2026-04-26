@@ -16,6 +16,10 @@ struct FriendListRequest {
     QString keyword;
 };
 
+struct GroupListRequest {
+    QString keyword;
+};
+
 struct UserDetailRequest {
     QString userId;
 };

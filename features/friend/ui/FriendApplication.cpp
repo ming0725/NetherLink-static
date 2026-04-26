@@ -1,61 +1,14 @@
 #include "FriendApplication.h"
 #include "shared/ui/TransparentSplitter.h"
-#include "shared/ui/OverlayScrollListView.h"
-#include <QAbstractListModel>
-#include <QApplication>
 #include <QPainter>
 #include <QPaintEvent>
-#include <QPalette>
 #include <QPushButton>
 #include <QResizeEvent>
-#include <QScrollBar>
-#include <QStyledItemDelegate>
-#include <QStringList>
 #include <QVariantAnimation>
-
-extern const int kContactGroupArrowYOffset;
 
 namespace {
 
-constexpr int kSideListHeaderHeight = 36;
-constexpr int kSideListLeftPadding = 12;
-constexpr int kSideListCountRightPadding = 18;
-constexpr int kSideListArrowSize = 12;
-const int kNoticeArrowYOffset = 2;
-
-const QFont& sideListFont()
-{
-    static const QFont font = []() {
-        QFont value = QApplication::font();
-        value.setPixelSize(12);
-        value.setWeight(QFont::Medium);
-        return value;
-    }();
-    return font;
-}
-
-const QFontMetrics& sideListMetrics()
-{
-    static const QFontMetrics metrics(sideListFont());
-    return metrics;
-}
-
-const QFont& sideListCountFont()
-{
-    static const QFont font = []() {
-        QFont value = QApplication::font();
-        value.setPixelSize(11);
-        value.setWeight(QFont::Medium);
-        return value;
-    }();
-    return font;
-}
-
-const QFontMetrics& sideListCountMetrics()
-{
-    static const QFontMetrics metrics(sideListCountFont());
-    return metrics;
-}
+constexpr int kLeftPaneWidth = 200;
 
 class ModeSwitchBar : public QWidget
 {
@@ -134,194 +87,6 @@ private:
     qreal m_thumbProgress = 0.0;
 };
 
-class GroupListPreviewModel : public QAbstractListModel
-{
-public:
-    enum Role {
-        IsNoticeRole = Qt::UserRole + 1,
-        IsGroupRole,
-        TitleRole,
-        CountRole
-    };
-
-    explicit GroupListPreviewModel(QObject* parent = nullptr)
-        : QAbstractListModel(parent)
-        , m_groups({
-              QStringLiteral("我创建的群聊"),
-              QStringLiteral("我管理的群聊"),
-              QStringLiteral("我加入的群聊"),
-              QStringLiteral("最近联系群聊")
-          })
-    {
-    }
-
-    int rowCount(const QModelIndex& parent = QModelIndex()) const override
-    {
-        return parent.isValid() ? 0 : m_groups.size() + 1;
-    }
-
-    QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override
-    {
-        if (!index.isValid() || index.row() < 0 || index.row() >= rowCount()) {
-            return {};
-        }
-
-        const bool isNotice = index.row() == 0;
-        switch (role) {
-        case Qt::DisplayRole:
-        case TitleRole:
-            return isNotice ? QStringLiteral("群通知") : m_groups.at(index.row() - 1);
-        case IsNoticeRole:
-            return isNotice;
-        case IsGroupRole:
-            return !isNotice;
-        case CountRole:
-            return 0;
-        case Qt::SizeHintRole:
-            return QSize(0, kSideListHeaderHeight);
-        default:
-            return {};
-        }
-    }
-
-    Qt::ItemFlags flags(const QModelIndex& index) const override
-    {
-        return index.isValid() ? Qt::ItemIsEnabled : Qt::NoItemFlags;
-    }
-
-private:
-    QStringList m_groups;
-};
-
-class GroupListPreviewDelegate : public QStyledItemDelegate
-{
-public:
-    explicit GroupListPreviewDelegate(QObject* parent = nullptr)
-        : QStyledItemDelegate(parent)
-    {
-    }
-
-    void paint(QPainter* painter,
-               const QStyleOptionViewItem& option,
-               const QModelIndex& index) const override
-    {
-        painter->save();
-        painter->setClipRect(option.rect);
-
-        const bool hovered = option.state & QStyle::State_MouseOver;
-        if (hovered) {
-            const QRect hoverRect = option.rect.adjusted(6, 3, -6, -3);
-            painter->setRenderHint(QPainter::Antialiasing, true);
-            painter->setBrush(QColor(0xe9, 0xe9, 0xe9));
-            painter->setPen(Qt::NoPen);
-            painter->drawRoundedRect(hoverRect, 6, 6);
-        }
-
-        if (index.data(GroupListPreviewModel::IsNoticeRole).toBool()) {
-            drawNotice(painter, option.rect, index.data(GroupListPreviewModel::TitleRole).toString());
-            painter->restore();
-            return;
-        }
-
-        drawGroup(painter, option.rect, index.data(GroupListPreviewModel::TitleRole).toString());
-        painter->restore();
-    }
-
-    QSize sizeHint(const QStyleOptionViewItem& option,
-                   const QModelIndex& index) const override
-    {
-        Q_UNUSED(option);
-        Q_UNUSED(index);
-        return QSize(0, kSideListHeaderHeight);
-    }
-
-private:
-    void drawNotice(QPainter* painter, const QRect& rect, const QString& title) const
-    {
-        painter->setFont(sideListFont());
-        painter->setPen(QColor(0x11, 0x11, 0x11));
-        painter->drawText(rect.adjusted(20, 0, -28, 0),
-                          Qt::AlignLeft | Qt::AlignVCenter,
-                          sideListMetrics().elidedText(title, Qt::ElideRight, qMax(0, rect.width() - 48)));
-
-        const int centerX = rect.right() - kSideListCountRightPadding;
-        const int centerY = rect.center().y() + kNoticeArrowYOffset;
-        QPen arrowPen(QColor(0x66, 0x66, 0x66), 1.3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
-        painter->setPen(arrowPen);
-        painter->drawLine(QPointF(centerX - 2.0, centerY - 4.0), QPointF(centerX + 2.0, centerY));
-        painter->drawLine(QPointF(centerX + 2.0, centerY), QPointF(centerX - 2.0, centerY + 4.0));
-    }
-
-    void drawGroup(QPainter* painter, const QRect& rect, const QString& title) const
-    {
-        const QRect arrowRect(rect.left() + kSideListLeftPadding,
-                              rect.top() + (rect.height() - kSideListArrowSize) / 2
-                                      + kContactGroupArrowYOffset,
-                              kSideListArrowSize,
-                              kSideListArrowSize);
-
-        painter->save();
-        painter->setRenderHint(QPainter::Antialiasing, true);
-        painter->translate(arrowRect.center());
-        QPen arrowPen(QColor(0x78, 0x86, 0x94), 1.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
-        painter->setPen(arrowPen);
-        painter->drawLine(QPointF(-2.5, -4.0), QPointF(2.5, 0.0));
-        painter->drawLine(QPointF(2.5, 0.0), QPointF(-2.5, 4.0));
-        painter->restore();
-
-        const QString countText = QString::number(0);
-        const int titleLeft = arrowRect.right() + 8;
-        const int countWidth = sideListCountMetrics().horizontalAdvance(countText);
-        const int rightEdge = rect.right() - kSideListCountRightPadding;
-        const QRect countRect(qMax(titleLeft, rightEdge - countWidth + 1),
-                              rect.top(),
-                              countWidth,
-                              rect.height());
-        const QRect titleRect(titleLeft,
-                              rect.top(),
-                              qMax(0, countRect.left() - titleLeft - 8),
-                              rect.height());
-
-        painter->setFont(sideListFont());
-        painter->setPen(QColor(0x38, 0x45, 0x52));
-        painter->drawText(titleRect,
-                          Qt::AlignLeft | Qt::AlignVCenter,
-                          sideListMetrics().elidedText(title, Qt::ElideRight, titleRect.width()));
-        painter->setFont(sideListCountFont());
-        painter->setPen(QColor(0x99, 0xa3, 0xad));
-        painter->drawText(countRect, Qt::AlignRight | Qt::AlignVCenter, countText);
-    }
-};
-
-class GroupListPreviewWidget : public OverlayScrollListView
-{
-public:
-    explicit GroupListPreviewWidget(QWidget* parent = nullptr)
-        : OverlayScrollListView(parent)
-        , m_model(new GroupListPreviewModel(this))
-        , m_delegate(new GroupListPreviewDelegate(this))
-    {
-        setModel(m_model);
-        setItemDelegate(m_delegate);
-        setSelectionMode(QAbstractItemView::NoSelection);
-        setEditTriggers(QAbstractItemView::NoEditTriggers);
-        setMouseTracking(true);
-        setAutoFillBackground(true);
-        viewport()->setAutoFillBackground(true);
-        QPalette palette = this->palette();
-        palette.setColor(QPalette::Base, Qt::white);
-        palette.setColor(QPalette::Window, Qt::white);
-        setPalette(palette);
-        viewport()->setPalette(palette);
-        setWheelStepPixels(64);
-        setScrollBarInsets(8, 4);
-    }
-
-private:
-    GroupListPreviewModel* m_model;
-    GroupListPreviewDelegate* m_delegate;
-};
-
 QString modeButtonStyle()
 {
     return QStringLiteral(
@@ -352,10 +117,10 @@ FriendApplication::LeftPane::LeftPane(QWidget* parent)
         , m_friendModeButton(new QPushButton(QStringLiteral("好友"), m_modeBar))
         , m_groupModeButton(new QPushButton(QStringLiteral("群聊"), m_modeBar))
         , m_content(new FriendListWidget(this))
-        , m_groupPlaceholder(new GroupListPreviewWidget(this))
+        , m_groupList(new GroupListWidget(this))
 {
-    setMinimumWidth(144);
-    setMaximumWidth(305);
+    setFixedWidth(kLeftPaneWidth);
+    setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
     m_searchInput->setFixedHeight(26);
     m_addButton->setRadius(8);
     m_addButton->setNormalColor(QColor(0xF5, 0xF5, 0xF5));
@@ -381,7 +146,7 @@ FriendApplication::LeftPane::LeftPane(QWidget* parent)
     m_groupModeButton->setStyleSheet(modeButtonStyle());
     static_cast<ModeSwitchBar*>(m_modeBar)->setButtons(m_friendModeButton, m_groupModeButton);
 
-    m_groupPlaceholder->hide();
+    m_groupList->hide();
 
     connect(m_friendModeButton, &QPushButton::clicked, this, [this]() { updateContentMode(true); });
     connect(m_groupModeButton, &QPushButton::clicked, this, [this]() { updateContentMode(true); });
@@ -418,7 +183,7 @@ void FriendApplication::LeftPane::resizeEvent(QResizeEvent* ev)
     const int contentY = nextY + modeHeight + 4;
     const QRect contentRect(0, contentY, width(), qMax(0, height() - contentY));
     m_content->setGeometry(contentRect);
-    m_groupPlaceholder->setGeometry(contentRect);
+    m_groupList->setGeometry(contentRect);
     updateContentMode(false);
 }
 
@@ -427,7 +192,10 @@ void FriendApplication::LeftPane::updateContentMode(bool animate)
     const bool showGroups = m_groupModeButton->isChecked();
     static_cast<ModeSwitchBar*>(m_modeBar)->setCurrentSegment(showGroups ? 1 : 0, animate);
     m_content->setVisible(!showGroups);
-    m_groupPlaceholder->setVisible(showGroups);
+    m_groupList->setVisible(showGroups);
+    if (showGroups) {
+        m_groupList->ensureInitialized();
+    }
 }
 
 FriendApplication::FriendApplication(QWidget* parent)
@@ -440,8 +208,12 @@ FriendApplication::FriendApplication(QWidget* parent)
     m_rightStack = new QStackedWidget(this);
     m_defaultPage = new DefaultPage(this);
     m_detailPage = new FriendDetailPage(this);
+    m_groupDetailPage = new GroupDetailPage(this);
+    m_rightStack->setMinimumWidth(0);
+    m_rightStack->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     m_rightStack->addWidget(m_defaultPage);
     m_rightStack->addWidget(m_detailPage);
+    m_rightStack->addWidget(m_groupDetailPage);
     m_rightStack->setCurrentWidget(m_defaultPage);
 
     // 3) 分割器：将左、右面板加入
@@ -454,7 +226,7 @@ FriendApplication::FriendApplication(QWidget* parent)
     m_splitter->setStretchFactor(1, 1);          // 右侧占满剩余
 
     // （可选）设置初始左侧宽度
-    m_splitter->setSizes({ 200, width() - 200 });
+    m_splitter->setSizes({ kLeftPaneWidth, qMax(0, width() - kLeftPaneWidth) });
     m_splitter->handle(1)->setCursor(Qt::SizeHorCursor);
 
     // 去除窗口自带标题栏，若需要无边框效果
@@ -462,6 +234,8 @@ FriendApplication::FriendApplication(QWidget* parent)
 
     connect(m_leftPane->searchInput()->getLineEdit(), &QLineEdit::textChanged,
             m_leftPane->friendList(), &FriendListWidget::setKeyword);
+    connect(m_leftPane->searchInput()->getLineEdit(), &QLineEdit::textChanged,
+            m_leftPane->groupList(), &GroupListWidget::setKeyword);
     connect(m_leftPane->friendList(), &FriendListWidget::selectedFriendChanged,
             this, [this](const QString& userId) {
                 if (userId.isEmpty()) {
@@ -471,7 +245,20 @@ FriendApplication::FriendApplication(QWidget* parent)
                 m_detailPage->setUserId(userId);
                 m_rightStack->setCurrentWidget(m_detailPage);
             });
+    connect(m_leftPane->groupList(), &GroupListWidget::selectedGroupChanged,
+            this, [this](const QString& groupId) {
+                if (groupId.isEmpty()) {
+                    m_rightStack->setCurrentWidget(m_defaultPage);
+                    return;
+                }
+                m_groupDetailPage->setGroupId(groupId);
+                m_rightStack->setCurrentWidget(m_groupDetailPage);
+            });
     connect(m_detailPage, &FriendDetailPage::friendDeleted,
+            this, [this]() {
+                m_rightStack->setCurrentWidget(m_defaultPage);
+            });
+    connect(m_groupDetailPage, &GroupDetailPage::groupExited,
             this, [this]() {
                 m_rightStack->setCurrentWidget(m_defaultPage);
             });

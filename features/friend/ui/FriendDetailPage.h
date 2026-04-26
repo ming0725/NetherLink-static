@@ -6,7 +6,7 @@
 
 class QLabel;
 class QLineEdit;
-class QPushButton;
+class StatefulPushButton;
 class QToolButton;
 class QVBoxLayout;
 
@@ -54,6 +54,6 @@ private:
     QLineEdit* m_remarkEdit;
     QToolButton* m_groupButton;
     QLabel* m_signatureLabel;
-    QPushButton* m_messageButton;
-    QPushButton* m_deleteButton;
+    StatefulPushButton* m_messageButton;
+    StatefulPushButton* m_deleteButton;
 };

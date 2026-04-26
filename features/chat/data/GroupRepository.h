@@ -11,13 +11,21 @@ class GroupRepository : public QObject{
 public:
     static GroupRepository& instance();
 
-    QVector<Group> requestGroupList() const;
+    QVector<Group> requestGroupList(const GroupListRequest& query = {}) const;
     Group requestGroupDetail(const GroupDetailRequest& query) const;
     QString requestGroupAvatarPath(const QString& groupId) const;
+    QMap<QString, QString> requestGroupCategories() const;
+    QString effectiveGroupCategoryId(const Group& group) const;
+    QString effectiveGroupCategoryName(const Group& group) const;
+    bool isCurrentUserGroupOwner(const Group& group) const;
+    bool isCurrentUserGroupAdmin(const Group& group) const;
     bool contains(const QString& groupId) const;
 
     void saveGroup(const Group& group);
     void removeGroup(const QString& groupID);
+
+signals:
+    void groupListChanged();
 
 private:
     explicit GroupRepository(QObject* parent = nullptr);

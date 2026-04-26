@@ -12,5 +12,9 @@ struct Group {
     bool isDnd = false;
     QVector<QString> adminsID;
     QString remark;
+    QString introduction;
+    QString announcement;
     QVector<QString> membersID;
+    QString listGroupId = "gg_joined";
+    QString listGroupName = "我加入的群聊";
 };

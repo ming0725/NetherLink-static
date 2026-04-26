@@ -9,7 +9,6 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QPainter>
-#include <QPushButton>
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QStyle>
@@ -19,6 +18,7 @@
 
 #include "features/friend/data/UserRepository.h"
 #include "shared/services/ImageService.h"
+#include "shared/ui/StatefulPushButton.h"
 
 namespace {
 
@@ -56,6 +56,23 @@ QHBoxLayout* makeInfoRow(const QString& title, QWidget* valueWidget)
     row->addWidget(titleLabel, 0, Qt::AlignTop);
     row->addWidget(valueWidget, 1);
     return row;
+}
+
+void applyPrimaryButtonStyle(StatefulPushButton* button)
+{
+    button->setRadius(8);
+    button->setPrimaryStyle();
+}
+
+void applyDangerOutlineButtonStyle(StatefulPushButton* button)
+{
+    button->setRadius(8);
+    button->setNormalColor(Qt::white);
+    button->setHoverColor(QColor(0xff, 0xf4, 0xf4));
+    button->setPressColor(QColor(0xff, 0xe8, 0xe8));
+    button->setTextColor(QColor(0xd9, 0x36, 0x36));
+    button->setBorderColor(QColor(0xdd, 0xdd, 0xdd));
+    button->setBorderWidth(1);
 }
 
 } // namespace
@@ -145,8 +162,8 @@ FriendDetailPage::FriendDetailPage(QWidget* parent)
     , m_remarkEdit(new QLineEdit(this))
     , m_groupButton(new GroupSelectButton(this))
     , m_signatureLabel(new QLabel(this))
-    , m_messageButton(new QPushButton(QStringLiteral("发消息"), this))
-    , m_deleteButton(new QPushButton(QStringLiteral("删除好友"), this))
+    , m_messageButton(new StatefulPushButton(QStringLiteral("发消息"), this))
+    , m_deleteButton(new StatefulPushButton(QStringLiteral("删除好友"), this))
 {
     setAutoFillBackground(true);
     QPalette pal = palette();
@@ -242,25 +259,19 @@ FriendDetailPage::FriendDetailPage(QWidget* parent)
     buttons->addStretch();
     m_messageButton->setFixedSize(118, 38);
     m_deleteButton->setFixedSize(118, 38);
-    m_messageButton->setCursor(Qt::PointingHandCursor);
-    m_deleteButton->setCursor(Qt::PointingHandCursor);
-    m_messageButton->setStyleSheet(QStringLiteral(
-            "QPushButton { background: #0099ff; color: white; border: none; border-radius: 8px; }"
-            "QPushButton:hover { background: #0088ee; }"));
-    m_deleteButton->setStyleSheet(QStringLiteral(
-            "QPushButton { background: white; color: #d93636; border: 1px solid #dddddd; border-radius: 8px; }"
-            "QPushButton:hover { background: #fff4f4; }"));
+    applyPrimaryButtonStyle(m_messageButton);
+    applyDangerOutlineButtonStyle(m_deleteButton);
     buttons->addWidget(m_messageButton);
     buttons->addWidget(m_deleteButton);
     buttons->addStretch();
     contentLayout->addLayout(buttons);
 
-    connect(m_messageButton, &QPushButton::clicked, this, [this]() {
+    connect(m_messageButton, &StatefulPushButton::clicked, this, [this]() {
         if (m_hasUser) {
             emit requestMessage(m_user.id);
         }
     });
-    connect(m_deleteButton, &QPushButton::clicked, this, [this]() {
+    connect(m_deleteButton, &StatefulPushButton::clicked, this, [this]() {
         if (!m_hasUser) {
             return;
         }

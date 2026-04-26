@@ -1,4 +1,4 @@
-#include "FriendListWidget.h"
+#include "GroupListWidget.h"
 
 #include <QApplication>
 #include <QCursor>
@@ -9,20 +9,20 @@
 #include <QScrollBar>
 #include <QVariantAnimation>
 
-#include "features/friend/ui/FriendListDelegate.h"
-#include "features/friend/model/FriendListModel.h"
-#include "features/friend/data/UserRepository.h"
+#include "features/chat/data/GroupRepository.h"
+#include "features/friend/model/GroupListModel.h"
+#include "features/friend/ui/GroupListDelegate.h"
 
 extern const int kContactGroupArrowYOffset;
 
 namespace {
 
 constexpr int kStickyHeaderHeight = 36;
-constexpr int kGroupLeftPadding = 12;
-constexpr int kGroupCountRightPadding = 18;
-constexpr int kGroupArrowSize = 12;
+constexpr int kCategoryLeftPadding = 12;
+constexpr int kCategoryCountRightPadding = 18;
+constexpr int kCategoryArrowSize = 12;
 
-QFont stickyGroupFont()
+QFont stickyCategoryFont()
 {
     QFont font = QApplication::font();
     font.setPixelSize(12);
@@ -30,7 +30,7 @@ QFont stickyGroupFont()
     return font;
 }
 
-QFont stickyGroupCountFont()
+QFont stickyCategoryCountFont()
 {
     QFont font = QApplication::font();
     font.setPixelSize(11);
@@ -40,10 +40,10 @@ QFont stickyGroupCountFont()
 
 } // namespace
 
-FriendListWidget::FriendListWidget(QWidget* parent)
+GroupListWidget::GroupListWidget(QWidget* parent)
     : OverlayScrollListView(parent)
-    , m_model(new FriendListModel(this))
-    , m_delegate(new FriendListDelegate(this))
+    , m_model(new GroupListModel(this))
+    , m_delegate(new GroupListDelegate(this))
 {
     setModel(m_model);
     setItemDelegate(m_delegate);
@@ -63,11 +63,11 @@ FriendListWidget::FriendListWidget(QWidget* parent)
     setScrollBarInsets(8, 4);
 
     connect(selectionModel(), &QItemSelectionModel::currentChanged,
-            this, &FriendListWidget::onCurrentChanged);
-    connect(&UserRepository::instance(), &UserRepository::friendListChanged,
-            this, &FriendListWidget::reloadFriends);
+            this, &GroupListWidget::onCurrentChanged);
+    connect(&GroupRepository::instance(), &GroupRepository::groupListChanged,
+            this, &GroupListWidget::reloadGroups);
     connect(verticalScrollBar(), &QScrollBar::valueChanged,
-            this, &FriendListWidget::updateStickyHeader);
+            this, &GroupListWidget::updateStickyHeader);
     connect(m_model, &QAbstractItemModel::modelReset,
             this, [this]() { updateStickyHeader(); });
     connect(m_model, &QAbstractItemModel::rowsInserted,
@@ -80,18 +80,18 @@ FriendListWidget::FriendListWidget(QWidget* parent)
             });
 }
 
-void FriendListWidget::ensureInitialized()
+void GroupListWidget::ensureInitialized()
 {
     if (m_state.initialized) {
         return;
     }
 
     m_state.initialized = true;
-    reloadFriends();
+    reloadGroups();
     updateStickyHeader();
 }
 
-void FriendListWidget::setKeyword(const QString& keyword)
+void GroupListWidget::setKeyword(const QString& keyword)
 {
     if (m_state.keyword == keyword) {
         return;
@@ -99,34 +99,34 @@ void FriendListWidget::setKeyword(const QString& keyword)
 
     m_state.keyword = keyword;
     if (m_state.initialized) {
-        reloadFriends();
+        reloadGroups();
     }
 }
 
-QString FriendListWidget::selectedFriendId() const
+QString GroupListWidget::selectedGroupId() const
 {
-    return m_model->friendIdAt(currentIndex());
+    return m_model->groupIdAt(currentIndex());
 }
 
-FriendSummary FriendListWidget::selectedFriend() const
+Group GroupListWidget::selectedGroup() const
 {
-    return m_model->friendAt(currentIndex());
+    return m_model->groupAt(currentIndex());
 }
 
-void FriendListWidget::showEvent(QShowEvent* event)
+void GroupListWidget::showEvent(QShowEvent* event)
 {
     OverlayScrollListView::showEvent(event);
     ensureInitialized();
     updateStickyHeader();
 }
 
-void FriendListWidget::paintEvent(QPaintEvent* event)
+void GroupListWidget::paintEvent(QPaintEvent* event)
 {
     OverlayScrollListView::paintEvent(event);
     drawStickyHeader();
 }
 
-void FriendListWidget::leaveEvent(QEvent* event)
+void GroupListWidget::leaveEvent(QEvent* event)
 {
     OverlayScrollListView::leaveEvent(event);
     if (m_stickyVisible) {
@@ -134,7 +134,7 @@ void FriendListWidget::leaveEvent(QEvent* event)
     }
 }
 
-void FriendListWidget::mousePressEvent(QMouseEvent* event)
+void GroupListWidget::mousePressEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton) {
         OverlayScrollListView::mousePressEvent(event);
@@ -142,8 +142,8 @@ void FriendListWidget::mousePressEvent(QMouseEvent* event)
     }
 
     const QRect stickyRect(0, m_stickyOffsetY, viewport()->width(), kStickyHeaderHeight);
-    if (m_stickyVisible && !m_stickyGroup.groupId.isEmpty() && stickyRect.contains(event->pos())) {
-        toggleStickyGroupById(m_stickyGroup.groupId);
+    if (m_stickyVisible && !m_stickyCategory.categoryId.isEmpty() && stickyRect.contains(event->pos())) {
+        toggleStickyCategoryById(m_stickyCategory.categoryId);
         event->accept();
         return;
     }
@@ -155,8 +155,8 @@ void FriendListWidget::mousePressEvent(QMouseEvent* event)
         return;
     }
 
-    if (m_model->isGroupRow(index)) {
-        toggleGroup(index);
+    if (m_model->isCategoryRow(index)) {
+        toggleCategory(index);
         event->accept();
         return;
     }
@@ -175,7 +175,7 @@ void FriendListWidget::mousePressEvent(QMouseEvent* event)
     selectionModel()->setCurrentIndex(index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
 }
 
-void FriendListWidget::mouseMoveEvent(QMouseEvent* event)
+void GroupListWidget::mouseMoveEvent(QMouseEvent* event)
 {
     OverlayScrollListView::mouseMoveEvent(event);
     if (m_stickyVisible) {
@@ -183,43 +183,43 @@ void FriendListWidget::mouseMoveEvent(QMouseEvent* event)
     }
 }
 
-void FriendListWidget::onCurrentChanged(const QModelIndex& current, const QModelIndex& previous)
+void GroupListWidget::onCurrentChanged(const QModelIndex& current, const QModelIndex& previous)
 {
     Q_UNUSED(previous);
-    m_state.selectedFriendId = m_model->isFriendRow(current) ? m_model->friendIdAt(current) : QString();
-    emit selectedFriendChanged(m_state.selectedFriendId);
+    m_state.selectedGroupId = m_model->isGroupRow(current) ? m_model->groupIdAt(current) : QString();
+    emit selectedGroupChanged(m_state.selectedGroupId);
 }
 
-void FriendListWidget::reloadFriends()
+void GroupListWidget::reloadGroups()
 {
     if (!m_state.initialized) {
         return;
     }
 
-    m_model->setFriends(UserRepository::instance().requestFriendList({m_state.keyword}));
+    m_model->setGroups(GroupRepository::instance().requestGroupList({m_state.keyword}));
     restoreSelection();
     updateStickyHeader();
 }
 
-void FriendListWidget::restoreSelection()
+void GroupListWidget::restoreSelection()
 {
-    if (m_state.selectedFriendId.isEmpty()) {
+    if (m_state.selectedGroupId.isEmpty()) {
         clearSelection();
         setCurrentIndex(QModelIndex());
         return;
     }
 
-    const int row = m_model->indexOfFriend(m_state.selectedFriendId);
+    const int row = m_model->indexOfGroup(m_state.selectedGroupId);
     if (row < 0) {
-        m_state.selectedFriendId.clear();
+        m_state.selectedGroupId.clear();
         clearSelection();
         setCurrentIndex(QModelIndex());
         return;
     }
 
     const QModelIndex index = m_model->index(row, 0);
-    if (index.data(FriendListModel::GroupProgressRole).toReal() <= 0.01) {
-        m_state.selectedFriendId.clear();
+    if (index.data(GroupListModel::CategoryProgressRole).toReal() <= 0.01) {
+        m_state.selectedGroupId.clear();
         clearSelection();
         setCurrentIndex(QModelIndex());
         return;
@@ -228,94 +228,94 @@ void FriendListWidget::restoreSelection()
     selectionModel()->setCurrentIndex(index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
 }
 
-void FriendListWidget::toggleGroup(const QModelIndex& index)
+void GroupListWidget::toggleCategory(const QModelIndex& index)
 {
-    toggleGroupById(m_model->groupIdAt(index));
+    toggleCategoryById(m_model->categoryIdAt(index));
 }
 
-void FriendListWidget::toggleStickyGroupById(const QString& groupId)
+void GroupListWidget::toggleStickyCategoryById(const QString& categoryId)
 {
-    const QString stableGroupId = groupId;
-    if (stableGroupId.isEmpty()) {
+    const QString stableCategoryId = categoryId;
+    if (stableCategoryId.isEmpty()) {
         return;
     }
 
-    const bool expanded = m_model->isGroupExpanded(stableGroupId);
-    const bool pinnedAtTop = isGroupPinnedAtTop(stableGroupId);
+    const bool expanded = m_model->isCategoryExpanded(stableCategoryId);
+    const bool pinnedAtTop = isCategoryPinnedAtTop(stableCategoryId);
 
     if (expanded && !pinnedAtTop) {
-        scrollGroupToTop(stableGroupId);
-        collapseGroupById(stableGroupId, true);
+        scrollCategoryToTop(stableCategoryId);
+        collapseCategoryById(stableCategoryId, true);
         return;
     }
 
-    toggleGroupById(stableGroupId, true);
+    toggleCategoryById(stableCategoryId, true);
 }
 
-void FriendListWidget::toggleGroupById(const QString& groupId, bool keepGroupAtTop)
+void GroupListWidget::toggleCategoryById(const QString& categoryId, bool keepCategoryAtTop)
 {
-    if (groupId.isEmpty()) {
+    if (categoryId.isEmpty()) {
         return;
     }
 
-    const bool expanded = m_model->isGroupExpanded(groupId);
-    setGroupExpandedAnimated(groupId, !expanded, keepGroupAtTop);
+    const bool expanded = m_model->isCategoryExpanded(categoryId);
+    setCategoryExpandedAnimated(categoryId, !expanded, keepCategoryAtTop);
 }
 
-void FriendListWidget::collapseGroupById(const QString& groupId, bool keepGroupAtTop)
+void GroupListWidget::collapseCategoryById(const QString& categoryId, bool keepCategoryAtTop)
 {
-    setGroupExpandedAnimated(groupId, false, keepGroupAtTop);
+    setCategoryExpandedAnimated(categoryId, false, keepCategoryAtTop);
 }
 
-void FriendListWidget::setGroupExpandedAnimated(const QString& groupId, bool targetExpanded, bool keepGroupAtTop)
+void GroupListWidget::setCategoryExpandedAnimated(const QString& categoryId, bool targetExpanded, bool keepCategoryAtTop)
 {
-    if (groupId.isEmpty()) {
+    if (categoryId.isEmpty()) {
         return;
     }
 
-    const bool expanded = m_model->isGroupExpanded(groupId);
-    const qreal startProgress = m_model->groupProgress(groupId);
+    const bool expanded = m_model->isCategoryExpanded(categoryId);
+    const qreal startProgress = m_model->categoryProgress(categoryId);
     const qreal endProgress = targetExpanded ? 1.0 : 0.0;
-    const bool shouldKeepAtTop = keepGroupAtTop && !targetExpanded;
+    const bool shouldKeepAtTop = keepCategoryAtTop && !targetExpanded;
 
     if (expanded == targetExpanded && qAbs(startProgress - endProgress) <= 0.001) {
         return;
     }
 
-    if (QPointer<QVariantAnimation> running = m_groupAnimations.value(groupId)) {
+    if (QPointer<QVariantAnimation> running = m_categoryAnimations.value(categoryId)) {
         running->stop();
         running->deleteLater();
     }
 
-    m_model->setGroupExpanded(groupId, targetExpanded);
+    m_model->setCategoryExpanded(categoryId, targetExpanded);
     if (shouldKeepAtTop) {
-        scrollGroupToTop(groupId);
+        scrollCategoryToTop(categoryId);
     }
 
     auto* animation = new QVariantAnimation(this);
-    m_groupAnimations.insert(groupId, animation);
+    m_categoryAnimations.insert(categoryId, animation);
     animation->setStartValue(startProgress);
     animation->setEndValue(endProgress);
     animation->setDuration(240);
     animation->setEasingCurve(QEasingCurve::OutCubic);
 
-    connect(animation, &QVariantAnimation::valueChanged, this, [this, groupId, shouldKeepAtTop](const QVariant& value) {
-        m_model->setGroupProgress(groupId, value.toReal());
+    connect(animation, &QVariantAnimation::valueChanged, this, [this, categoryId, shouldKeepAtTop](const QVariant& value) {
+        m_model->setCategoryProgress(categoryId, value.toReal());
         doItemsLayout();
         if (shouldKeepAtTop) {
-            scrollGroupToTop(groupId);
+            scrollCategoryToTop(categoryId);
         }
         viewport()->update();
         updateOverlayScrollBar();
         updateStickyHeader();
     });
-    connect(animation, &QVariantAnimation::finished, this, [this, groupId, endProgress, animation, shouldKeepAtTop]() {
-        m_model->setGroupProgress(groupId, endProgress);
-        m_groupAnimations.remove(groupId);
+    connect(animation, &QVariantAnimation::finished, this, [this, categoryId, endProgress, animation, shouldKeepAtTop]() {
+        m_model->setCategoryProgress(categoryId, endProgress);
+        m_categoryAnimations.remove(categoryId);
         animation->deleteLater();
         doItemsLayout();
         if (shouldKeepAtTop) {
-            scrollGroupToTop(groupId);
+            scrollCategoryToTop(categoryId);
         }
         viewport()->update();
         updateOverlayScrollBar();
@@ -325,53 +325,53 @@ void FriendListWidget::setGroupExpandedAnimated(const QString& groupId, bool tar
     animation->start();
 }
 
-bool FriendListWidget::isGroupPinnedAtTop(const QString& groupId) const
+bool GroupListWidget::isCategoryPinnedAtTop(const QString& categoryId) const
 {
-    const int groupRow = m_model->groupRowForId(groupId);
-    if (groupRow < 0) {
+    const int categoryRow = m_model->categoryRowForId(categoryId);
+    if (categoryRow < 0) {
         return false;
     }
 
-    const QRect groupRect = visualRect(m_model->index(groupRow, 0));
-    return groupRect.isValid() && qAbs(groupRect.top()) <= 1;
+    const QRect categoryRect = visualRect(m_model->index(categoryRow, 0));
+    return categoryRect.isValid() && qAbs(categoryRect.top()) <= 1;
 }
 
-void FriendListWidget::scrollGroupToTop(const QString& groupId)
+void GroupListWidget::scrollCategoryToTop(const QString& categoryId)
 {
-    const QString stableGroupId = groupId;
-    const int groupRow = m_model->groupRowForId(stableGroupId);
-    if (groupRow < 0) {
+    const QString stableCategoryId = categoryId;
+    const int categoryRow = m_model->categoryRowForId(stableCategoryId);
+    if (categoryRow < 0) {
         return;
     }
 
-    scrollTo(m_model->index(groupRow, 0), QAbstractItemView::PositionAtTop);
+    scrollTo(m_model->index(categoryRow, 0), QAbstractItemView::PositionAtTop);
 }
 
-void FriendListWidget::clearCurrentSelection()
+void GroupListWidget::clearCurrentSelection()
 {
     clearSelection();
     setCurrentIndex(QModelIndex());
-    m_state.selectedFriendId.clear();
+    m_state.selectedGroupId.clear();
 }
 
-void FriendListWidget::updateStickyHeader()
+void GroupListWidget::updateStickyHeader()
 {
     const StickyHeaderState state = calculateStickyHeaderState();
     m_stickyVisible = state.visible;
     m_stickyOffsetY = state.offsetY;
 
     if (!m_stickyVisible) {
-        m_stickyGroup = {};
+        m_stickyCategory = {};
         viewport()->update();
         return;
     }
 
-    m_stickyGroup = state.group;
+    m_stickyCategory = state.category;
 
     viewport()->update();
 }
 
-FriendListWidget::StickyHeaderState FriendListWidget::calculateStickyHeaderState() const
+GroupListWidget::StickyHeaderState GroupListWidget::calculateStickyHeaderState() const
 {
     StickyHeaderState state;
     if (m_model->rowCount() <= 0 || verticalScrollBar()->value() <= 0) {
@@ -386,17 +386,17 @@ FriendListWidget::StickyHeaderState FriendListWidget::calculateStickyHeaderState
         return state;
     }
 
-    const int currentGroupRow = m_model->groupRowForRow(firstVisible.row());
-    if (currentGroupRow < 0) {
+    const int currentCategoryRow = m_model->categoryRowForRow(firstVisible.row());
+    if (currentCategoryRow < 0) {
         return state;
     }
 
     state.visible = true;
-    state.group = stickyGroupDataForRow(currentGroupRow);
+    state.category = stickyCategoryDataForRow(currentCategoryRow);
 
-    const int nextGroupRow = m_model->nextGroupRow(currentGroupRow);
-    if (nextGroupRow >= 0) {
-        const QRect nextRect = visualRect(m_model->index(nextGroupRow, 0));
+    const int nextCategoryRow = m_model->nextCategoryRow(currentCategoryRow);
+    if (nextCategoryRow >= 0) {
+        const QRect nextRect = visualRect(m_model->index(nextCategoryRow, 0));
         if (nextRect.isValid()) {
             state.offsetY = qMin(0, nextRect.top() - kStickyHeaderHeight);
         }
@@ -405,24 +405,24 @@ FriendListWidget::StickyHeaderState FriendListWidget::calculateStickyHeaderState
     return state;
 }
 
-FriendListWidget::StickyGroupData FriendListWidget::stickyGroupDataForRow(int row) const
+GroupListWidget::StickyCategoryData GroupListWidget::stickyCategoryDataForRow(int row) const
 {
     const QModelIndex index = m_model->index(row, 0);
     if (!index.isValid()) {
         return {};
     }
 
-    StickyGroupData group;
-    group.groupId = index.data(FriendListModel::GroupIdRole).toString();
-    group.title = index.data(FriendListModel::GroupNameRole).toString();
-    group.count = index.data(FriendListModel::GroupFriendCountRole).toInt();
-    group.progress = index.data(FriendListModel::GroupProgressRole).toReal();
-    return group;
+    StickyCategoryData category;
+    category.categoryId = index.data(GroupListModel::CategoryIdRole).toString();
+    category.title = index.data(GroupListModel::CategoryNameRole).toString();
+    category.count = index.data(GroupListModel::CategoryGroupCountRole).toInt();
+    category.progress = index.data(GroupListModel::CategoryProgressRole).toReal();
+    return category;
 }
 
-void FriendListWidget::drawStickyHeader() const
+void GroupListWidget::drawStickyHeader() const
 {
-    if (!m_stickyVisible || m_stickyGroup.groupId.isEmpty()) {
+    if (!m_stickyVisible || m_stickyCategory.categoryId.isEmpty()) {
         return;
     }
 
@@ -433,14 +433,14 @@ void FriendListWidget::drawStickyHeader() const
     const QRect headerRect(0, m_stickyOffsetY, viewport()->width(), kStickyHeaderHeight);
     painter.fillRect(headerRect, Qt::white);
 
-    drawStickyGroup(&painter, headerRect, m_stickyGroup);
+    drawStickyCategory(&painter, headerRect, m_stickyCategory);
 }
 
-void FriendListWidget::drawStickyGroup(QPainter* painter,
-                                       const QRect& rect,
-                                       const StickyGroupData& group) const
+void GroupListWidget::drawStickyCategory(QPainter* painter,
+                                         const QRect& rect,
+                                         const StickyCategoryData& category) const
 {
-    if (group.groupId.isEmpty()) {
+    if (category.categoryId.isEmpty()) {
         return;
     }
 
@@ -453,29 +453,29 @@ void FriendListWidget::drawStickyGroup(QPainter* painter,
         painter->drawRoundedRect(hoverRect, 6, 6);
     }
 
-    const QRect arrowRect(rect.left() + kGroupLeftPadding,
-                          rect.top() + (rect.height() - kGroupArrowSize) / 2
+    const QRect arrowRect(rect.left() + kCategoryLeftPadding,
+                          rect.top() + (rect.height() - kCategoryArrowSize) / 2
                                   + kContactGroupArrowYOffset,
-                          kGroupArrowSize,
-                          kGroupArrowSize);
+                          kCategoryArrowSize,
+                          kCategoryArrowSize);
 
     painter->save();
     painter->translate(arrowRect.center());
-    painter->rotate(group.progress * 90.0);
+    painter->rotate(category.progress * 90.0);
     QPen arrowPen(QColor(0x78, 0x86, 0x94), 1.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
     painter->setPen(arrowPen);
     painter->drawLine(QPointF(-2.5, -4.0), QPointF(2.5, 0.0));
     painter->drawLine(QPointF(2.5, 0.0), QPointF(-2.5, 4.0));
     painter->restore();
 
-    const QFont font = stickyGroupFont();
-    const QFont countFont = stickyGroupCountFont();
+    const QFont font = stickyCategoryFont();
+    const QFont countFont = stickyCategoryCountFont();
     const QFontMetrics metrics(font);
     const QFontMetrics countMetrics(countFont);
-    const QString countText = QString::number(group.count);
+    const QString countText = QString::number(category.count);
     const int titleLeft = arrowRect.right() + 8;
     const int countWidth = countMetrics.horizontalAdvance(countText);
-    const int rightEdge = rect.right() - kGroupCountRightPadding;
+    const int rightEdge = rect.right() - kCategoryCountRightPadding;
     const QRect countRect(qMax(titleLeft, rightEdge - countWidth + 1),
                           rect.top(),
                           countWidth,
@@ -489,7 +489,7 @@ void FriendListWidget::drawStickyGroup(QPainter* painter,
     painter->setPen(QColor(0x38, 0x45, 0x52));
     painter->drawText(titleRect,
                       Qt::AlignLeft | Qt::AlignVCenter,
-                      metrics.elidedText(group.title, Qt::ElideRight, titleRect.width()));
+                      metrics.elidedText(category.title, Qt::ElideRight, titleRect.width()));
     painter->setFont(countFont);
     painter->setPen(QColor(0x99, 0xa3, 0xad));
     painter->drawText(countRect, Qt::AlignRight | Qt::AlignVCenter, countText);

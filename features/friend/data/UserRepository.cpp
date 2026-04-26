@@ -23,6 +23,19 @@ int statusSortRank(UserStatus status)
     }
 }
 
+QString friendVisibleName(const FriendSummary& friendSummary)
+{
+    if (friendSummary.remark.isEmpty() || friendSummary.nickName.isEmpty()) {
+        return friendSummary.displayName;
+    }
+    return QStringLiteral("%1(%2)").arg(friendSummary.remark, friendSummary.nickName);
+}
+
+QString friendVisibleSubtitle(const FriendSummary& friendSummary)
+{
+    return QStringLiteral("[%1] %2").arg(statusText(friendSummary.status), friendSummary.signature);
+}
+
 class FriendListRequestOperation final
     : public RepositoryTemplate<FriendListRequest, QVector<FriendSummary>> {
 public:
@@ -79,7 +92,16 @@ private:
 
             static QCollator localCollator(QLocale::Chinese);
             localCollator.setNumericMode(true);
-            return localCollator.compare(lhs.displayName, rhs.displayName) < 0;
+            const int nameOrder = localCollator.compare(friendVisibleName(lhs), friendVisibleName(rhs));
+            if (nameOrder != 0) {
+                return nameOrder < 0;
+            }
+
+            const int subtitleOrder = localCollator.compare(friendVisibleSubtitle(lhs), friendVisibleSubtitle(rhs));
+            if (subtitleOrder != 0) {
+                return subtitleOrder < 0;
+            }
+            return lhs.userId < rhs.userId;
         });
     }
 
@@ -109,21 +131,21 @@ UserRepository::UserRepository(QObject* parent)
     : QObject(parent)
 {
     const QVector<User> users = {
-            {"u001", "momo", "", ":/resources/avatar/1.jpg", Online, "我是好momo", false, "g001", "常用联系人", "上海"},
+            {"u001", "momo", "小桃", ":/resources/avatar/1.jpg", Online, "我是好momo", false, "g001", "常用联系人", "上海"},
             {"u002", "blazer", "", ":/resources/avatar/0.jpg", Mining, "不掉烈焰棒", false, "g001", "常用联系人", "下界要塞"},
-            {"u003", "不吃香菜（考研版）", "", ":/resources/avatar/3.jpg", Online, "绝不吃一口香菜！", false, "g001", "常用联系人", "北京"},
+            {"u003", "不吃香菜（考研版）", "香菜克星", ":/resources/avatar/3.jpg", Online, "绝不吃一口香菜！", false, "g001", "常用联系人", "北京"},
             {"u004", "不抽香烟（一路菜花版）", "", ":/resources/avatar/5.jpg", Online, "芝士雪豹", false, "g002", "同学", "杭州"},
-            {"u005", "不会演戏（许仙版）", "", ":/resources/avatar/4.jpg", Offline, "不碍事的白姑娘", false, "g002", "同学", "苏州"},
+            {"u005", "不会演戏（许仙版）", "许仙", ":/resources/avatar/4.jpg", Offline, "不碍事的白姑娘", false, "g002", "同学", "苏州"},
             {"u006", "TralaleroTralala", "", ":/resources/avatar/2.jpg", Online, "不穿Nike（蓝勾版）", false, "g002", "同学"},
             {"u007", "圆头耄耋", "", ":/resources/avatar/6.jpg", Offline, "这只猫很懒，什么都没留下来", false, "g003", "服务器伙伴"},
-            {"u008", "歪比巴卜", "", ":/resources/avatar/7.jpg", Mining, "歪比歪比", false, "g003", "服务器伙伴"},
+            {"u008", "歪比巴卜", "指令哥", ":/resources/avatar/7.jpg", Mining, "歪比歪比", false, "g003", "服务器伙伴"},
             {"u009", "tung tung tung sahur", "", ":/resources/avatar/8.jpg", Offline, "tung tung tung tung tung tung tung tung tung sahur", false, "g003", "服务器伙伴"},
             {"u010", "BombardinoCrocodilo", "", ":/resources/avatar/9.jpg", Flying, "已塌房", false, "g003", "服务器伙伴"},
-            {"u011", "momo", "", ":/resources/avatar/10.jpg", Online, "今天也要准时上线", false, "g004", "临时会话"},
+            {"u011", "momo", "临时 momo", ":/resources/avatar/10.jpg", Online, "今天也要准时上线", false, "g004", "临时会话"},
             {"u012", "blazer", "", ":/resources/avatar/0.jpg", Offline, "刷怪塔维护中", false, "g004", "临时会话"},
             {"u013", "不吃香菜（考研版）", "", ":/resources/avatar/3.jpg", Mining, "背书到下界", false, "g004", "临时会话"},
             {"u014", "歪比巴卜", "", ":/resources/avatar/7.jpg", Online, "收到请回复", false, "g005", "最近添加"},
-            {"u015", "圆头耄耋", "", ":/resources/avatar/6.jpg", Flying, "刚刚通过好友验证", false, "g005", "最近添加"},
+            {"u015", "圆头耄耋", "新好友", ":/resources/avatar/6.jpg", Flying, "刚刚通过好友验证", false, "g005", "最近添加"},
             {"u016", "TralaleroTralala", "", ":/resources/avatar/2.jpg", Offline, "晚点再聊", false, "g005", "最近添加"},
     };
 
@@ -157,7 +179,7 @@ UserRepository::UserRepository(QObject* parent)
             User user{
                     QString("perf_%1").arg(serial, 4, 10, QChar('0')),
                     QString("%1 %2").arg(names.at(index % names.size())).arg(index + 1),
-                    "",
+                    (index % 9 == 0) ? QString("备注好友 %1").arg(index + 1) : QString(),
                     QString(":/resources/avatar/%1.jpg").arg(index % 11),
                     statuses.at(index % statuses.size()),
                     QString("性能测试好友 %1").arg(index + 1),

@@ -7,7 +7,9 @@
 #include "shared/ui/IconLineEdit.h"
 #include "shared/ui/StatefulPushButton.h"
 #include "features/friend/ui/FriendListWidget.h"
+#include "features/friend/ui/GroupListWidget.h"
 #include "features/friend/ui/FriendDetailPage.h"
+#include "features/friend/ui/GroupDetailPage.h"
 #include "app/frame/DefaultPage.h"
 
 class QPushButton;
@@ -24,6 +26,7 @@ private:
     public:
         explicit LeftPane(QWidget* parent = nullptr);
         FriendListWidget* friendList() const { return m_content; }
+        GroupListWidget* groupList() const { return m_groupList; }
         IconLineEdit* searchInput() const { return m_searchInput; }
 
     protected:
@@ -38,12 +41,13 @@ private:
         QPushButton* m_friendModeButton;
         QPushButton* m_groupModeButton;
         FriendListWidget* m_content;
-        QWidget* m_groupPlaceholder;
+        GroupListWidget* m_groupList;
     };
 
     LeftPane*    m_leftPane;     // 左侧面板
     DefaultPage* m_defaultPage;  // 右侧默认页
     FriendDetailPage* m_detailPage;
+    GroupDetailPage* m_groupDetailPage;
     QStackedWidget* m_rightStack;
     QSplitter*   m_splitter;     // 中间分隔器
 };

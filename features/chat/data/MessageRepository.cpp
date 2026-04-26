@@ -29,6 +29,11 @@ QString buildPreviewText(const QSharedPointer<ChatMessage>& message,
     return message->getContent();
 }
 
+QString groupDisplayName(const Group& group)
+{
+    return group.remark.isEmpty() ? group.groupName : group.remark;
+}
+
 QVector<FriendSummary> sampledFriendsForMessages()
 {
     QVector<FriendSummary> friends = UserRepository::instance().requestFriendList();
@@ -64,7 +69,7 @@ public:
             const Group group = GroupRepository::instance().requestGroupDetail({query.conversationId});
             return ConversationMeta{
                     group.groupId,
-                    group.groupName,
+                    groupDisplayName(group),
                     group.groupAvatarPath,
                     true,
                     group.memberNum,
@@ -105,7 +110,7 @@ private:
             const QSharedPointer<ChatMessage> lastMessage = messages.isEmpty() ? QSharedPointer<ChatMessage>() : messages.last();
             result.push_back(ConversationSummary{
                     group.groupId,
-                    group.groupName,
+                    groupDisplayName(group),
                     group.groupAvatarPath,
                     buildPreviewText(lastMessage, true),
                     lastMessage ? lastMessage->getTimestamp() : QDateTime(),
