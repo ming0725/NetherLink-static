@@ -1,10 +1,13 @@
 #include "MessageListWidget.h"
 
+#include <QAction>
 #include <QItemSelectionModel>
+#include <QMouseEvent>
 #include <QPalette>
 #include <QScrollBar>
 #include <QTimer>
 
+#include "shared/ui/StyledActionMenu.h"
 #include "features/friend/data/UserRepository.h"
 #include "features/chat/ui/MessageListDelegate.h"
 #include "features/chat/model/MessageListModel.h"
@@ -120,6 +123,20 @@ void MessageListWidget::clearCurrentConversationSelection()
     viewport()->update();
 }
 
+void MessageListWidget::mousePressEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::RightButton) {
+        const QModelIndex index = indexAt(event->pos());
+        if (index.isValid()) {
+            showConversationMenu(event->globalPosition().toPoint(), index);
+        }
+        event->accept();
+        return;
+    }
+
+    OverlayScrollListView::mousePressEvent(event);
+}
+
 void MessageListWidget::onCurrentChanged(const QModelIndex& current, const QModelIndex& previous)
 {
     if (!current.isValid()) {
@@ -146,6 +163,73 @@ void MessageListWidget::onRepositoryLastMessageChanged(const QString& conversati
     m_model->updateConversationPreview(conversationId,
                                        previewTextForMessage(conversationId, lastMessage),
                                        lastMessage ? lastMessage->getTimestamp() : QDateTime());
+}
+
+void MessageListWidget::showConversationMenu(const QPoint& globalPos, const QModelIndex& index)
+{
+    const ConversationSummary conversation = m_model->conversationAt(index);
+    if (conversation.conversationId.isEmpty()) {
+        return;
+    }
+
+    auto* menu = new StyledActionMenu(this);
+    menu->setItemHoverColor(QColor(238, 238, 238));
+    m_model->setContextMenuConversation(conversation.conversationId);
+
+    menu->addAction(QStringLiteral("置顶"));
+
+    const bool hasUnread = conversation.unreadCount > 0;
+    QAction* unreadAction = menu->addAction(hasUnread
+                                            ? QStringLiteral("标记已读")
+                                            : QStringLiteral("标记未读"));
+    connect(unreadAction, &QAction::triggered, this,
+            [this, conversationId = conversation.conversationId, hasUnread]() {
+        if (hasUnread) {
+            m_model->markConversationRead(conversationId);
+            MessageRepository::instance().markConversationRead(conversationId);
+            viewport()->update();
+            return;
+        }
+
+        m_model->markConversationUnread(conversationId);
+        MessageRepository::instance().markConversationUnread(conversationId);
+        viewport()->update();
+    });
+
+    QAction* dndAction = menu->addAction(conversation.isDoNotDisturb
+                                         ? QStringLiteral("取消免打扰")
+                                         : QStringLiteral("消息免打扰"));
+    connect(dndAction, &QAction::triggered, this,
+            [this, conversationId = conversation.conversationId,
+             enabled = !conversation.isDoNotDisturb]() {
+        m_model->setConversationDoNotDisturb(conversationId, enabled);
+        MessageRepository::instance().setConversationDoNotDisturb(conversationId, enabled);
+        viewport()->update();
+    });
+
+    menu->addSeparator();
+
+    QAction* deleteAction = menu->addAction(QStringLiteral("删除"));
+    StyledActionMenu::setActionColors(deleteAction,
+                                      QColor(235, 87, 87),
+                                      QColor(255, 255, 255),
+                                      QColor(235, 87, 87));
+    connect(deleteAction, &QAction::triggered, this,
+            [this, conversationId = conversation.conversationId]() {
+        const bool deletingSelected = selectedConversationId() == conversationId;
+        if (deletingSelected) {
+            clearCurrentConversationSelection();
+        }
+        m_model->removeConversation(conversationId);
+        MessageRepository::instance().removeConversation(conversationId);
+        viewport()->update();
+    });
+
+    connect(menu, &QMenu::aboutToHide, this, [this, menu]() {
+        m_model->setContextMenuConversation({});
+        menu->deleteLater();
+    });
+    menu->popup(globalPos);
 }
 
 void MessageListWidget::reloadConversations()

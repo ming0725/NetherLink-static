@@ -41,6 +41,9 @@ QVariant MessageListModel::data(const QModelIndex& index, int role) const
         return conversation.isGroup;
     case MemberCountRole:
         return conversation.memberCount;
+    case ContextMenuActiveRole:
+        return !m_contextMenuConversationId.isEmpty() &&
+               conversation.conversationId == m_contextMenuConversationId;
     case Qt::SizeHintRole:
         return QSize(0, 72);
     default:
@@ -78,6 +81,77 @@ void MessageListModel::markConversationRead(const QString& conversationId)
     m_conversations[row].unreadCount = 0;
     const QModelIndex modelIndex = index(row, 0);
     emit dataChanged(modelIndex, modelIndex, {UnreadCountRole});
+}
+
+void MessageListModel::markConversationUnread(const QString& conversationId, int unreadCount)
+{
+    const int row = indexOfConversation(conversationId);
+    if (row < 0) {
+        return;
+    }
+
+    const int nextUnreadCount = qMax(1, unreadCount);
+    if (m_conversations[row].unreadCount == nextUnreadCount) {
+        return;
+    }
+
+    m_conversations[row].unreadCount = nextUnreadCount;
+    const QModelIndex modelIndex = index(row, 0);
+    emit dataChanged(modelIndex, modelIndex, {UnreadCountRole});
+}
+
+void MessageListModel::setConversationDoNotDisturb(const QString& conversationId, bool enabled)
+{
+    const int row = indexOfConversation(conversationId);
+    if (row < 0) {
+        return;
+    }
+
+    if (m_conversations[row].isDoNotDisturb == enabled) {
+        return;
+    }
+
+    m_conversations[row].isDoNotDisturb = enabled;
+    const QModelIndex modelIndex = index(row, 0);
+    emit dataChanged(modelIndex, modelIndex, {DoNotDisturbRole, UnreadCountRole});
+}
+
+void MessageListModel::setContextMenuConversation(const QString& conversationId)
+{
+    if (m_contextMenuConversationId == conversationId) {
+        return;
+    }
+
+    const QString previousId = m_contextMenuConversationId;
+    m_contextMenuConversationId = conversationId;
+
+    const int previousRow = indexOfConversation(previousId);
+    if (previousRow >= 0) {
+        const QModelIndex modelIndex = index(previousRow, 0);
+        emit dataChanged(modelIndex, modelIndex, {ContextMenuActiveRole});
+    }
+
+    const int currentRow = indexOfConversation(m_contextMenuConversationId);
+    if (currentRow >= 0) {
+        const QModelIndex modelIndex = index(currentRow, 0);
+        emit dataChanged(modelIndex, modelIndex, {ContextMenuActiveRole});
+    }
+}
+
+bool MessageListModel::removeConversation(const QString& conversationId)
+{
+    const int row = indexOfConversation(conversationId);
+    if (row < 0) {
+        return false;
+    }
+
+    beginRemoveRows(QModelIndex(), row, row);
+    m_conversations.removeAt(row);
+    if (m_contextMenuConversationId == conversationId) {
+        m_contextMenuConversationId.clear();
+    }
+    endRemoveRows();
+    return true;
 }
 
 void MessageListModel::updateConversationPreview(const QString& conversationId,

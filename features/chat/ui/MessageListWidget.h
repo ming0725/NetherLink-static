@@ -5,6 +5,7 @@
 
 class MessageListDelegate;
 class MessageListModel;
+class QMouseEvent;
 class QTimer;
 
 class MessageListWidget : public OverlayScrollListView
@@ -23,6 +24,9 @@ public:
 signals:
     void conversationActivated(const QString& conversationId);
 
+protected:
+    void mousePressEvent(QMouseEvent* event) override;
+
 private slots:
     void onCurrentChanged(const QModelIndex& current, const QModelIndex& previous);
     void onRepositoryLastMessageChanged(const QString& conversationId,
@@ -35,6 +39,7 @@ private:
     };
 
     void restoreSelection(const QString& conversationId);
+    void showConversationMenu(const QPoint& globalPos, const QModelIndex& index);
     QString previewTextForMessage(const QString& conversationId,
                                   const QSharedPointer<ChatMessage>& message) const;
 

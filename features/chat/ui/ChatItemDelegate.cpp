@@ -543,7 +543,7 @@ int ChatItemDelegate::calculateMaxBubbleWidth(const QRect& contentRect) const
 void ChatItemDelegate::showContextMenu(const QPoint& pos, const QModelIndex& index,
                                      const ChatMessage* message) const
 {
-    TransparentMenu* menu = new TransparentMenu(qobject_cast<QWidget*>(parent()));
+    StyledActionMenu* menu = new StyledActionMenu(qobject_cast<QWidget*>(parent()));
 
     // 添加复制选项
     if (message->getType() == MessageType::Text) {
@@ -559,6 +559,10 @@ void ChatItemDelegate::showContextMenu(const QPoint& pos, const QModelIndex& ind
 
     // 添加删除选项
     QAction* deleteAction = menu->addAction("删除");
+    StyledActionMenu::setActionColors(deleteAction,
+                                      QColor(235, 87, 87),
+                                      QColor(255, 255, 255),
+                                      QColor(235, 87, 87));
     connect(deleteAction, &QAction::triggered, [this, index, model = index.model()]() {
         Q_UNUSED(model);
         emit const_cast<ChatItemDelegate*>(this)->deleteRequested(index.row());

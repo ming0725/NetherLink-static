@@ -22,6 +22,8 @@ public slots:
     void touchConversation(const QString& conversationId,
                            const QDateTime& timestamp = QDateTime::currentDateTime());
     void markConversationRead(const QString& conversationId);
+    void markConversationUnread(const QString& conversationId, int unreadCount = 1);
+    void setConversationDoNotDisturb(const QString& conversationId, bool enabled);
     void removeConversation(const QString& conversationId);
     void addMessage(const QString& conversationId,
                     QSharedPointer<ChatMessage> message);

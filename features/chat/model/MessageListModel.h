@@ -19,7 +19,8 @@ public:
         UnreadCountRole,
         DoNotDisturbRole,
         IsGroupRole,
-        MemberCountRole
+        MemberCountRole,
+        ContextMenuActiveRole
     };
 
     explicit MessageListModel(QObject* parent = nullptr);
@@ -30,6 +31,10 @@ public:
 
     void setConversations(QVector<ConversationSummary> conversations);
     void markConversationRead(const QString& conversationId);
+    void markConversationUnread(const QString& conversationId, int unreadCount = 1);
+    void setConversationDoNotDisturb(const QString& conversationId, bool enabled);
+    void setContextMenuConversation(const QString& conversationId);
+    bool removeConversation(const QString& conversationId);
     void updateConversationPreview(const QString& conversationId,
                                    const QString& previewText,
                                    const QDateTime& lastMessageTime);
@@ -43,4 +48,5 @@ private:
     void sortConversations();
 
     QVector<ConversationSummary> m_conversations;
+    QString m_contextMenuConversationId;
 };

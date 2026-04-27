@@ -3,7 +3,7 @@
 
 #include <QStyledItemDelegate>
 #include "shared/types/ChatMessage.h"
-#include "shared/ui/TransparentMenu.h"
+#include "shared/ui/StyledActionMenu.h"
 
 class ChatItemDelegate : public QStyledItemDelegate
 {

@@ -325,7 +325,7 @@ private:
                     lastMessage ? lastMessage->getTimestamp() : QDateTime(),
                     effectiveMessageListTime(group.groupId, lastMessage),
                     state.unreadCount,
-                    group.isDnd || state.isDoNotDisturb,
+                    state.isDoNotDisturb,
                     true,
                     group.memberNum
             });
@@ -357,7 +357,7 @@ private:
                     lastMessage ? lastMessage->getTimestamp() : QDateTime(),
                     effectiveMessageListTime(friendSummary.userId, lastMessage),
                     state.unreadCount,
-                    friendSummary.isDoNotDisturb || state.isDoNotDisturb,
+                    state.isDoNotDisturb,
                     false,
                     0
             });
@@ -504,6 +504,36 @@ void MessageRepository::markConversationRead(const QString& conversationId)
         state.unreadCount = 0;
         state.lastReadAt = QDateTime::currentDateTime();
     }
+}
+
+void MessageRepository::markConversationUnread(const QString& conversationId, int unreadCount)
+{
+    if (conversationId.isEmpty()) {
+        return;
+    }
+
+    {
+        QMutexLocker locker(&m_mutex);
+        ConversationSyncState& state = m_conversationStates[conversationId];
+        state.conversationId = conversationId;
+        state.unreadCount = qMax(1, unreadCount);
+    }
+    emit conversationListChanged(conversationId);
+}
+
+void MessageRepository::setConversationDoNotDisturb(const QString& conversationId, bool enabled)
+{
+    if (conversationId.isEmpty()) {
+        return;
+    }
+
+    {
+        QMutexLocker locker(&m_mutex);
+        ConversationSyncState& state = m_conversationStates[conversationId];
+        state.conversationId = conversationId;
+        state.isDoNotDisturb = enabled;
+    }
+    emit conversationListChanged(conversationId);
 }
 
 void MessageRepository::removeConversation(const QString& conversationId)
