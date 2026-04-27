@@ -23,6 +23,7 @@ public:
 
 signals:
     void conversationActivated(const QString& conversationId);
+    void currentConversationDeleted();
 
 protected:
     void mousePressEvent(QMouseEvent* event) override;

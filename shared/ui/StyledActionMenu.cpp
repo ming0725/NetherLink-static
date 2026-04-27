@@ -2,6 +2,7 @@
 
 #include <QAction>
 #include <QGraphicsDropShadowEffect>
+#include <QGuiApplication>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -9,7 +10,12 @@
 #include <QStringList>
 #include <QStyle>
 #include <QStyleOption>
+#include <QTimer>
 #include <QVariant>
+
+#ifdef Q_OS_MACOS
+#include "platform/macos/MacStyledActionMenuBridge_p.h"
+#endif
 
 namespace {
 constexpr auto ActionTextColorProperty = "_styledActionMenu_textColor";
@@ -27,6 +33,8 @@ constexpr int ItemHorizontalPadding = 10;
 constexpr int ItemIconGap = 6;
 constexpr int ArrowWidth = 10;
 constexpr int ItemFontSize = 13;
+constexpr int MaxMouseReleaseWaitAttempts = 40;
+constexpr int MouseReleasePollIntervalMs = 4;
 
 QColor readColor(const QVariant& value, const QColor& fallback)
 {
@@ -83,15 +91,21 @@ StyledActionMenu::StyledActionMenu(QWidget* parent)
                        ShadowMargin + MenuPadding,
                        ShadowMargin + MenuPadding,
                        ShadowMargin + MenuPadding);
-    auto* shadowEffect = new QGraphicsDropShadowEffect(this);
-    shadowEffect->setBlurRadius(22);
-    shadowEffect->setOffset(0, 1);
-    shadowEffect->setColor(QColor(0, 0, 0, 50));
-    setGraphicsEffect(shadowEffect);
+    if (!usesNativeMenu()) {
+        auto* shadowEffect = new QGraphicsDropShadowEffect(this);
+        shadowEffect->setBlurRadius(22);
+        shadowEffect->setOffset(0, 1);
+        shadowEffect->setColor(QColor(0, 0, 0, 50));
+        setGraphicsEffect(shadowEffect);
+    }
 
     auto* menuStyle = new StyledActionMenuSizeStyle;
     menuStyle->setParent(this);
     setStyle(menuStyle);
+}
+
+StyledActionMenu::~StyledActionMenu()
+{
 }
 
 StyledActionMenu* StyledActionMenu::addStyledMenu(const QString& title)
@@ -100,6 +114,53 @@ StyledActionMenu* StyledActionMenu::addStyledMenu(const QString& title)
     menu->setTitle(title);
     addMenu(menu);
     return menu;
+}
+
+void StyledActionMenu::popup(const QPoint& pos, QAction* atAction)
+{
+#ifdef Q_OS_MACOS
+    if (usesNativeMenu()) {
+        Q_UNUSED(atAction);
+        bool hideEmitted = false;
+        const auto emitNativeHide = [this, &hideEmitted]() {
+            if (hideEmitted) {
+                return;
+            }
+
+            hideEmitted = true;
+            emit aboutToHide();
+        };
+
+        emit aboutToShow();
+        MacStyledActionMenuBridge::popupMenu(this, this, pos, emitNativeHide);
+        emitNativeHide();
+        return;
+    }
+#endif
+
+    QMenu::popup(pos, atAction);
+}
+
+void StyledActionMenu::popupWhenMouseReleased(const QPoint& pos, QAction* atAction)
+{
+    popupWhenMouseReleased(pos, atAction, 0);
+}
+
+void StyledActionMenu::popupWhenMouseReleased(const QPoint& pos, QAction* atAction, int attempt)
+{
+    const Qt::MouseButtons buttons = QGuiApplication::mouseButtons();
+    const bool hasPressedButton = buttons.testFlag(Qt::LeftButton) ||
+            buttons.testFlag(Qt::RightButton) ||
+            buttons.testFlag(Qt::MiddleButton);
+
+    if (!hasPressedButton || attempt >= MaxMouseReleaseWaitAttempts) {
+        popup(pos, atAction);
+        return;
+    }
+
+    QTimer::singleShot(MouseReleasePollIntervalMs, this, [this, pos, atAction, attempt]() {
+        popupWhenMouseReleased(pos, atAction, attempt + 1);
+    });
 }
 
 void StyledActionMenu::setItemHoverColor(const QColor& color)
@@ -257,4 +318,13 @@ void StyledActionMenu::paintEvent(QPaintEvent* event)
             painter.drawPath(arrow);
         }
     }
+}
+
+bool StyledActionMenu::usesNativeMenu() const
+{
+#ifdef Q_OS_MACOS
+    return MacStyledActionMenuBridge::isSupported();
+#else
+    return false;
+#endif
 }

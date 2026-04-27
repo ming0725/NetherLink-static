@@ -18,6 +18,7 @@ public:
         LastTimeRole,
         UnreadCountRole,
         DoNotDisturbRole,
+        IsPinnedRole,
         IsGroupRole,
         MemberCountRole,
         ContextMenuActiveRole
@@ -33,6 +34,7 @@ public:
     void markConversationRead(const QString& conversationId);
     void markConversationUnread(const QString& conversationId, int unreadCount = 1);
     void setConversationDoNotDisturb(const QString& conversationId, bool enabled);
+    void setConversationPinned(const QString& conversationId, bool pinned);
     void setContextMenuConversation(const QString& conversationId);
     bool removeConversation(const QString& conversationId);
     void updateConversationPreview(const QString& conversationId,

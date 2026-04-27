@@ -144,9 +144,12 @@ void MessageListDelegate::paint(QPainter* painter,
     const bool selected = option.state & QStyle::State_Selected;
     const bool hovered = (option.state & QStyle::State_MouseOver) ||
             index.data(MessageListModel::ContextMenuActiveRole).toBool();
+    const bool pinned = index.data(MessageListModel::IsPinnedRole).toBool();
     const QColor backgroundColor = selected
             ? QColor(0x00, 0x99, 0xff)
-            : (hovered ? QColor(0xf0, 0xf0, 0xf0) : QColor(0xff, 0xff, 0xff));
+            : (pinned
+               ? (hovered ? QColor(0xe2, 0xe2, 0xe2) : QColor(0xf3, 0xf3, 0xf3))
+               : (hovered ? QColor(0xf0, 0xf0, 0xf0) : QColor(0xff, 0xff, 0xff)));
     painter->fillRect(option.rect, backgroundColor);
 
     const int itemCenterY = option.rect.center().y();

@@ -119,6 +119,7 @@ struct ConversationSummary {
     QDateTime messageListTime;
     int unreadCount = 0;
     bool isDoNotDisturb = false;
+    bool isPinned = false;
     bool isGroup = false;
     int memberCount = 0;
 };
@@ -127,6 +128,7 @@ struct ConversationSyncState {
     QString conversationId;
     int unreadCount = 0;
     bool isDoNotDisturb = false;
+    bool isPinned = false;
     QDateTime messageListTime;
     QDateTime lastReadAt;
 };

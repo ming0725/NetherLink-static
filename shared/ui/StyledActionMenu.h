@@ -2,6 +2,7 @@
 
 #include <QColor>
 #include <QMenu>
+#include <QPoint>
 
 class QAction;
 class QPaintEvent;
@@ -12,8 +13,11 @@ class StyledActionMenu : public QMenu
 
 public:
     explicit StyledActionMenu(QWidget* parent = nullptr);
+    ~StyledActionMenu() override;
 
     StyledActionMenu* addStyledMenu(const QString& title);
+    void popup(const QPoint& pos, QAction* atAction = nullptr);
+    void popupWhenMouseReleased(const QPoint& pos, QAction* atAction = nullptr);
 
     void setItemHoverColor(const QColor& color);
     void setSeparatorColor(const QColor& color);
@@ -29,4 +33,8 @@ public:
 
 protected:
     void paintEvent(QPaintEvent* event) override;
+
+private:
+    bool usesNativeMenu() const;
+    void popupWhenMouseReleased(const QPoint& pos, QAction* atAction, int attempt);
 };

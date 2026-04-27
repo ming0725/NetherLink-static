@@ -12,6 +12,7 @@
 #include <QMouseEvent>
 #include <QClipboard>
 #include <QPainterPath>
+#include <QPersistentModelIndex>
 #include <QMenu>
 
 namespace {
@@ -544,6 +545,7 @@ void ChatItemDelegate::showContextMenu(const QPoint& pos, const QModelIndex& ind
                                      const ChatMessage* message) const
 {
     StyledActionMenu* menu = new StyledActionMenu(qobject_cast<QWidget*>(parent()));
+    const QPersistentModelIndex persistentIndex(index);
 
     // 添加复制选项
     if (message->getType() == MessageType::Text) {
@@ -569,13 +571,17 @@ void ChatItemDelegate::showContextMenu(const QPoint& pos, const QModelIndex& ind
         showSuccessNotificationForDelegate(this, QStringLiteral("删除成功！"));
     });
 
-    // 显示菜单
-    menu->popup(pos);
-
     // 菜单关闭后自动删除，并取消选中状态
-    connect(menu, &QMenu::aboutToHide, [index, model = const_cast<QAbstractItemModel*>(index.model())]() {
-        model->setData(index, false, Qt::UserRole + 1);
+    connect(menu, &QMenu::aboutToHide, menu, [menu, persistentIndex, model = const_cast<QAbstractItemModel*>(index.model())]() {
+        if (persistentIndex.isValid()) {
+            model->setData(persistentIndex, false, Qt::UserRole + 1);
+        }
+        menu->deleteLater();
     });
+
+    // 原生 NSMenu 不能在 MouseButtonPress 的同步处理里立刻进入 tracking，
+    // 否则 Qt 可能丢失对应 release 并影响其它区域的事件状态。
+    menu->popupWhenMouseReleased(pos);
 }
 
 void ChatItemDelegate::drawTimeHeader(QPainter* painter, const QRect& rect,

@@ -451,6 +451,11 @@ void ChatArea::clearConversation()
     newMessageNotifier->hide();
 }
 
+void ChatArea::closeConversation()
+{
+    clearConversation();
+}
+
 void ChatArea::loadOlderMessages()
 {
     if (conversationId().isEmpty() || !m_state.hasMoreBefore || m_state.loadingOlderMessages) {

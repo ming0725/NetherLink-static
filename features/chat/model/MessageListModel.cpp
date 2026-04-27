@@ -37,6 +37,8 @@ QVariant MessageListModel::data(const QModelIndex& index, int role) const
         return conversation.unreadCount;
     case DoNotDisturbRole:
         return conversation.isDoNotDisturb;
+    case IsPinnedRole:
+        return conversation.isPinned;
     case IsGroupRole:
         return conversation.isGroup;
     case MemberCountRole:
@@ -114,6 +116,23 @@ void MessageListModel::setConversationDoNotDisturb(const QString& conversationId
     m_conversations[row].isDoNotDisturb = enabled;
     const QModelIndex modelIndex = index(row, 0);
     emit dataChanged(modelIndex, modelIndex, {DoNotDisturbRole, UnreadCountRole});
+}
+
+void MessageListModel::setConversationPinned(const QString& conversationId, bool pinned)
+{
+    const int row = indexOfConversation(conversationId);
+    if (row < 0) {
+        return;
+    }
+
+    if (m_conversations[row].isPinned == pinned) {
+        return;
+    }
+
+    beginResetModel();
+    m_conversations[row].isPinned = pinned;
+    sortConversations();
+    endResetModel();
 }
 
 void MessageListModel::setContextMenuConversation(const QString& conversationId)
@@ -208,6 +227,9 @@ void MessageListModel::sortConversations()
 {
     std::sort(m_conversations.begin(), m_conversations.end(),
               [](const ConversationSummary& lhs, const ConversationSummary& rhs) {
+                  if (lhs.isPinned != rhs.isPinned) {
+                      return lhs.isPinned;
+                  }
                   return lhs.messageListTime > rhs.messageListTime;
               });
 }

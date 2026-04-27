@@ -25,6 +25,7 @@ public:
                          const QDateTime& timestamp = QDateTime::currentDateTime());
     void addTextMessage(QSharedPointer<TextMessage> message,
                         const QDateTime& timestamp = QDateTime::currentDateTime());
+    void closeConversation();
     void clearMessageSelection();
     void handleGlobalMousePress(const QPoint& globalPos);
 protected:

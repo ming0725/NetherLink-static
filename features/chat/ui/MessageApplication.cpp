@@ -65,6 +65,8 @@ MessageApplication::MessageApplication(QWidget* parent)
             m_leftPane->messageList(), &MessageListWidget::setKeyword);
     connect(m_leftPane->messageList(), &MessageListWidget::conversationActivated,
             this, &MessageApplication::onMessageClicked);
+    connect(m_leftPane->messageList(), &MessageListWidget::currentConversationDeleted,
+            this, &MessageApplication::onCurrentConversationDeleted);
 
     // 右侧堆栈：初始页 + 聊天页
     m_rightStack  = new QStackedWidget(this);
@@ -123,6 +125,14 @@ void MessageApplication::onMessageClicked(const QString& conversationId)
             0,
             kInitialMessagePageSize
     }));
+}
+
+void MessageApplication::onCurrentConversationDeleted()
+{
+    if (m_chatArea) {
+        m_chatArea->closeConversation();
+    }
+    m_rightStack->setCurrentWidget(m_defaultPage);
 }
 
 void MessageApplication::openConversationFromContact(const QString& conversationId)

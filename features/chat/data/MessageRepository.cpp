@@ -326,6 +326,7 @@ private:
                     effectiveMessageListTime(group.groupId, lastMessage),
                     state.unreadCount,
                     state.isDoNotDisturb,
+                    state.isPinned,
                     true,
                     group.memberNum
             });
@@ -358,6 +359,7 @@ private:
                     effectiveMessageListTime(friendSummary.userId, lastMessage),
                     state.unreadCount,
                     state.isDoNotDisturb,
+                    state.isPinned,
                     false,
                     0
             });
@@ -369,6 +371,9 @@ private:
     void onAfterRequest(const ConversationListRequest&, QVector<ConversationSummary>& result) const override
     {
         std::sort(result.begin(), result.end(), [](const ConversationSummary& lhs, const ConversationSummary& rhs) {
+            if (lhs.isPinned != rhs.isPinned) {
+                return lhs.isPinned;
+            }
             return lhs.messageListTime > rhs.messageListTime;
         });
     }
@@ -532,6 +537,24 @@ void MessageRepository::setConversationDoNotDisturb(const QString& conversationI
         ConversationSyncState& state = m_conversationStates[conversationId];
         state.conversationId = conversationId;
         state.isDoNotDisturb = enabled;
+    }
+    emit conversationListChanged(conversationId);
+}
+
+void MessageRepository::setConversationPinned(const QString& conversationId, bool pinned)
+{
+    if (conversationId.isEmpty()) {
+        return;
+    }
+
+    {
+        QMutexLocker locker(&m_mutex);
+        ConversationSyncState& state = m_conversationStates[conversationId];
+        state.conversationId = conversationId;
+        if (state.isPinned == pinned) {
+            return;
+        }
+        state.isPinned = pinned;
     }
     emit conversationListChanged(conversationId);
 }

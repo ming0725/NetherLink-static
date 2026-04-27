@@ -125,10 +125,10 @@ void MessageListWidget::clearCurrentConversationSelection()
 
 void MessageListWidget::mousePressEvent(QMouseEvent* event)
 {
+    const QModelIndex pressedIndex = indexAt(event->pos());
     if (event->button() == Qt::RightButton) {
-        const QModelIndex index = indexAt(event->pos());
-        if (index.isValid()) {
-            showConversationMenu(event->globalPosition().toPoint(), index);
+        if (pressedIndex.isValid()) {
+            showConversationMenu(event->globalPosition().toPoint(), pressedIndex);
         }
         event->accept();
         return;
@@ -176,7 +176,19 @@ void MessageListWidget::showConversationMenu(const QPoint& globalPos, const QMod
     menu->setItemHoverColor(QColor(238, 238, 238));
     m_model->setContextMenuConversation(conversation.conversationId);
 
-    menu->addAction(QStringLiteral("置顶"));
+    QAction* pinAction = menu->addAction(conversation.isPinned
+                                         ? QStringLiteral("取消置顶")
+                                         : QStringLiteral("置顶"));
+    connect(pinAction, &QAction::triggered, this,
+            [this, conversationId = conversation.conversationId,
+             pinned = !conversation.isPinned]() {
+        MessageRepository::instance().setConversationPinned(conversationId, pinned);
+        const int row = m_model->indexOfConversation(conversationId);
+        if (row >= 0) {
+            scrollTo(m_model->index(row, 0));
+        }
+        viewport()->update();
+    });
 
     const bool hasUnread = conversation.unreadCount > 0;
     QAction* unreadAction = menu->addAction(hasUnread
@@ -222,14 +234,19 @@ void MessageListWidget::showConversationMenu(const QPoint& globalPos, const QMod
         }
         m_model->removeConversation(conversationId);
         MessageRepository::instance().removeConversation(conversationId);
+        if (deletingSelected) {
+            emit currentConversationDeleted();
+        }
         viewport()->update();
     });
 
     connect(menu, &QMenu::aboutToHide, this, [this, menu]() {
         m_model->setContextMenuConversation({});
+        viewport()->update();
         menu->deleteLater();
     });
-    menu->popup(globalPos);
+    // 和聊天气泡菜单保持一致：等右键 release 后再打开原生菜单，避免跨区域鼠标状态残留。
+    menu->popupWhenMouseReleased(globalPos);
 }
 
 void MessageListWidget::reloadConversations()

@@ -22,6 +22,7 @@ protected:
     void paintEvent(QPaintEvent* event) override;
 private slots:
     void onMessageClicked(const QString& conversationId);
+    void onCurrentConversationDeleted();
 private:
     class LeftPane : public QWidget {
     public:
