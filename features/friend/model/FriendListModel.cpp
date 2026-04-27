@@ -2,6 +2,8 @@
 
 #include <QSize>
 
+#include <utility>
+
 namespace {
 
 constexpr int kGroupHeaderHeight = 36;
@@ -75,6 +77,8 @@ QVariant FriendListModel::data(const QModelIndex& index, int role) const
             return group.expanded;
         case GroupProgressRole:
             return group.progress;
+        case ContextMenuActiveRole:
+            return false;
         case Qt::SizeHintRole:
             return QSize(0, kGroupHeaderHeight);
         default:
@@ -115,6 +119,8 @@ QVariant FriendListModel::data(const QModelIndex& index, int role) const
         return group.groupName;
     case GroupProgressRole:
         return group.progress;
+    case ContextMenuActiveRole:
+        return !m_contextMenuFriendId.isEmpty() && friendSummary.userId == m_contextMenuFriendId;
     case Qt::SizeHintRole:
         return QSize(0, qRound(kFriendItemHeight * group.progress));
     default:
@@ -210,6 +216,37 @@ void FriendListModel::appendFriendsToGroup(const QString& groupId, QVector<Frien
     group->hasMore = hasMore && group->friends.size() < group->totalCount;
     rebuildRows();
     endResetModel();
+}
+
+void FriendListModel::replaceFriendsInGroup(const QString& groupId, QVector<FriendSummary> friends, bool hasMore)
+{
+    FriendGroup* group = groupForId(groupId);
+    if (!group) {
+        return;
+    }
+
+    beginResetModel();
+    for (FriendSummary& friendSummary : friends) {
+        friendSummary.groupId = group->groupId;
+        friendSummary.groupName = group->groupName;
+    }
+    group->friends = std::move(friends);
+    if (group->friends.size() > group->totalCount) {
+        group->friends.resize(group->totalCount);
+    }
+    group->hasMore = hasMore && group->friends.size() < group->totalCount;
+    rebuildRows();
+    endResetModel();
+}
+
+QStringList FriendListModel::groupIds() const
+{
+    QStringList ids;
+    ids.reserve(m_groups.size());
+    for (const FriendGroup& group : m_groups) {
+        ids.push_back(group.groupId);
+    }
+    return ids;
 }
 
 int FriendListModel::loadedFriendCount(const QString& groupId) const
@@ -389,6 +426,28 @@ void FriendListModel::setGroupProgress(const QString& groupId, qreal progress)
         emit dataChanged(index(firstRow, 0),
                          index(lastRow, 0),
                          {GroupProgressRole, Qt::SizeHintRole});
+    }
+}
+
+void FriendListModel::setContextMenuFriend(const QString& userId)
+{
+    if (m_contextMenuFriendId == userId) {
+        return;
+    }
+
+    const QString previousId = m_contextMenuFriendId;
+    m_contextMenuFriendId = userId;
+
+    const int previousRow = indexOfFriend(previousId);
+    if (previousRow >= 0) {
+        const QModelIndex modelIndex = index(previousRow, 0);
+        emit dataChanged(modelIndex, modelIndex, {ContextMenuActiveRole});
+    }
+
+    const int currentRow = indexOfFriend(m_contextMenuFriendId);
+    if (currentRow >= 0) {
+        const QModelIndex modelIndex = index(currentRow, 0);
+        emit dataChanged(modelIndex, modelIndex, {ContextMenuActiveRole});
     }
 }
 

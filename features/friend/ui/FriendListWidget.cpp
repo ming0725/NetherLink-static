@@ -1,9 +1,13 @@
 #include "FriendListWidget.h"
 
 #include <QAbstractItemView>
+#include <QAction>
+#include <QActionGroup>
 #include <QApplication>
 #include <QCursor>
 #include <QItemSelectionModel>
+#include <QMap>
+#include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPalette>
@@ -14,7 +18,9 @@
 #include "features/friend/ui/FriendListDelegate.h"
 #include "features/friend/model/FriendListModel.h"
 #include "features/friend/data/UserRepository.h"
+#include "features/chat/data/MessageRepository.h"
 #include "shared/services/ImageService.h"
+#include "shared/ui/StyledActionMenu.h"
 
 extern const int kContactGroupArrowYOffset;
 
@@ -155,6 +161,15 @@ void FriendListWidget::leaveEvent(QEvent* event)
 
 void FriendListWidget::mousePressEvent(QMouseEvent* event)
 {
+    if (event->button() == Qt::RightButton) {
+        const QModelIndex pressedIndex = indexAt(event->pos());
+        if (m_model->isFriendRow(pressedIndex)) {
+            showFriendMenu(event->globalPosition().toPoint(), pressedIndex);
+        }
+        event->accept();
+        return;
+    }
+
     if (event->button() != Qt::LeftButton) {
         OverlayScrollListView::mousePressEvent(event);
         return;
@@ -231,6 +246,9 @@ void FriendListWidget::reloadFriends()
     m_model->setGroups(UserRepository::instance().requestFriendGroupSummaries({m_state.keyword}),
                        preserveLoadedItems);
     m_state.loadedKeyword = m_state.keyword;
+    if (preserveLoadedItems) {
+        refreshLoadedGroups();
+    }
     restoreSelection();
     m_preservingSelection = false;
     updateStickyHeader();
@@ -248,6 +266,11 @@ void FriendListWidget::restoreSelection()
     if (row < 0) {
         clearSelection();
         setCurrentIndex(QModelIndex());
+        const bool hadSelection = !m_state.selectedFriendId.isEmpty();
+        m_state.selectedFriendId.clear();
+        if (hadSelection) {
+            emit selectedFriendChanged(QString());
+        }
         return;
     }
 
@@ -262,6 +285,29 @@ void FriendListWidget::restoreSelection()
     selectionModel()->clearSelection();
     selectionModel()->select(index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
     verticalScrollBar()->setValue(scrollValue);
+}
+
+void FriendListWidget::refreshLoadedGroups()
+{
+    for (const QString& groupId : m_model->groupIds()) {
+        if (!m_model->isGroupExpanded(groupId)) {
+            continue;
+        }
+
+        const int currentLoadedCount = m_model->loadedFriendCount(groupId);
+        const int pageSize = qMax(kFriendPageSize, currentLoadedCount);
+        QVector<FriendSummary> friends = UserRepository::instance().requestFriendsInGroup({
+                groupId,
+                m_state.keyword,
+                0,
+                pageSize + 1
+        });
+        const bool hasMore = friends.size() > pageSize;
+        if (hasMore) {
+            friends.resize(pageSize);
+        }
+        m_model->replaceFriendsInGroup(groupId, friends, hasMore);
+    }
 }
 
 void FriendListWidget::toggleGroup(const QModelIndex& index)
@@ -445,6 +491,110 @@ void FriendListWidget::clearCurrentSelection()
     m_preservingSelection = wasPreservingSelection;
     m_state.selectedFriendId.clear();
     emit selectedFriendChanged(QString());
+}
+
+void FriendListWidget::showFriendMenu(const QPoint& globalPos, const QModelIndex& index)
+{
+    const FriendSummary friendSummary = m_model->friendAt(index);
+    if (friendSummary.userId.isEmpty()) {
+        return;
+    }
+
+    auto* menu = new StyledActionMenu(this);
+    menu->setItemHoverColor(QColor(238, 238, 238));
+    m_model->setContextMenuFriend(friendSummary.userId);
+
+    QAction* messageAction = menu->addAction(QStringLiteral("发消息"));
+    connect(messageAction, &QAction::triggered, this, [this, userId = friendSummary.userId]() {
+        emit requestMessage(userId);
+    });
+
+    StyledActionMenu* groupMenu = menu->addStyledMenu(QStringLiteral("添加到分组"));
+    auto* actionGroup = new QActionGroup(groupMenu);
+    actionGroup->setExclusive(true);
+
+    auto addGroupAction = [this, groupMenu, actionGroup, friendSummary](const QString& groupId,
+                                                                        const QString& groupName) {
+        QAction* action = groupMenu->addAction(groupName);
+        action->setCheckable(true);
+        action->setChecked(groupId == friendSummary.groupId);
+        actionGroup->addAction(action);
+        connect(action, &QAction::triggered, this,
+                [this, userId = friendSummary.userId, groupId, groupName]() {
+            changeFriendGroup(userId, groupId, groupName);
+        });
+    };
+
+    addGroupAction(friendSummary.groupId, friendSummary.groupName);
+    const QMap<QString, QString> groups = UserRepository::instance().requestFriendGroups();
+    for (auto it = groups.constBegin(); it != groups.constEnd(); ++it) {
+        if (it.key() == friendSummary.groupId) {
+            continue;
+        }
+        addGroupAction(it.key(), it.value());
+    }
+
+    menu->addSeparator();
+
+    QAction* deleteAction = menu->addAction(QStringLiteral("删除好友"));
+    StyledActionMenu::setActionColors(deleteAction,
+                                      QColor(235, 87, 87),
+                                      QColor(255, 255, 255),
+                                      QColor(235, 87, 87));
+    connect(deleteAction, &QAction::triggered, this, [this, userId = friendSummary.userId]() {
+        deleteFriendFromMenu(userId);
+    });
+
+    connect(menu, &QMenu::aboutToHide, this, [this, menu]() {
+        m_model->setContextMenuFriend({});
+        viewport()->update();
+        menu->deleteLater();
+    });
+    menu->popupWhenMouseReleased(globalPos);
+}
+
+void FriendListWidget::changeFriendGroup(const QString& userId,
+                                         const QString& groupId,
+                                         const QString& groupName)
+{
+    if (userId.isEmpty() || groupId.isEmpty()) {
+        return;
+    }
+
+    User user = UserRepository::instance().requestUserDetail({userId});
+    if (user.id.isEmpty() || user.friendGroupId == groupId) {
+        return;
+    }
+
+    user.friendGroupId = groupId;
+    user.friendGroupName = groupName;
+    UserRepository::instance().saveUser(user);
+    if (m_state.selectedFriendId == userId) {
+        emit selectedFriendChanged(userId);
+    }
+}
+
+void FriendListWidget::deleteFriendFromMenu(const QString& userId)
+{
+    if (userId.isEmpty()) {
+        return;
+    }
+
+    const int result = QMessageBox::question(this,
+                                             QStringLiteral("删除好友"),
+                                             QStringLiteral("确认删除该好友吗？"),
+                                             QMessageBox::Yes | QMessageBox::No,
+                                             QMessageBox::No);
+    if (result != QMessageBox::Yes) {
+        return;
+    }
+
+    const bool deletingSelected = m_state.selectedFriendId == userId;
+    MessageRepository::instance().removeConversation(userId);
+    UserRepository::instance().removeUser(userId);
+    if (deletingSelected) {
+        clearCurrentSelection();
+    }
 }
 
 void FriendListWidget::updateStickyHeader()

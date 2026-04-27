@@ -12,7 +12,7 @@ namespace MacStyledActionMenuBridge {
 // Test switch:
 // 1/2 = native AppKit menu. macOS 26+ uses system Liquid Glass; older macOS uses native blur.
 // 3 = force Qt fallback
-constexpr int kStyledActionMenuTestMode = 1;
+constexpr int kStyledActionMenuTestMode = 3;
 
 enum class Appearance {
     Unsupported,

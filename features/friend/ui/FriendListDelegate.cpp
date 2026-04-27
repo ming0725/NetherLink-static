@@ -227,7 +227,8 @@ void FriendListDelegate::paint(QPainter* painter,
     }
 
     const bool selected = option.state & QStyle::State_Selected;
-    const bool hovered = option.state & QStyle::State_MouseOver;
+    const bool hovered = (option.state & QStyle::State_MouseOver) ||
+            index.data(FriendListModel::ContextMenuActiveRole).toBool();
     const QColor backgroundColor = selected
             ? QColor(0x00, 0x99, 0xff)
             : (hovered ? QColor(0xf0, 0xf0, 0xf0) : QColor(0xff, 0xff, 0xff));

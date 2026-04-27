@@ -2,6 +2,7 @@
 
 #include <QAbstractListModel>
 #include <QHash>
+#include <QStringList>
 #include <QVector>
 
 #include "shared/types/RepositoryTypes.h"
@@ -26,7 +27,8 @@ public:
         GroupNameRole,
         GroupFriendCountRole,
         GroupExpandedRole,
-        GroupProgressRole
+        GroupProgressRole,
+        ContextMenuActiveRole
     };
 
     explicit FriendListModel(QObject* parent = nullptr);
@@ -37,6 +39,8 @@ public:
 
     void setGroups(QVector<FriendGroupSummary> groups, bool preserveLoadedItems = true);
     void appendFriendsToGroup(const QString& groupId, QVector<FriendSummary> friends, bool hasMore);
+    void replaceFriendsInGroup(const QString& groupId, QVector<FriendSummary> friends, bool hasMore);
+    QStringList groupIds() const;
     int loadedFriendCount(const QString& groupId) const;
     bool hasMoreFriends(const QString& groupId) const;
     void pruneCollapsedRows();
@@ -55,6 +59,7 @@ public:
     qreal groupProgress(const QString& groupId) const;
     void setGroupExpanded(const QString& groupId, bool expanded);
     void setGroupProgress(const QString& groupId, qreal progress);
+    void setContextMenuFriend(const QString& userId);
 
 private:
     struct FriendGroup {
@@ -88,4 +93,5 @@ private:
 
     QVector<FriendGroup> m_groups;
     QVector<RowEntry> m_rows;
+    QString m_contextMenuFriendId;
 };

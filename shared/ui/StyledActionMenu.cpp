@@ -277,6 +277,27 @@ void StyledActionMenu::paintEvent(QPaintEvent* event)
 
         QRect textRect = itemRect.adjusted(ItemHorizontalPadding, 0,
                                            -ItemHorizontalPadding - ArrowWidth, 0);
+        if (action->isCheckable()) {
+            const int checkSize = 12;
+            const QRect checkRect(itemRect.left() + ItemHorizontalPadding,
+                                  itemRect.top() + (itemRect.height() - checkSize) / 2,
+                                  checkSize,
+                                  checkSize);
+            if (action->isChecked()) {
+                QPen checkPen(selected ? hoverTextColor : normalTextColor,
+                              1.8,
+                              Qt::SolidLine,
+                              Qt::RoundCap,
+                              Qt::RoundJoin);
+                painter.setPen(checkPen);
+                painter.drawLine(QPointF(checkRect.left() + 2.0, checkRect.center().y() + 1.0),
+                                 QPointF(checkRect.left() + 5.0, checkRect.bottom() - 2.0));
+                painter.drawLine(QPointF(checkRect.left() + 5.0, checkRect.bottom() - 2.0),
+                                 QPointF(checkRect.right() - 1.0, checkRect.top() + 2.0));
+                painter.setPen(selected ? hoverTextColor : normalTextColor);
+            }
+            textRect.setLeft(checkRect.right() + ItemIconGap);
+        }
         const QIcon actionIcon = action->icon();
         if (!actionIcon.isNull()) {
             const int iconSize = qMin(18, itemRect.height() - 8);

@@ -65,6 +65,7 @@ private:
     };
 
     void restoreSelection();
+    void refreshLoadedGroups();
     void toggleGroup(const QModelIndex& index);
     void toggleStickyGroupById(const QString& groupId);
     void toggleGroupById(const QString& groupId, bool keepGroupAtTop = false);
@@ -75,6 +76,9 @@ private:
     bool isGroupPinnedAtTop(const QString& groupId) const;
     void scrollGroupToTop(const QString& groupId);
     void clearCurrentSelection();
+    void showFriendMenu(const QPoint& globalPos, const QModelIndex& index);
+    void changeFriendGroup(const QString& userId, const QString& groupId, const QString& groupName);
+    void deleteFriendFromMenu(const QString& userId);
     void updateStickyHeader();
     StickyHeaderState calculateStickyHeaderState() const;
     StickyGroupData stickyGroupDataForRow(int row) const;
