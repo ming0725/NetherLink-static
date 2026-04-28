@@ -309,6 +309,7 @@ void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, cons
     m_openPostSession.postId = summary.postId;
     m_openPostSession.detailRequestId.clear();
     m_openPostSession.sourceGeometry = QRect(mapFromGlobal(sourceGeometry.topLeft()), sourceGeometry.size());
+    m_pendingPostDetail.reset();
     removeTransitionImage();
     clearDetailView();
 
@@ -388,44 +389,7 @@ void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, cons
         m_transitionAnimation = nullptr;
         m_transitionPhase = TransitionPhase::Idle;
         if (m_detailView && m_openPostSession.detailRequestId.isEmpty()) {
-            m_detailView->setImageVisible(true);
-            m_detailView->show();
-
-            auto* snapshot = detailSnapshotWidget(m_detailSnapshot);
-            if (snapshot) {
-                if (m_detailSnapshotFadeAnimation) {
-                    m_detailSnapshotFadeAnimation->stop();
-                    m_detailSnapshotFadeAnimation->deleteLater();
-                    m_detailSnapshotFadeAnimation = nullptr;
-                }
-
-                m_detailSnapshotFadeAnimation = new QVariantAnimation(this);
-                m_detailSnapshotFadeAnimation->setDuration(100);
-                m_detailSnapshotFadeAnimation->setStartValue(snapshot->visualOpacity());
-                m_detailSnapshotFadeAnimation->setEndValue(0.0);
-                m_detailSnapshotFadeAnimation->setEasingCurve(QEasingCurve::OutCubic);
-                connect(m_detailSnapshotFadeAnimation, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
-                    if (auto* currentSnapshot = detailSnapshotWidget(m_detailSnapshot)) {
-                        currentSnapshot->setVisualOpacity(value.toReal());
-                    }
-                });
-                connect(m_detailSnapshotFadeAnimation, &QVariantAnimation::finished, this, [this]() {
-                    if (m_detailSnapshotFadeAnimation) {
-                        m_detailSnapshotFadeAnimation->deleteLater();
-                        m_detailSnapshotFadeAnimation = nullptr;
-                    }
-                    clearDetailSnapshot();
-                    removeTransitionImage();
-                    updateLayerOrder();
-                });
-                m_detailSnapshotFadeAnimation->start();
-            } else {
-                clearDetailSnapshot();
-                QTimer::singleShot(0, this, [this]() {
-                    removeTransitionImage();
-                    updateLayerOrder();
-                });
-            }
+            revealDetailViewAfterLoad();
         } else if (m_openPostSession.detailRequestId.isEmpty()) {
             removeTransitionImage();
         }
@@ -445,63 +409,13 @@ void PostApplication::onPostDetailReady(const QString& requestId, const PostDeta
         return;
     }
 
-    m_detailView->setPostData(detail);
-    if (m_transitionPhase == TransitionPhase::Opening) {
-        const qreal opacity = detailSnapshotWidget(m_detailSnapshot)
-                ? detailSnapshotWidget(m_detailSnapshot)->visualOpacity()
-                : 1.0;
-        refreshDetailSnapshotFromView(opacity);
-        if (m_detailView) {
-            m_detailView->hide();
-        }
-    } else if (m_detailSnapshot) {
-        m_detailView->setImageVisible(true);
-        m_detailView->show();
-
-        auto* snapshot = detailSnapshotWidget(m_detailSnapshot);
-        if (snapshot) {
-            if (m_detailSnapshotFadeAnimation) {
-                m_detailSnapshotFadeAnimation->stop();
-                m_detailSnapshotFadeAnimation->deleteLater();
-                m_detailSnapshotFadeAnimation = nullptr;
-            }
-
-            m_detailSnapshotFadeAnimation = new QVariantAnimation(this);
-            m_detailSnapshotFadeAnimation->setDuration(120);
-            m_detailSnapshotFadeAnimation->setStartValue(snapshot->visualOpacity());
-            m_detailSnapshotFadeAnimation->setEndValue(0.0);
-            m_detailSnapshotFadeAnimation->setEasingCurve(QEasingCurve::OutCubic);
-            connect(m_detailSnapshotFadeAnimation, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
-                if (auto* currentSnapshot = detailSnapshotWidget(m_detailSnapshot)) {
-                    currentSnapshot->setVisualOpacity(value.toReal());
-                }
-            });
-            connect(m_detailSnapshotFadeAnimation, &QVariantAnimation::finished, this, [this]() {
-                if (m_detailSnapshotFadeAnimation) {
-                    m_detailSnapshotFadeAnimation->deleteLater();
-                    m_detailSnapshotFadeAnimation = nullptr;
-                }
-                clearDetailSnapshot();
-                removeTransitionImage();
-                updateLayerOrder();
-            });
-            m_detailSnapshotFadeAnimation->start();
-        } else {
-            clearDetailSnapshot();
-            QTimer::singleShot(0, this, [this]() {
-                removeTransitionImage();
-                updateLayerOrder();
-            });
-        }
-    } else if (m_detailView) {
-        m_detailView->setImageVisible(true);
-        m_detailView->show();
-        QTimer::singleShot(0, this, [this]() {
-            removeTransitionImage();
-            updateLayerOrder();
-        });
-    }
+    m_pendingPostDetail = detail;
     m_openPostSession.detailRequestId.clear();
+    if (m_transitionPhase == TransitionPhase::Opening) {
+        return;
+    }
+
+    revealDetailViewAfterLoad();
 }
 
 void PostApplication::onPostUpdated(const PostSummary& summary)
@@ -765,6 +679,7 @@ void PostApplication::clearDetailSnapshot()
 void PostApplication::stopActiveTransition()
 {
     m_openPostSession.detailRequestId.clear();
+    m_pendingPostDetail.reset();
 
     if (m_detailSnapshotFadeAnimation) {
         m_detailSnapshotFadeAnimation->stop();
@@ -810,6 +725,73 @@ void PostApplication::clearDetailView()
     m_detailView->deleteLater();
     m_detailView = nullptr;
     updateLayerOrder();
+}
+
+void PostApplication::revealDetailViewAfterLoad()
+{
+    if (!m_detailView) {
+        removeTransitionImage();
+        return;
+    }
+
+    m_detailView->setImageVisible(true);
+    m_detailView->show();
+
+    auto* snapshot = detailSnapshotWidget(m_detailSnapshot);
+    if (snapshot) {
+        if (m_detailSnapshotFadeAnimation) {
+            m_detailSnapshotFadeAnimation->stop();
+            m_detailSnapshotFadeAnimation->deleteLater();
+            m_detailSnapshotFadeAnimation = nullptr;
+        }
+
+        m_detailSnapshotFadeAnimation = new QVariantAnimation(this);
+        m_detailSnapshotFadeAnimation->setDuration(120);
+        m_detailSnapshotFadeAnimation->setStartValue(snapshot->visualOpacity());
+        m_detailSnapshotFadeAnimation->setEndValue(0.0);
+        m_detailSnapshotFadeAnimation->setEasingCurve(QEasingCurve::OutCubic);
+        connect(m_detailSnapshotFadeAnimation, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
+            if (auto* currentSnapshot = detailSnapshotWidget(m_detailSnapshot)) {
+                currentSnapshot->setVisualOpacity(value.toReal());
+            }
+        });
+        connect(m_detailSnapshotFadeAnimation, &QVariantAnimation::finished, this, [this]() {
+            if (m_detailSnapshotFadeAnimation) {
+                m_detailSnapshotFadeAnimation->deleteLater();
+                m_detailSnapshotFadeAnimation = nullptr;
+            }
+            clearDetailSnapshot();
+            removeTransitionImage();
+            updateLayerOrder();
+            applyPendingPostDetail();
+        });
+        m_detailSnapshotFadeAnimation->start();
+        return;
+    }
+
+    clearDetailSnapshot();
+    QTimer::singleShot(0, this, [this]() {
+        removeTransitionImage();
+        updateLayerOrder();
+        applyPendingPostDetail();
+    });
+}
+
+void PostApplication::applyPendingPostDetail()
+{
+    if (!m_detailView || !m_pendingPostDetail.has_value()) {
+        return;
+    }
+
+    const PostDetailData detail = *m_pendingPostDetail;
+    m_pendingPostDetail.reset();
+    QTimer::singleShot(0, this, [this, detail]() {
+        if (!m_detailView || detail.postId != m_openPostSession.postId) {
+            return;
+        }
+        m_detailView->setPostData(detail);
+        updateLayerOrder();
+    });
 }
 
 void PostApplication::startCloseAnimation()

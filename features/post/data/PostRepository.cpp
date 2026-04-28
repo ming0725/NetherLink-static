@@ -1,7 +1,10 @@
 #include "PostRepository.h"
 
 #include <QImageReader>
-#include <QTimer>
+#include <QMetaObject>
+#include <QRunnable>
+#include <QThread>
+#include <QThreadPool>
 #include <QUuid>
 
 #include "features/friend/data/UserRepository.h"
@@ -152,9 +155,17 @@ PostDetailData PostRepository::requestPostDetail(const PostDetailRequest& query)
 QString PostRepository::requestPostDetailAsync(const PostDetailRequest& query, int delayMs)
 {
     const QString requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    QTimer::singleShot(qMax(0, delayMs), this, [this, requestId, query]() {
-        emit postDetailReady(requestId, requestPostDetail(query));
-    });
+    QThreadPool::globalInstance()->start(QRunnable::create([this, requestId, query, delayMs]() {
+        const int boundedDelayMs = qMax(0, delayMs);
+        if (boundedDelayMs > 0) {
+            QThread::msleep(static_cast<unsigned long>(boundedDelayMs));
+        }
+
+        const PostDetailData detail = requestPostDetail(query);
+        QMetaObject::invokeMethod(this, [this, requestId, detail]() {
+            emit postDetailReady(requestId, detail);
+        }, Qt::QueuedConnection);
+    }));
     return requestId;
 }
 

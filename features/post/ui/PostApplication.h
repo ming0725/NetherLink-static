@@ -7,6 +7,8 @@
 #include <QStackedWidget>
 #include <QVariantAnimation>
 
+#include <optional>
+
 #include "shared/types/RepositoryTypes.h"
 class PostFeedPage;
 class PostApplicationBar;
@@ -57,6 +59,8 @@ private:
     void clearDetailSnapshot();
     void clearDetailView();
     void startCloseAnimation();
+    void revealDetailViewAfterLoad();
+    void applyPendingPostDetail();
     QWidget* createPlaceholderPage() const;
     void replaceStackPage(int index, QWidget* page);
     void ensurePageLoaded(int index);
@@ -76,6 +80,7 @@ private:
     QWidget* m_transitionImage = nullptr;
     PostCreatePage* m_createPage = nullptr;
     OpenPostSession m_openPostSession;
+    std::optional<PostDetailData> m_pendingPostDetail;
     TransitionPhase m_transitionPhase = TransitionPhase::Idle;
     bool m_initialPageLoadScheduled = false;
 #ifdef Q_OS_MACOS
