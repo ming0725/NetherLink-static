@@ -275,6 +275,11 @@ void GroupListWidget::restoreSelection()
     if (row < 0) {
         clearSelection();
         setCurrentIndex(QModelIndex());
+        const Group selectedGroup = GroupRepository::instance().requestGroupDetail({m_state.selectedGroupId});
+        if (selectedGroup.groupId.isEmpty()) {
+            m_state.selectedGroupId.clear();
+            emit selectedGroupChanged(QString());
+        }
         return;
     }
 
@@ -366,7 +371,7 @@ void GroupListWidget::setCategoryExpandedAnimated(const QString& categoryId, boo
     m_categoryAnimations.insert(categoryId, animation);
     animation->setStartValue(startProgress);
     animation->setEndValue(endProgress);
-    animation->setDuration(240);
+    animation->setDuration(420);
     animation->setEasingCurve(QEasingCurve::OutCubic);
 
     connect(animation, &QVariantAnimation::valueChanged, this, [this, categoryId, shouldKeepAtTop](const QVariant& value) {

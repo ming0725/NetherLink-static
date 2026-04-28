@@ -266,9 +266,9 @@ void FriendListWidget::restoreSelection()
     if (row < 0) {
         clearSelection();
         setCurrentIndex(QModelIndex());
-        const bool hadSelection = !m_state.selectedFriendId.isEmpty();
-        m_state.selectedFriendId.clear();
-        if (hadSelection) {
+        const User selectedUser = UserRepository::instance().requestUserDetail({m_state.selectedFriendId});
+        if (selectedUser.id.isEmpty()) {
+            m_state.selectedFriendId.clear();
             emit selectedFriendChanged(QString());
         }
         return;
@@ -385,7 +385,7 @@ void FriendListWidget::setGroupExpandedAnimated(const QString& groupId, bool tar
     m_groupAnimations.insert(groupId, animation);
     animation->setStartValue(startProgress);
     animation->setEndValue(endProgress);
-    animation->setDuration(240);
+    animation->setDuration(420);
     animation->setEasingCurve(QEasingCurve::OutCubic);
 
     connect(animation, &QVariantAnimation::valueChanged, this, [this, groupId, shouldKeepAtTop](const QVariant& value) {
