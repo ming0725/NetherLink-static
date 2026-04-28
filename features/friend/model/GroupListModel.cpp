@@ -80,6 +80,8 @@ QVariant GroupListModel::data(const QModelIndex& index, int role) const
             return category.expanded;
         case CategoryProgressRole:
             return category.progress;
+        case HoverSuppressedRole:
+            return false;
         case Qt::SizeHintRole:
             return QSize(0, kCategoryHeaderHeight);
         default:
@@ -118,6 +120,8 @@ QVariant GroupListModel::data(const QModelIndex& index, int role) const
         return category.categoryName;
     case CategoryProgressRole:
         return category.progress;
+    case HoverSuppressedRole:
+        return !m_hoverSuppressedGroupId.isEmpty() && group.groupId == m_hoverSuppressedGroupId;
     case Qt::SizeHintRole:
         return QSize(0, qRound(kGroupItemHeight * category.progress));
     default:
@@ -400,6 +404,11 @@ void GroupListModel::setCategoryProgress(const QString& categoryId, qreal progre
                          index(lastRow, 0),
                          {CategoryProgressRole, Qt::SizeHintRole});
     }
+}
+
+void GroupListModel::setHoverSuppressedGroup(const QString& groupId)
+{
+    m_hoverSuppressedGroupId = groupId;
 }
 
 const GroupListModel::GroupCategory* GroupListModel::categoryForId(const QString& categoryId) const

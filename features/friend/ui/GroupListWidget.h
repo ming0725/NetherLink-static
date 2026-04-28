@@ -77,6 +77,11 @@ private:
     bool isCategoryPinnedAtTop(const QString& categoryId) const;
     void scrollCategoryToTop(const QString& categoryId);
     void clearCurrentSelection();
+    void showGroupMenu(const QPoint& globalPos, const QModelIndex& index);
+    void changeGroupCategory(const QString& groupId,
+                             const QString& categoryId,
+                             const QString& categoryName);
+    void exitGroupFromMenu(const QString& groupId);
     void updateStickyHeader();
     StickyHeaderState calculateStickyHeaderState() const;
     StickyCategoryData stickyCategoryDataForRow(int row) const;

@@ -1,20 +1,25 @@
 #include "GroupListWidget.h"
 
 #include <QAbstractItemView>
+#include <QActionGroup>
 #include <QApplication>
 #include <QCursor>
 #include <QItemSelectionModel>
+#include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPalette>
 #include <QScrollBar>
+#include <QStringList>
 #include <QTimer>
 #include <QVariantAnimation>
 
 #include "features/chat/data/GroupRepository.h"
+#include "features/chat/data/MessageRepository.h"
 #include "features/friend/model/GroupListModel.h"
 #include "features/friend/ui/GroupListDelegate.h"
 #include "shared/services/ImageService.h"
+#include "shared/ui/StyledActionMenu.h"
 
 extern const int kContactGroupArrowYOffset;
 
@@ -25,6 +30,17 @@ constexpr int kCategoryLeftPadding = 12;
 constexpr int kCategoryCountRightPadding = 18;
 constexpr int kCategoryArrowSize = 12;
 constexpr int kGroupPageSize = 80;
+
+const QStringList& editableCategoryOrder()
+{
+    static const QStringList ids = {
+            QStringLiteral("gg_joined"),
+            QStringLiteral("gg_college"),
+            QStringLiteral("gg_work"),
+            QStringLiteral("gg_performance")
+    };
+    return ids;
+}
 
 QFont stickyCategoryFont()
 {
@@ -155,6 +171,15 @@ void GroupListWidget::leaveEvent(QEvent* event)
 
 void GroupListWidget::mousePressEvent(QMouseEvent* event)
 {
+    if (event->button() == Qt::RightButton) {
+        const QModelIndex pressedIndex = indexAt(event->pos());
+        if (m_model->isGroupRow(pressedIndex)) {
+            showGroupMenu(event->globalPosition().toPoint(), pressedIndex);
+        }
+        event->accept();
+        return;
+    }
+
     if (event->button() != Qt::LeftButton) {
         OverlayScrollListView::mousePressEvent(event);
         return;
@@ -196,6 +221,8 @@ void GroupListWidget::mousePressEvent(QMouseEvent* event)
 
 void GroupListWidget::mouseMoveEvent(QMouseEvent* event)
 {
+    m_model->setHoverSuppressedGroup({});
+    viewport()->update();
     OverlayScrollListView::mouseMoveEvent(event);
     if (m_stickyVisible) {
         viewport()->update(QRect(0, 0, viewport()->width(), kStickyHeaderHeight));
@@ -445,6 +472,122 @@ void GroupListWidget::clearCurrentSelection()
     m_preservingSelection = wasPreservingSelection;
     m_state.selectedGroupId.clear();
     emit selectedGroupChanged(QString());
+}
+
+void GroupListWidget::showGroupMenu(const QPoint& globalPos, const QModelIndex& index)
+{
+    const Group group = m_model->groupAt(index);
+    if (group.groupId.isEmpty()) {
+        return;
+    }
+
+    auto* menu = new StyledActionMenu(this);
+    menu->setItemHoverColor(QColor(238, 238, 238));
+    m_model->setHoverSuppressedGroup({});
+
+    QAction* messageAction = menu->addAction(QStringLiteral("发消息"));
+    connect(messageAction, &QAction::triggered, this, [this, groupId = group.groupId]() {
+        emit requestMessage(groupId);
+    });
+
+    StyledActionMenu* categoryMenu = menu->addStyledMenu(QStringLiteral("添加到分组"));
+    auto* actionGroup = new QActionGroup(categoryMenu);
+    actionGroup->setExclusive(true);
+
+    const QMap<QString, QString> categories = GroupRepository::instance().requestGroupCategories();
+    const QString currentCategoryId = group.listGroupId.isEmpty()
+            ? QStringLiteral("gg_joined")
+            : group.listGroupId;
+
+    auto addCategoryAction = [this, categoryMenu, actionGroup, group, currentCategoryId]
+            (const QString& categoryId, const QString& categoryName) {
+        QAction* action = categoryMenu->addAction(categoryName);
+        action->setCheckable(true);
+        action->setChecked(categoryId == currentCategoryId);
+        actionGroup->addAction(action);
+        connect(action, &QAction::triggered, this,
+                [this, groupId = group.groupId, categoryId, categoryName]() {
+            changeGroupCategory(groupId, categoryId, categoryName);
+        });
+    };
+
+    for (const QString& categoryId : editableCategoryOrder()) {
+        addCategoryAction(categoryId, categories.value(categoryId));
+    }
+
+    menu->addSeparator();
+
+    QAction* exitAction = menu->addAction(QStringLiteral("退出群聊"));
+    const bool canExit = !GroupRepository::instance().isCurrentUserGroupOwner(group);
+    exitAction->setEnabled(canExit);
+    if (canExit) {
+        StyledActionMenu::setActionColors(exitAction,
+                                          QColor(235, 87, 87),
+                                          QColor(255, 255, 255),
+                                          QColor(235, 87, 87));
+    }
+    connect(exitAction, &QAction::triggered, this, [this, groupId = group.groupId]() {
+        exitGroupFromMenu(groupId);
+    });
+
+    connect(menu, &QMenu::aboutToHide, this, [this, menu, groupId = group.groupId]() {
+        m_model->setHoverSuppressedGroup(groupId);
+        viewport()->update();
+        menu->deleteLater();
+    });
+    menu->popupWhenMouseReleased(globalPos);
+}
+
+void GroupListWidget::changeGroupCategory(const QString& groupId,
+                                          const QString& categoryId,
+                                          const QString& categoryName)
+{
+    if (groupId.isEmpty() || categoryId.isEmpty()) {
+        return;
+    }
+
+    Group group = GroupRepository::instance().requestGroupDetail({groupId});
+    const QString currentCategoryId = group.listGroupId.isEmpty()
+            ? QStringLiteral("gg_joined")
+            : group.listGroupId;
+    if (group.groupId.isEmpty() || categoryId == currentCategoryId) {
+        return;
+    }
+
+    group.listGroupId = categoryId;
+    group.listGroupName = categoryName;
+    GroupRepository::instance().saveGroup(group);
+    if (m_state.selectedGroupId == groupId) {
+        emit selectedGroupChanged(groupId);
+    }
+}
+
+void GroupListWidget::exitGroupFromMenu(const QString& groupId)
+{
+    if (groupId.isEmpty()) {
+        return;
+    }
+
+    const Group group = GroupRepository::instance().requestGroupDetail({groupId});
+    if (group.groupId.isEmpty() || GroupRepository::instance().isCurrentUserGroupOwner(group)) {
+        return;
+    }
+
+    const int result = QMessageBox::question(this,
+                                             QStringLiteral("退出群聊"),
+                                             QStringLiteral("确认退出该群聊吗？"),
+                                             QMessageBox::Yes | QMessageBox::No,
+                                             QMessageBox::No);
+    if (result != QMessageBox::Yes) {
+        return;
+    }
+
+    const bool exitingSelected = m_state.selectedGroupId == groupId;
+    MessageRepository::instance().removeConversation(groupId);
+    GroupRepository::instance().removeGroup(groupId);
+    if (exitingSelected) {
+        clearCurrentSelection();
+    }
 }
 
 void GroupListWidget::updateStickyHeader()

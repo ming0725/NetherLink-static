@@ -26,7 +26,8 @@ public:
         CategoryNameRole,
         CategoryGroupCountRole,
         CategoryExpandedRole,
-        CategoryProgressRole
+        CategoryProgressRole,
+        HoverSuppressedRole
     };
 
     explicit GroupListModel(QObject* parent = nullptr);
@@ -55,6 +56,7 @@ public:
     qreal categoryProgress(const QString& categoryId) const;
     void setCategoryExpanded(const QString& categoryId, bool expanded);
     void setCategoryProgress(const QString& categoryId, qreal progress);
+    void setHoverSuppressedGroup(const QString& groupId);
 
 private:
     struct GroupCategory {
@@ -87,4 +89,5 @@ private:
 
     QVector<GroupCategory> m_categories;
     QVector<RowEntry> m_rows;
+    QString m_hoverSuppressedGroupId;
 };

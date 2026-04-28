@@ -7,6 +7,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QProxyStyle>
+#include <QShowEvent>
 #include <QStringList>
 #include <QStyle>
 #include <QStyleOption>
@@ -17,6 +18,11 @@
 #include "platform/macos/MacStyledActionMenuBridge_p.h"
 #endif
 
+#ifdef Q_OS_WIN
+#include <Windows.h>
+#include <dwmapi.h>
+#endif
+
 namespace {
 constexpr auto ActionTextColorProperty = "_styledActionMenu_textColor";
 constexpr auto ActionHoverTextColorProperty = "_styledActionMenu_hoverTextColor";
@@ -24,15 +30,20 @@ constexpr auto ActionHoverBackgroundColorProperty = "_styledActionMenu_hoverBack
 constexpr auto MenuHoverColorProperty = "_styledActionMenu_hoverColor";
 constexpr auto MenuSeparatorColorProperty = "_styledActionMenu_separatorColor";
 
+#ifdef Q_OS_WIN
+constexpr int ShadowMargin = 8;
+#else
 constexpr int ShadowMargin = 4;
+#endif
 constexpr int MenuRadius = 7;
 constexpr int MenuPadding = 4;
 constexpr int ItemRadius = 4;
-constexpr int ItemHeight = 26;
+constexpr int ItemHeight = 28;
 constexpr int ItemHorizontalPadding = 10;
 constexpr int ItemIconGap = 6;
 constexpr int ArrowWidth = 10;
 constexpr int ItemFontSize = 13;
+constexpr int SeparatorHeight = 3;
 constexpr int MaxMouseReleaseWaitAttempts = 40;
 constexpr int MouseReleasePollIntervalMs = 4;
 
@@ -69,7 +80,7 @@ public:
 
         const auto* menuItem = qstyleoption_cast<const QStyleOptionMenuItem*>(option);
         if (menuItem && menuItem->menuItemType == QStyleOptionMenuItem::Separator) {
-            result.setHeight(12);
+            result.setHeight(SeparatorHeight);
             return result;
         }
 
@@ -78,6 +89,71 @@ public:
         return result;
     }
 };
+
+#ifdef Q_OS_WIN
+constexpr DWORD DwmWindowCornerPreferenceAttribute = 33;
+constexpr DWORD DwmCornerDoNotRound = 1;
+
+void applyWindowsNoSystemShadow(QWidget* widget)
+{
+    if (!widget) {
+        return;
+    }
+
+    const HWND hwnd = reinterpret_cast<HWND>(widget->winId());
+    if (!hwnd) {
+        return;
+    }
+
+    LONG_PTR classStyle = GetClassLongPtrW(hwnd, GCL_STYLE);
+    if (classStyle & CS_DROPSHADOW) {
+        SetClassLongPtrW(hwnd, GCL_STYLE, classStyle & ~CS_DROPSHADOW);
+    }
+
+    const LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    SetWindowLongPtrW(hwnd, GWL_EXSTYLE,
+                      exStyle & ~WS_EX_DLGMODALFRAME & ~WS_EX_CLIENTEDGE & ~WS_EX_STATICEDGE);
+
+    const DWMNCRENDERINGPOLICY renderingPolicy = DWMNCRP_DISABLED;
+    DwmSetWindowAttribute(hwnd,
+                          DWMWA_NCRENDERING_POLICY,
+                          &renderingPolicy,
+                          sizeof(renderingPolicy));
+
+    const DWORD cornerPreference = DwmCornerDoNotRound;
+    DwmSetWindowAttribute(hwnd,
+                          DwmWindowCornerPreferenceAttribute,
+                          &cornerPreference,
+                          sizeof(cornerPreference));
+
+    const MARGINS margins = {0, 0, 0, 0};
+    DwmExtendFrameIntoClientArea(hwnd, &margins);
+
+    SetWindowPos(hwnd,
+                 nullptr,
+                 0,
+                 0,
+                 0,
+                 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+}
+
+void paintWindowsShadow(QPainter& painter, const QRectF& panelRect)
+{
+    painter.save();
+    painter.setBrush(Qt::NoBrush);
+
+    for (int spread = ShadowMargin; spread > 0; --spread) {
+        const qreal progress = static_cast<qreal>(ShadowMargin - spread) / ShadowMargin;
+        const int alpha = static_cast<int>(26 * (1.0 - progress) * (1.0 - progress));
+        painter.setPen(QPen(QColor(0, 0, 0, alpha), 1.0));
+        const QRectF shadowRect = panelRect.adjusted(-spread, -spread + 1, spread, spread + 1);
+        painter.drawRoundedRect(shadowRect, MenuRadius + spread, MenuRadius + spread);
+    }
+
+    painter.restore();
+}
+#endif
 }
 
 StyledActionMenu::StyledActionMenu(QWidget* parent)
@@ -87,10 +163,14 @@ StyledActionMenu::StyledActionMenu(QWidget* parent)
     setProperty(MenuSeparatorColorProperty, QColor(229, 229, 229));
     setAttribute(Qt::WA_TranslucentBackground, true);
     setWindowFlags(windowFlags() | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
+#ifdef Q_OS_WIN
+    applyWindowsNoSystemShadow(this);
+#endif
     setContentsMargins(ShadowMargin + MenuPadding,
                        ShadowMargin + MenuPadding,
                        ShadowMargin + MenuPadding,
                        ShadowMargin + MenuPadding);
+#ifndef Q_OS_WIN
     if (!usesNativeMenu()) {
         auto* shadowEffect = new QGraphicsDropShadowEffect(this);
         shadowEffect->setBlurRadius(22);
@@ -98,6 +178,7 @@ StyledActionMenu::StyledActionMenu(QWidget* parent)
         shadowEffect->setColor(QColor(0, 0, 0, 50));
         setGraphicsEffect(shadowEffect);
     }
+#endif
 
     auto* menuStyle = new StyledActionMenuSizeStyle;
     menuStyle->setParent(this);
@@ -138,6 +219,9 @@ void StyledActionMenu::popup(const QPoint& pos, QAction* atAction)
     }
 #endif
 
+#ifdef Q_OS_WIN
+    applyWindowsNoSystemShadow(this);
+#endif
     QMenu::popup(pos, atAction);
 }
 
@@ -226,6 +310,9 @@ void StyledActionMenu::paintEvent(QPaintEvent* event)
 
     const QRectF panelRect = QRectF(rect()).adjusted(ShadowMargin, ShadowMargin,
                                                     -ShadowMargin, -ShadowMargin);
+#ifdef Q_OS_WIN
+    paintWindowsShadow(painter, panelRect);
+#endif
     painter.setPen(QPen(QColor(218, 218, 218), 1));
     painter.setBrush(QColor(248, 248, 248));
     painter.drawRoundedRect(panelRect.adjusted(0, 0, 0, 0), MenuRadius, MenuRadius);
@@ -339,6 +426,15 @@ void StyledActionMenu::paintEvent(QPaintEvent* event)
             painter.drawPath(arrow);
         }
     }
+}
+
+void StyledActionMenu::showEvent(QShowEvent* event)
+{
+    QMenu::showEvent(event);
+
+#ifdef Q_OS_WIN
+    applyWindowsNoSystemShadow(this);
+#endif
 }
 
 bool StyledActionMenu::usesNativeMenu() const
