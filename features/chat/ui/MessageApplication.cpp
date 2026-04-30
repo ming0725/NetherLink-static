@@ -154,4 +154,6 @@ void MessageApplication::ensureChatArea()
 
     m_chatArea = new ChatArea(this);
     m_rightStack->addWidget(m_chatArea);
+    connect(m_chatArea, &ChatArea::currentConversationRemoved,
+            this, &MessageApplication::onCurrentConversationDeleted);
 }

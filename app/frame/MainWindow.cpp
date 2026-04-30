@@ -15,6 +15,8 @@
 #include <QApplication>
 namespace {
 
+constexpr int kMainWindowMinimumWidth = 820;
+
 IconLineEdit* iconLineEditForWidget(QWidget* widget)
 {
     QWidget* current = widget;
@@ -81,7 +83,7 @@ MainWindow::MainWindow(QWidget* parent)
     // 窗口基础设置
     resize(950, 650);
     setMinimumHeight(525);
-    setMinimumWidth(685);
+    setMinimumWidth(kMainWindowMinimumWidth);
     setAttribute(Qt::WA_TranslucentBackground);
 
     setBackdropColor(QColor(248, 248, 252, 92));

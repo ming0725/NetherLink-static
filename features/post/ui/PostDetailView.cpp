@@ -1,8 +1,8 @@
 // PostDetailView.cpp
-#include <QFontMetrics>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QVBoxLayout>
 #include <QVariantAnimation>
 
 #include "shared/services/ImageService.h"
@@ -103,37 +103,12 @@ private:
 
 } // namespace
 
-void PostDetailScrollArea::layoutContent()
-{
-    if (!contentWidget || !m_titleLabel || !m_contentLabel) {
-        return;
-    }
-
-    const int margin = 20;
-    const int spacing = 20;
-    int currentY = margin;
-
-    QFontMetrics titleMetrics(m_titleLabel->font());
-    const int titleWidth = viewport()->width() - 2 * margin;
-    const int titleHeight = titleMetrics.boundingRect(0, 0, titleWidth, 0,
-                                                      Qt::TextWordWrap, m_titleLabel->text()).height();
-    m_titleLabel->setGeometry(margin, currentY, titleWidth, titleHeight);
-    currentY += titleHeight + spacing;
-
-    QFontMetrics contentMetrics(m_contentLabel->font());
-    const int contentWidth = viewport()->width() - 2 * margin;
-    const int contentHeight = contentMetrics.boundingRect(0, 0, contentWidth, 0,
-                                                          Qt::TextWordWrap, m_contentLabel->text()).height();
-    m_contentLabel->setGeometry(margin, currentY, contentWidth, contentHeight);
-    currentY += contentHeight + spacing;
-
-    contentWidget->setFixedSize(viewport()->width(), currentY);
-}
-
 PostDetailScrollArea::PostDetailScrollArea(QWidget* parent)
     : OverlayScrollArea(parent)
 {
-    contentWidget->setObjectName("PostDetailContentWidget");
+    getContentWidget()->setObjectName("PostDetailContentWidget");
+    useVerticalContentLayout(QMargins(20, 20, 20, 20), 20);
+    setViewportBackgroundColor(Qt::white);
     setWheelStepPixels(64);
     setScrollBarInsets(8, 4);
 }
@@ -142,12 +117,20 @@ void PostDetailScrollArea::setLabels(QLabel* titleLabel, QLabel* contentLabel)
 {
     m_titleLabel = titleLabel;
     m_contentLabel = contentLabel;
-    refreshContentLayout();
+    if (auto* layout = qobject_cast<QVBoxLayout*>(contentLayout())) {
+        if (m_titleLabel && layout->indexOf(m_titleLabel) < 0) {
+            layout->addWidget(m_titleLabel);
+        }
+        if (m_contentLabel && layout->indexOf(m_contentLabel) < 0) {
+            layout->addWidget(m_contentLabel);
+        }
+    }
+    relayoutContent();
 }
 
 void PostDetailScrollArea::relayout()
 {
-    refreshContentLayout();
+    relayoutContent();
 }
 
 PostDetailView::PostDetailView(QWidget* parent)
@@ -191,13 +174,6 @@ void PostDetailView::setupUI()
     m_followBtn->setCursor(Qt::PointingHandCursor);
 
     m_contentArea = new PostDetailScrollArea(m_panelContainer);
-    m_contentArea->setAutoFillBackground(true);
-    QPalette contentPalette = m_contentArea->palette();
-    contentPalette.setColor(QPalette::Window, Qt::white);
-    contentPalette.setColor(QPalette::Base, Qt::white);
-    m_contentArea->setPalette(contentPalette);
-    m_contentArea->viewport()->setPalette(contentPalette);
-    m_contentArea->viewport()->setAutoFillBackground(true);
 
     m_titleLabel = new QLabel(m_contentArea->getContentWidget());
     m_titleLabel->setWordWrap(true);

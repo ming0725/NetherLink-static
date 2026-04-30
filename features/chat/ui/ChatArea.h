@@ -10,8 +10,15 @@
 #include "shared/types/ChatMessage.h"
 #include "NewMessageNotifier.h"
 #include "shared/ui/FloatingInputBar.h"
+#include "shared/types/Group.h"
 #include "shared/types/RepositoryTypes.h"
 
+class QPropertyAnimation;
+class QPushButton;
+class QLabel;
+class ChatSessionController;
+class DirectConversationInfoPanel;
+class GroupConversationInfoPanel;
 
 class ChatArea : public QWidget
 {
@@ -28,6 +35,10 @@ public:
     void closeConversation();
     void clearMessageSelection();
     void handleGlobalMousePress(const QPoint& globalPos);
+
+signals:
+    void currentConversationRemoved();
+
 protected:
     void resizeEvent(QResizeEvent *event) override;
 private slots:
@@ -37,6 +48,10 @@ private slots:
     void onSendText(const QString &text);
     void onSendTextAsPeer(const QString &text);
     void onDeleteMessageRequested(int row);
+    void onInfoButtonClicked();
+    void confirmClearChatHistory();
+    void confirmDeleteFriend();
+    void confirmExitGroup();
 
 private:
     struct ConversationState {
@@ -57,6 +72,12 @@ private:
     FloatingInputBar* inputBar;
     QLabel* statusIcon;
     QLabel* nameLabel;
+    QPushButton* infoButton;
+    GroupConversationInfoPanel* groupInfoPanel = nullptr;
+    DirectConversationInfoPanel* directInfoPanel = nullptr;
+    ChatSessionController* sessionController;
+    QPropertyAnimation* infoPanelAnimation;
+    bool infoPanelOpen = false;
     ConversationState m_state;
     
     void updateNewMessageNotifier();
@@ -67,10 +88,37 @@ private:
     void adjustBottomSpace();
     void updateInputBarPosition();
     void applyConversationMeta();
-    void clearConversation();
+    void clearConversation(bool closeInfoPanel = true);
     void loadOlderMessages();
     QString conversationId() const;
     bool isGroupMode() const;
+    QWidget* activeInfoPanel() const;
+    QWidget* inactiveInfoPanel() const;
+    QWidget* ensureActiveInfoPanel();
+    void connectGroupInfoPanel(GroupConversationInfoPanel* panel);
+    void connectDirectInfoPanel(DirectConversationInfoPanel* panel);
+    void releaseInfoPanels();
+    void requestInfoPanelData(bool resetTransientState);
+    int visibleInfoPanelWidth() const;
+    void showInfoPanel(bool animated);
+    void hideInfoPanel(bool animated);
+    void updateInfoPanelGeometry();
+    QRect infoPanelOpenGeometry() const;
+    QRect infoPanelClosedGeometry() const;
+    bool containsGlobalPoint(QWidget* widget, const QPoint& globalPos) const;
+    void updateGroupInfoPanelState();
+    void updateDirectInfoPanelState(bool animated);
+    void onSessionChanged(const ConversationMeta& meta);
+    void onDirectPanelDataLoaded(const ConversationMeta& meta, const User& directUser);
+    void onGroupPanelDataLoaded(const ConversationMeta& meta,
+                                const Group& group,
+                                const QVector<User>& previewMembers,
+                                int totalMembers,
+                                bool canEditGroupInfo,
+                                bool canExitGroup);
+    void onGroupMembersPageLoaded(const ConversationMeta& meta, const GroupMembersPage& page);
+    void onSessionMessagesCleared();
+    void onSessionConversationRemoved();
 };
 
 #endif // CHATAREA_H 

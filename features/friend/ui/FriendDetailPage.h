@@ -5,7 +5,7 @@
 #include "shared/types/User.h"
 
 class QLabel;
-class QLineEdit;
+class InlineEditableText;
 class StatefulPushButton;
 class QToolButton;
 class QVBoxLayout;
@@ -54,7 +54,7 @@ private:
     QLabel* m_regionLabel;
     QLabel* m_statusIcon;
     QLabel* m_statusLabel;
-    QLineEdit* m_remarkEdit;
+    InlineEditableText* m_remarkEdit;
     QToolButton* m_groupButton;
     QLabel* m_signatureLabel;
     StatefulPushButton* m_messageButton;

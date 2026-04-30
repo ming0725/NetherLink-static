@@ -5,7 +5,7 @@
 #include "shared/types/Group.h"
 
 class QLabel;
-class QLineEdit;
+class InlineEditableText;
 class StatefulPushButton;
 class QToolButton;
 
@@ -52,7 +52,7 @@ private:
     AvatarLabel* m_avatarLabel;
     QLabel* m_nameLabel;
     QLabel* m_idLabel;
-    QLineEdit* m_remarkEdit;
+    InlineEditableText* m_remarkEdit;
     QToolButton* m_categoryButton;
     QLabel* m_introLabel;
     QLabel* m_announcementLabel;

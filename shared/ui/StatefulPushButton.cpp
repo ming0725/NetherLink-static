@@ -15,6 +15,7 @@ StatefulPushButton::StatefulPushButton(QWidget* parent)
         , m_disabledColor(0xa0a0a0)
         , m_currentColor(m_normalColor)
         , m_textColor(Qt::white)
+        , m_textAlignment(Qt::AlignCenter)
         , m_borderColor(Qt::transparent)
         , m_borderWidth(0)
         , m_isFlat(false)
@@ -35,6 +36,7 @@ StatefulPushButton::StatefulPushButton(const QString& text, QWidget* parent)
         , m_disabledColor(0xa0a0a0)
         , m_currentColor(m_normalColor)
         , m_textColor(Qt::white)
+        , m_textAlignment(Qt::AlignCenter)
         , m_borderColor(Qt::transparent)
         , m_borderWidth(0)
         , m_isFlat(false)
@@ -132,6 +134,13 @@ void StatefulPushButton::setCurrentColor(const QColor& c)
 
 QColor StatefulPushButton::textColor() const { return m_textColor; }
 void StatefulPushButton::setTextColor(const QColor& c) { m_textColor = c; update(); }
+
+Qt::Alignment StatefulPushButton::textAlignment() const { return m_textAlignment; }
+void StatefulPushButton::setTextAlignment(Qt::Alignment alignment)
+{
+    m_textAlignment = alignment;
+    update();
+}
 
 QColor StatefulPushButton::borderColor() const { return m_borderColor; }
 void StatefulPushButton::setBorderColor(const QColor& c) { m_borderColor = c; update(); }
@@ -236,11 +245,15 @@ void StatefulPushButton::paintEvent(QPaintEvent* e)
 
     p.setPen(m_textColor);
     const QString buttonText = text();
-    const QFontMetrics metrics(font());
-    const QRect textBounds = metrics.tightBoundingRect(buttonText);
-    const QPoint textOrigin((width() - textBounds.width()) / 2 - textBounds.left(),
-                            (height() - textBounds.height()) / 2 - textBounds.top());
-    p.drawText(textOrigin, buttonText);
+    Qt::Alignment alignment = m_textAlignment;
+    if (!(alignment & Qt::AlignVertical_Mask)) {
+        alignment |= Qt::AlignVCenter;
+    }
+
+    const int textWidth = QFontMetrics(font()).horizontalAdvance(buttonText);
+    const int adaptivePadding = qMin(14, qMax(0, (width() - textWidth) / 2));
+    const QRect textRect = rect().adjusted(adaptivePadding, 0, -adaptivePadding, 0);
+    p.drawText(textRect, alignment, buttonText);
 }
 
 bool StatefulPushButton::event(QEvent* e)

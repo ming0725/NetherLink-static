@@ -2,6 +2,8 @@
 #include "features/chat/data/GroupRepository.h"
 #include "features/friend/data/UserRepository.h"
 #include "features/chat/data/MessageRepository.h"
+#include "features/chat/ui/ConversationInfoPanel.h"
+#include "features/chat/ui/ChatSessionController.h"
 #include "app/state/CurrentUser.h"
 #include "shared/services/ImageService.h"
 #ifdef Q_OS_MACOS
@@ -9,17 +11,23 @@
 #endif
 #include <QPainter>
 #include <QLinearGradient>
-#include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QScrollBar>
 #include <QTimer>
 #include <QResizeEvent>
 #include <QDateTime>
 #include <QFont>
 #include <QPalette>
+#include <QPropertyAnimation>
+#include <QPushButton>
+#include <QLabel>
+#include <QMessageBox>
+#include <QVBoxLayout>
 
 namespace {
 
 // Floating input bar metrics. Keep list bottom spacing in sync with these values.
+static constexpr int kChatInfoHeight = 62;
 static constexpr int kInputBarSideMargin = 20;
 static constexpr int kInputBarBottomMargin = 18;
 static constexpr int kInputBarHeight = 195;
@@ -29,6 +37,54 @@ static constexpr int kInputBarBottomGradientFadeHeight = 32;
 static constexpr int kInputBarBottomGradientSolidAlpha = 192;
 static constexpr int kOlderMessagePageSize = 24;
 static constexpr int kFetchOlderTopThreshold = 8;
+static constexpr int kInfoButtonSize = 28;
+static constexpr int kInfoPanelDividerHeight = 1;
+static constexpr int kInfoPanelMinWidth = 220;
+static constexpr int kInfoPanelPreferredWidth = 280;
+static constexpr int kInfoPanelMaxWidth = 340;
+static constexpr int kInfoPanelAnimationDuration = 220;
+static constexpr int kChatInfoRightMargin = 18;
+
+class SquareDotsButton : public QPushButton
+{
+public:
+    explicit SquareDotsButton(QWidget* parent = nullptr)
+        : QPushButton(parent)
+    {
+        setCursor(Qt::PointingHandCursor);
+        setFocusPolicy(Qt::NoFocus);
+        setFlat(true);
+        setFixedSize(kInfoButtonSize, kInfoButtonSize);
+        setAttribute(Qt::WA_Hover);
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+
+        if (isDown()) {
+            painter.setBrush(QColor(0xDF, 0xDF, 0xDF));
+        } else if (underMouse()) {
+            painter.setBrush(QColor(0xE8, 0xE8, 0xE8));
+        } else {
+            painter.setBrush(Qt::transparent);
+        }
+        painter.setPen(Qt::NoPen);
+        painter.drawRoundedRect(rect().adjusted(1, 1, -1, -1), 6, 6);
+
+        painter.setBrush(QColor(0x33, 0x33, 0x33));
+        const int dotSize = 4;
+        const int spacing = 4;
+        const int totalWidth = dotSize * 3 + spacing * 2;
+        const int startX = (width() - totalWidth) / 2;
+        const int y = (height() - dotSize) / 2;
+        for (int i = 0; i < 3; ++i) {
+            painter.drawRect(startX + i * (dotSize + spacing), y, dotSize, dotSize);
+        }
+    }
+};
 
 class BottomGapGradientOverlay : public QWidget
 {
@@ -90,6 +146,26 @@ ChatArea::ChatArea(QWidget *parent)
     newMessageNotifier->hide();
 
     bottomGapGradientOverlay = new BottomGapGradientOverlay(this);
+    sessionController = new ChatSessionController(this);
+
+    infoPanelAnimation = new QPropertyAnimation(this);
+    infoPanelAnimation->setPropertyName("geometry");
+    infoPanelAnimation->setDuration(kInfoPanelAnimationDuration);
+    infoPanelAnimation->setEasingCurve(QEasingCurve::OutCubic);
+    connect(infoPanelAnimation, &QPropertyAnimation::finished, this, [this]() {
+        if (!infoPanelOpen) {
+            releaseInfoPanels();
+        }
+        updateInputBarPosition();
+        adjustBottomSpace();
+    });
+    connect(infoPanelAnimation, &QPropertyAnimation::valueChanged, this, [this]() {
+        updateInputBarPosition();
+        adjustBottomSpace();
+        if (QWidget* panel = activeInfoPanel(); panel && panel->isVisible()) {
+            panel->raise();
+        }
+    });
 
     // 创建悬浮输入栏
     inputBar = new FloatingInputBar(this);
@@ -97,7 +173,7 @@ ChatArea::ChatArea(QWidget *parent)
 
     QWidget* chatInfo = new QWidget(this);
     chatInfo->setAutoFillBackground(true);
-    chatInfo->setFixedHeight(24 + 26 + 12);
+    chatInfo->setFixedHeight(kChatInfoHeight);
     QPalette chatInfoPalette = chatInfo->palette();
     chatInfoPalette.setColor(QPalette::Window, QColor(0xF2, 0xF2, 0xF2));
     chatInfo->setPalette(chatInfoPalette);
@@ -110,7 +186,7 @@ ChatArea::ChatArea(QWidget *parent)
 
     // 外层垂直布局：用于将内容推到底部
     QVBoxLayout* outerLayout = new QVBoxLayout(chatInfo);
-    outerLayout->setContentsMargins(20, 5, 5, 10); // 留出左下边距
+    outerLayout->setContentsMargins(20, 5, kChatInfoRightMargin, 10); // 留出左右下边距
     outerLayout->addStretch(); // 将内容推到底部
 
     // 内层水平布局：图标 + 名字
@@ -130,10 +206,13 @@ ChatArea::ChatArea(QWidget *parent)
     namePalette.setColor(QPalette::WindowText, Qt::black);
     nameLabel->setPalette(namePalette);
 
+    infoButton = new SquareDotsButton(chatInfo);
+
     // 添加到底部布局
     bottomLayout->addWidget(nameLabel);
     bottomLayout->addWidget(statusIcon);
-    bottomLayout->addStretch(); // 保证靠左
+    bottomLayout->addStretch(); // 保证名称靠左，入口靠右
+    bottomLayout->addWidget(infoButton);
 
     // 添加到底部区域
     outerLayout->addLayout(bottomLayout);
@@ -161,6 +240,22 @@ ChatArea::ChatArea(QWidget *parent)
             this, &ChatArea::clearMessageSelection);
     connect(chatDelegate, &ChatItemDelegate::deleteRequested,
             this, &ChatArea::onDeleteMessageRequested);
+    connect(infoButton, &QPushButton::clicked,
+            this, &ChatArea::onInfoButtonClicked);
+    connect(sessionController, &ChatSessionController::sessionChanged,
+            this, [this](const ConversationMeta& meta, const User&, const Group&) {
+                onSessionChanged(meta);
+            });
+    connect(sessionController, &ChatSessionController::directPanelDataLoaded,
+            this, &ChatArea::onDirectPanelDataLoaded);
+    connect(sessionController, &ChatSessionController::groupPanelDataLoaded,
+            this, &ChatArea::onGroupPanelDataLoaded);
+    connect(sessionController, &ChatSessionController::groupMembersPageLoaded,
+            this, &ChatArea::onGroupMembersPageLoaded);
+    connect(sessionController, &ChatSessionController::messagesCleared,
+            this, &ChatArea::onSessionMessagesCleared);
+    connect(sessionController, &ChatSessionController::conversationRemoved,
+            this, &ChatArea::onSessionConversationRemoved);
 
     chatView->setAutoFillBackground(true);
     chatView->viewport()->setAutoFillBackground(true);
@@ -250,6 +345,7 @@ void ChatArea::onNewMessageNotifierClicked()
 void ChatArea::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
+    updateInfoPanelGeometry();
     updateNewMessageNotifierPosition();
     updateInputBarPosition();
     adjustBottomSpace();
@@ -257,6 +353,9 @@ void ChatArea::resizeEvent(QResizeEvent *event)
     // 确保新消息提示器在最上层
     if (newMessageNotifier && newMessageNotifier->isVisible()) {
         newMessageNotifier->raise();
+    }
+    if (QWidget* panel = activeInfoPanel(); panel && panel->isVisible()) {
+        panel->raise();
     }
 }
 
@@ -317,6 +416,9 @@ void ChatArea::addTextMessage(QSharedPointer<TextMessage> message,
 
 void ChatArea::applyConversationMeta()
 {
+    if (infoPanelOpen) {
+        requestInfoPanelData(false);
+    }
     if (m_state.meta.isGroup) {
         statusIcon->hide();
         nameLabel->setText(QString("%1（%2）").arg(m_state.meta.title, QString::number(m_state.meta.memberCount)));
@@ -329,12 +431,419 @@ void ChatArea::applyConversationMeta()
     nameLabel->setText(m_state.meta.title);
 }
 
+void ChatArea::onSessionChanged(const ConversationMeta& meta)
+{
+    m_state.meta = meta;
+    applyConversationMeta();
+}
+
+QWidget* ChatArea::activeInfoPanel() const
+{
+    return isGroupMode()
+            ? static_cast<QWidget*>(groupInfoPanel)
+            : static_cast<QWidget*>(directInfoPanel);
+}
+
+QWidget* ChatArea::inactiveInfoPanel() const
+{
+    return isGroupMode()
+            ? static_cast<QWidget*>(directInfoPanel)
+            : static_cast<QWidget*>(groupInfoPanel);
+}
+
+QWidget* ChatArea::ensureActiveInfoPanel()
+{
+    if (isGroupMode()) {
+        if (!groupInfoPanel) {
+            groupInfoPanel = new GroupConversationInfoPanel(this);
+            groupInfoPanel->setObjectName("groupConversationInfoPanel");
+            groupInfoPanel->setProperty("conversationType", "group");
+            connectGroupInfoPanel(groupInfoPanel);
+        }
+        return groupInfoPanel;
+    }
+
+    if (!directInfoPanel) {
+        directInfoPanel = new DirectConversationInfoPanel(this);
+        directInfoPanel->setObjectName("directConversationInfoPanel");
+        directInfoPanel->setProperty("conversationType", "direct");
+        connectDirectInfoPanel(directInfoPanel);
+    }
+    return directInfoPanel;
+}
+
+void ChatArea::connectGroupInfoPanel(GroupConversationInfoPanel* panel)
+{
+    if (!panel || !sessionController) {
+        return;
+    }
+
+    connect(panel, &GroupConversationInfoPanel::groupNameChanged,
+            sessionController, &ChatSessionController::saveGroupName);
+    connect(panel, &GroupConversationInfoPanel::groupIntroductionChanged,
+            sessionController, &ChatSessionController::saveGroupIntroduction);
+    connect(panel, &GroupConversationInfoPanel::groupAnnouncementChanged,
+            sessionController, &ChatSessionController::saveGroupAnnouncement);
+    connect(panel, &GroupConversationInfoPanel::currentUserNicknameChanged,
+            sessionController, &ChatSessionController::saveCurrentUserGroupNickname);
+    connect(panel, &GroupConversationInfoPanel::groupMemberNicknameChanged,
+            sessionController, &ChatSessionController::saveGroupMemberNickname);
+    connect(panel, &GroupConversationInfoPanel::groupMemberAdminPromotionRequested,
+            sessionController, &ChatSessionController::promoteGroupMemberToAdmin);
+    connect(panel, &GroupConversationInfoPanel::groupMemberAdminCancellationRequested,
+            sessionController, &ChatSessionController::cancelGroupMemberAdmin);
+    connect(panel, &GroupConversationInfoPanel::groupMemberRemovalRequested,
+            sessionController, &ChatSessionController::removeGroupMember);
+    connect(panel, &GroupConversationInfoPanel::groupRemarkChanged,
+            sessionController, &ChatSessionController::saveGroupRemark);
+    connect(panel, &GroupConversationInfoPanel::pinChanged,
+            sessionController, &ChatSessionController::setPinned);
+    connect(panel, &GroupConversationInfoPanel::doNotDisturbChanged,
+            sessionController, &ChatSessionController::setDoNotDisturb);
+    connect(panel, &GroupConversationInfoPanel::clearChatHistoryRequested,
+            this, &ChatArea::confirmClearChatHistory);
+    connect(panel, &GroupConversationInfoPanel::exitGroupRequested,
+            this, &ChatArea::confirmExitGroup);
+    connect(panel, &GroupConversationInfoPanel::groupMembersPageRequested,
+            sessionController, &ChatSessionController::loadGroupMembersPage);
+}
+
+void ChatArea::connectDirectInfoPanel(DirectConversationInfoPanel* panel)
+{
+    if (!panel || !sessionController) {
+        return;
+    }
+
+    connect(panel, &DirectConversationInfoPanel::remarkChanged,
+            sessionController, &ChatSessionController::saveDirectRemark);
+    connect(panel, &DirectConversationInfoPanel::pinChanged,
+            sessionController, &ChatSessionController::setPinned);
+    connect(panel, &DirectConversationInfoPanel::doNotDisturbChanged,
+            sessionController, &ChatSessionController::setDoNotDisturb);
+    connect(panel, &DirectConversationInfoPanel::clearChatHistoryRequested,
+            this, &ChatArea::confirmClearChatHistory);
+    connect(panel, &DirectConversationInfoPanel::deleteFriendRequested,
+            this, &ChatArea::confirmDeleteFriend);
+}
+
+void ChatArea::releaseInfoPanels()
+{
+    if (sessionController) {
+        sessionController->cancelPanelLoads();
+    }
+    if (infoPanelAnimation) {
+        infoPanelAnimation->setTargetObject(nullptr);
+    }
+    if (groupInfoPanel) {
+        groupInfoPanel->releaseTransientResources();
+        groupInfoPanel->deleteLater();
+        groupInfoPanel = nullptr;
+    }
+    if (directInfoPanel) {
+        directInfoPanel->deleteLater();
+        directInfoPanel = nullptr;
+    }
+}
+
+void ChatArea::requestInfoPanelData(bool resetTransientState)
+{
+    if (!sessionController || conversationId().isEmpty()) {
+        return;
+    }
+
+    if (resetTransientState && isGroupMode()) {
+        if (groupInfoPanel) {
+            groupInfoPanel->resetTransientState();
+            groupInfoPanel->setGroupSummary(Group{},
+                                            m_state.meta,
+                                            {},
+                                            m_state.meta.memberCount,
+                                            false,
+                                            false);
+        }
+    } else if (resetTransientState && directInfoPanel) {
+        directInfoPanel->setConversationMeta(m_state.meta, QString(), false);
+    }
+    sessionController->loadPanelData();
+}
+
+QRect ChatArea::infoPanelOpenGeometry() const
+{
+    const int maxPanelWidth = qMax(0, width() - 48);
+    const int boundedWidth = qBound(kInfoPanelMinWidth,
+                                    qMin(kInfoPanelPreferredWidth, width() * 2 / 5),
+                                    kInfoPanelMaxWidth);
+    const int panelWidth = qMin(boundedWidth, maxPanelWidth);
+    const int panelTop = kChatInfoHeight + kInfoPanelDividerHeight;
+    return QRect(width() - panelWidth,
+                 panelTop,
+                 panelWidth,
+                 qMax(0, height() - panelTop));
+}
+
+QRect ChatArea::infoPanelClosedGeometry() const
+{
+    QRect openRect = infoPanelOpenGeometry();
+    openRect.moveLeft(width());
+    return openRect;
+}
+
+int ChatArea::visibleInfoPanelWidth() const
+{
+    QWidget* panel = activeInfoPanel();
+    if (!panel || !panel->isVisible()) {
+        return 0;
+    }
+
+    return qBound(0, width() - panel->geometry().left(), infoPanelOpenGeometry().width());
+}
+
+void ChatArea::showInfoPanel(bool animated)
+{
+    QWidget* panel = ensureActiveInfoPanel();
+    QWidget* hiddenPanel = inactiveInfoPanel();
+    if (!panel) {
+        return;
+    }
+
+    requestInfoPanelData(true);
+
+    if (infoPanelAnimation) {
+        infoPanelAnimation->stop();
+    }
+    if (hiddenPanel) {
+        hiddenPanel->hide();
+    }
+
+    infoPanelOpen = true;
+    const QRect openRect = infoPanelOpenGeometry();
+    panel->setGeometry(animated ? infoPanelClosedGeometry() : openRect);
+    panel->show();
+    panel->raise();
+    if (infoButton) {
+        infoButton->raise();
+    }
+
+    if (!animated || !infoPanelAnimation) {
+        panel->setGeometry(openRect);
+        return;
+    }
+
+    infoPanelAnimation->setTargetObject(panel);
+    infoPanelAnimation->setStartValue(panel->geometry());
+    infoPanelAnimation->setEndValue(openRect);
+    infoPanelAnimation->start();
+}
+
+void ChatArea::hideInfoPanel(bool animated)
+{
+    QWidget* panel = activeInfoPanel();
+    if (!panel || (!panel->isVisible() && !infoPanelOpen)) {
+        infoPanelOpen = false;
+        releaseInfoPanels();
+        return;
+    }
+
+    if (infoPanelAnimation) {
+        infoPanelAnimation->stop();
+    }
+
+    infoPanelOpen = false;
+    const QRect closedRect = infoPanelClosedGeometry();
+
+    if (!animated || !infoPanelAnimation) {
+        releaseInfoPanels();
+        return;
+    }
+
+    panel->show();
+    panel->raise();
+    infoPanelAnimation->setTargetObject(panel);
+    infoPanelAnimation->setStartValue(panel->geometry());
+    infoPanelAnimation->setEndValue(closedRect);
+    infoPanelAnimation->start();
+}
+
+void ChatArea::updateInfoPanelGeometry()
+{
+    if (infoPanelAnimation && infoPanelAnimation->state() == QPropertyAnimation::Running) {
+        infoPanelAnimation->stop();
+    }
+
+    const QRect targetRect = infoPanelOpen ? infoPanelOpenGeometry() : infoPanelClosedGeometry();
+    if (groupInfoPanel) {
+        groupInfoPanel->setGeometry(targetRect);
+        groupInfoPanel->setVisible(infoPanelOpen && isGroupMode());
+    }
+    if (directInfoPanel) {
+        directInfoPanel->setGeometry(targetRect);
+        directInfoPanel->setVisible(infoPanelOpen && !isGroupMode());
+    }
+
+    if (QWidget* panel = activeInfoPanel(); panel && panel->isVisible()) {
+        panel->raise();
+    }
+    if (infoButton) {
+        infoButton->raise();
+    }
+}
+
+bool ChatArea::containsGlobalPoint(QWidget* widget, const QPoint& globalPos) const
+{
+    return widget && widget->isVisible() && widget->rect().contains(widget->mapFromGlobal(globalPos));
+}
+
+void ChatArea::updateGroupInfoPanelState()
+{
+    if (!groupInfoPanel || !infoPanelOpen) {
+        return;
+    }
+
+    requestInfoPanelData(false);
+}
+
+void ChatArea::updateDirectInfoPanelState(bool animated)
+{
+    if (directInfoPanel && infoPanelOpen) {
+        const QString remark = sessionController ? sessionController->directUser().remark : QString{};
+        directInfoPanel->setConversationMeta(m_state.meta, remark, animated);
+    }
+}
+
+void ChatArea::onDirectPanelDataLoaded(const ConversationMeta& meta, const User& directUser)
+{
+    if (!directInfoPanel || !infoPanelOpen || meta.conversationId != conversationId() || meta.isGroup) {
+        return;
+    }
+
+    m_state.meta = meta;
+    directInfoPanel->setConversationMeta(meta, directUser.remark, true);
+}
+
+void ChatArea::onGroupPanelDataLoaded(const ConversationMeta& meta,
+                                      const Group& group,
+                                      const QVector<User>& previewMembers,
+                                      int totalMembers,
+                                      bool canEditGroupInfo,
+                                      bool canExitGroup)
+{
+    if (!groupInfoPanel || !infoPanelOpen || meta.conversationId != conversationId() || !meta.isGroup) {
+        return;
+    }
+
+    m_state.meta = meta;
+    groupInfoPanel->setGroupSummary(group,
+                                    meta,
+                                    previewMembers,
+                                    totalMembers,
+                                    canEditGroupInfo,
+                                    canExitGroup);
+}
+
+void ChatArea::onGroupMembersPageLoaded(const ConversationMeta& meta, const GroupMembersPage& page)
+{
+    if (!groupInfoPanel || !infoPanelOpen || meta.conversationId != conversationId() || !meta.isGroup) {
+        return;
+    }
+
+    groupInfoPanel->appendGroupMembersPage(page);
+}
+
+void ChatArea::onInfoButtonClicked()
+{
+    if (infoPanelOpen) {
+        hideInfoPanel(true);
+    } else {
+        showInfoPanel(true);
+    }
+}
+
+void ChatArea::confirmClearChatHistory()
+{
+    if (conversationId().isEmpty()) {
+        return;
+    }
+
+    const int result = QMessageBox::question(this,
+                                             QStringLiteral("删除聊天记录"),
+                                             QStringLiteral("确认删除当前聊天记录吗？"),
+                                             QMessageBox::Yes | QMessageBox::No,
+                                             QMessageBox::No);
+    if (result != QMessageBox::Yes) {
+        return;
+    }
+
+    if (sessionController) {
+        sessionController->clearMessages();
+    }
+}
+
+void ChatArea::onSessionMessagesCleared()
+{
+    chatModel->clear();
+    m_state.loadedMessageCount = 0;
+    m_state.unreadMessageCount = 0;
+    m_state.hasMoreBefore = false;
+    m_state.loadingOlderMessages = false;
+    newMessageNotifier->hide();
+    adjustBottomSpace();
+}
+
+void ChatArea::confirmExitGroup()
+{
+    if (conversationId().isEmpty() || !isGroupMode()) {
+        return;
+    }
+
+    if (!sessionController || !sessionController->canExitGroup()) {
+        return;
+    }
+
+    const int result = QMessageBox::question(this,
+                                             QStringLiteral("退出群聊"),
+                                             QStringLiteral("确认退出该群聊吗？"),
+                                             QMessageBox::Yes | QMessageBox::No,
+                                             QMessageBox::No);
+    if (result != QMessageBox::Yes) {
+        return;
+    }
+
+    sessionController->exitGroup();
+}
+
+void ChatArea::confirmDeleteFriend()
+{
+    if (conversationId().isEmpty() || isGroupMode()) {
+        return;
+    }
+
+    const int result = QMessageBox::question(this,
+                                             QStringLiteral("删除好友"),
+                                             QStringLiteral("确认删除该好友吗？"),
+                                             QMessageBox::Yes | QMessageBox::No,
+                                             QMessageBox::No);
+    if (result != QMessageBox::Yes) {
+        return;
+    }
+
+    if (sessionController) {
+        sessionController->deleteFriend();
+    }
+}
+
+void ChatArea::onSessionConversationRemoved()
+{
+    clearConversation();
+    emit currentConversationRemoved();
+}
+
 void ChatArea::updateInputBarPosition() {
     if (inputBar) {
+        const int infoPanelWidth = visibleInfoPanelWidth();
         const QRect inputBarRect(
                 kInputBarSideMargin,
                 height() - kInputBarHeight - kInputBarBottomMargin,
-                width() - 2 * kInputBarSideMargin,
+                qMax(0, width() - 2 * kInputBarSideMargin - infoPanelWidth),
                 kInputBarHeight);
         inputBar->setGeometry(inputBarRect);
         inputBar->raise();
@@ -361,6 +870,9 @@ void ChatArea::updateInputBarPosition() {
             } else {
                 bottomGapGradientOverlay->hide();
             }
+        }
+        if (QWidget* panel = activeInfoPanel(); panel && panel->isVisible()) {
+            panel->raise();
         }
     }
 }
@@ -441,14 +953,22 @@ void ChatArea::onDeleteMessageRequested(int row)
     adjustBottomSpace();
 }
 
-void ChatArea::clearConversation()
+void ChatArea::clearConversation(bool closeInfoPanel)
 {
+    if (closeInfoPanel) {
+        hideInfoPanel(false);
+    }
+    if (sessionController) {
+        sessionController->close();
+    }
     chatModel->clear();
     chatModel->clearSelection();
     m_state = {};
     nameLabel->clear();
     statusIcon->hide();
     newMessageNotifier->hide();
+    updateGroupInfoPanelState();
+    updateDirectInfoPanelState(false);
 }
 
 void ChatArea::closeConversation()
@@ -499,12 +1019,18 @@ bool ChatArea::isGroupMode() const
 
 void ChatArea::openConversation(const ConversationThreadData& conversation)
 {
-    clearConversation();
-    m_state.meta = conversation.meta;
+    if (infoPanelOpen) {
+        hideInfoPanel(true);
+    }
+    clearConversation(false);
+    if (sessionController) {
+        sessionController->open(conversation.meta);
+    } else {
+        m_state.meta = conversation.meta;
+    }
     m_state.loadedMessageCount = conversation.loadedMessageCount;
     m_state.hasMoreBefore = conversation.hasMoreBefore;
     m_state.allowOlderMessageFetch = false;
-    applyConversationMeta();
     chatModel->setMessages(conversation.messages);
     adjustBottomSpace();
     QTimer::singleShot(0, this, [this]() {
@@ -525,6 +1051,19 @@ void ChatArea::handleGlobalMousePress(const QPoint& globalPos)
 {
     if (!chatModel || !chatView) {
         return;
+    }
+
+    if (containsGlobalPoint(infoButton, globalPos)) {
+        return;
+    }
+
+    if (infoPanelOpen) {
+        QWidget* panel = activeInfoPanel();
+        if (containsGlobalPoint(panel, globalPos)) {
+            clearMessageSelection();
+            return;
+        }
+        hideInfoPanel(true);
     }
 
     if (inputBar && inputBar->rect().contains(inputBar->mapFromGlobal(globalPos))) {

@@ -2,10 +2,24 @@
 
 #include <QCursor>
 #include <QDateTime>
+#include <QEvent>
+#include <QLayout>
+#include <QPalette>
 #include <QScrollBar>
+#include <QTimer>
+#include <QVBoxLayout>
 #include <QWheelEvent>
 
 #include "SmoothScrollBar.h"
+
+namespace {
+void makeTransparent(QWidget* widget)
+{
+    widget->setAutoFillBackground(false);
+    widget->setAttribute(Qt::WA_TranslucentBackground);
+    widget->setAttribute(Qt::WA_NoSystemBackground);
+}
+} // namespace
 
 OverlayScrollArea::OverlayScrollArea(QWidget* parent)
     : QAbstractScrollArea(parent)
@@ -17,8 +31,13 @@ OverlayScrollArea::OverlayScrollArea(QWidget* parent)
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setFrameShape(QFrame::NoFrame);
     setMouseTracking(true);
-    viewport()->setMouseTracking(true);
+    makeTransparent(this);
 
+    viewport()->setMouseTracking(true);
+    makeTransparent(viewport());
+
+    contentWidget->installEventFilter(this);
+    makeTransparent(contentWidget);
     contentWidget->move(0, 0);
 
     m_overlayScrollBar->hide();
@@ -42,6 +61,25 @@ OverlayScrollArea::OverlayScrollArea(QWidget* parent)
     });
 }
 
+QVBoxLayout* OverlayScrollArea::useVerticalContentLayout(const QMargins& margins, int spacing)
+{
+    auto* layout = qobject_cast<QVBoxLayout*>(contentWidget->layout());
+    if (!layout) {
+        delete contentWidget->layout();
+        layout = new QVBoxLayout(contentWidget);
+    }
+
+    layout->setContentsMargins(margins);
+    layout->setSpacing(spacing);
+    scheduleContentLayout();
+    return layout;
+}
+
+QLayout* OverlayScrollArea::contentLayout() const
+{
+    return contentWidget->layout();
+}
+
 void OverlayScrollArea::setWheelStepPixels(int pixels)
 {
     m_wheelStepPixels = qMax(24, pixels);
@@ -54,13 +92,75 @@ void OverlayScrollArea::setScrollBarInsets(int topBottomInset, int rightInset)
     updateOverlayScrollBarGeometry();
 }
 
+void OverlayScrollArea::setViewportBackgroundColor(const QColor& color)
+{
+    setAttribute(Qt::WA_TranslucentBackground, false);
+    viewport()->setAttribute(Qt::WA_TranslucentBackground, false);
+    viewport()->setAttribute(Qt::WA_NoSystemBackground, false);
+    QPalette palette = viewport()->palette();
+    palette.setColor(QPalette::Base, color);
+    palette.setColor(QPalette::Window, color);
+    viewport()->setPalette(palette);
+    viewport()->setAutoFillBackground(true);
+    setAutoFillBackground(false);
+    contentWidget->setAutoFillBackground(false);
+}
+
+void OverlayScrollArea::clearViewportBackground()
+{
+    makeTransparent(this);
+    makeTransparent(viewport());
+    QPalette palette = viewport()->palette();
+    palette.setColor(QPalette::Base, Qt::transparent);
+    palette.setColor(QPalette::Window, Qt::transparent);
+    viewport()->setPalette(palette);
+    makeTransparent(contentWidget);
+}
+
+void OverlayScrollArea::relayoutContent()
+{
+    refreshContentLayout();
+}
+
+void OverlayScrollArea::layoutContent()
+{
+    const int contentWidth = viewport()->width();
+    contentWidget->setFixedWidth(contentWidth);
+
+    if (QLayout* layout = contentWidget->layout()) {
+        layout->invalidate();
+        layout->activate();
+    }
+
+    QSize hint = contentWidget->sizeHint();
+    if (QLayout* layout = contentWidget->layout()) {
+        hint = layout->sizeHint();
+        if (layout->hasHeightForWidth()) {
+            hint.setHeight(layout->heightForWidth(contentWidth));
+        }
+    }
+
+    const int contentHeight = qMax(0, hint.height());
+    contentWidget->setFixedSize(contentWidth, contentHeight);
+
+    if (QLayout* layout = contentWidget->layout()) {
+        layout->setGeometry(QRect(QPoint(0, 0), contentWidget->size()));
+    }
+}
+
 void OverlayScrollArea::refreshContentLayout()
 {
-    contentWidget->resize(viewport()->width(), contentWidget->height());
+    if (m_refreshingLayout) {
+        return;
+    }
+
+    m_refreshingLayout = true;
+    m_layoutScheduled = false;
     layoutContent();
     updateScrollMetrics();
     syncContentPosition();
     updateOverlayScrollBar();
+    m_refreshingLayout = false;
 }
 
 void OverlayScrollArea::resizeEvent(QResizeEvent* event)
@@ -139,6 +239,21 @@ bool OverlayScrollArea::viewportEvent(QEvent* event)
     }
 
     return QAbstractScrollArea::viewportEvent(event);
+}
+
+void OverlayScrollArea::scheduleContentLayout()
+{
+    if (m_layoutScheduled || m_refreshingLayout) {
+        return;
+    }
+
+    m_layoutScheduled = true;
+    QTimer::singleShot(0, this, [this]() {
+        if (!m_layoutScheduled) {
+            return;
+        }
+        refreshContentLayout();
+    });
 }
 
 void OverlayScrollArea::showOverlayScrollBar()
@@ -277,4 +392,23 @@ void OverlayScrollArea::onVerticalScrollValueChanged(int value)
     m_animatedScrollValue = value;
     syncContentPosition();
     updateOverlayScrollBar();
+}
+
+bool OverlayScrollArea::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == contentWidget) {
+        switch (event->type()) {
+        case QEvent::LayoutRequest:
+        case QEvent::ChildAdded:
+        case QEvent::ChildRemoved:
+        case QEvent::Show:
+        case QEvent::Hide:
+            scheduleContentLayout();
+            break;
+        default:
+            break;
+        }
+    }
+
+    return QAbstractScrollArea::eventFilter(watched, event);
 }

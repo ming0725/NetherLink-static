@@ -14,6 +14,7 @@ class StatefulPushButton : public QPushButton
     Q_PROPERTY(QColor disabledColor READ disabledColor WRITE setDisabledColor)
     Q_PROPERTY(QColor currentColor READ currentColor WRITE setCurrentColor USER true)
     Q_PROPERTY(QColor textColor READ textColor WRITE setTextColor)
+    Q_PROPERTY(Qt::Alignment textAlignment READ textAlignment WRITE setTextAlignment)
     Q_PROPERTY(QColor borderColor READ borderColor WRITE setBorderColor)
     Q_PROPERTY(int borderWidth READ borderWidth WRITE setBorderWidth)
     Q_PROPERTY(bool isFlat READ isFlat WRITE setFlat)
@@ -43,6 +44,9 @@ public:
 
     QColor textColor() const;
     void setTextColor(const QColor& c);
+
+    Qt::Alignment textAlignment() const;
+    void setTextAlignment(Qt::Alignment alignment);
 
     QColor borderColor() const;
     void setBorderColor(const QColor& c);
@@ -84,6 +88,7 @@ private:
     QColor m_disabledColor;
     QColor m_currentColor;
     QColor m_textColor;
+    Qt::Alignment m_textAlignment;
     QColor m_borderColor;
     int m_borderWidth;
     bool m_isFlat;

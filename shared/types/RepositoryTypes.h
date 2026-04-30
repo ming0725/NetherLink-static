@@ -141,6 +141,7 @@ struct ConversationMeta {
     int memberCount = 0;
     UserStatus status = Offline;
     bool isDoNotDisturb = false;
+    bool isPinned = false;
 };
 
 using ChatMessageList = QVector<QSharedPointer<ChatMessage>>;
@@ -150,6 +151,15 @@ struct ConversationThreadData {
     ChatMessageList messages;
     int loadedMessageCount = 0;
     bool hasMoreBefore = false;
+};
+
+struct GroupMembersPage {
+    QString groupId;
+    QString keyword;
+    QVector<User> members;
+    int offset = 0;
+    int totalCount = 0;
+    bool hasMore = false;
 };
 
 struct AiChatListEntry {

@@ -240,10 +240,29 @@ private:
 class ConversationMetaRequestOperation final
     : public RepositoryTemplate<ConversationMetaRequest, ConversationMeta> {
 public:
+    explicit ConversationMetaRequestOperation(QMap<QString, ConversationSyncState> conversationStates)
+        : m_conversationStates(std::move(conversationStates))
+    {
+    }
+
+private:
+    bool hasState(const QString& conversationId) const
+    {
+        return m_conversationStates.contains(conversationId);
+    }
+
+    ConversationSyncState stateFor(const QString& conversationId) const
+    {
+        ConversationSyncState state = m_conversationStates.value(conversationId);
+        state.conversationId = conversationId;
+        return state;
+    }
+
     ConversationMeta doRequest(const ConversationMetaRequest& query) const override
     {
         if (GroupRepository::instance().contains(query.conversationId)) {
             const Group group = GroupRepository::instance().requestGroupDetail({query.conversationId});
+            const ConversationSyncState state = stateFor(group.groupId);
             return ConversationMeta{
                     group.groupId,
                     groupDisplayName(group),
@@ -251,11 +270,13 @@ public:
                     true,
                     group.memberNum,
                     Offline,
-                    group.isDnd
+                    hasState(group.groupId) ? state.isDoNotDisturb : group.isDnd,
+                    state.isPinned
             };
         }
 
         const User user = UserRepository::instance().requestUserDetail({query.conversationId});
+        const ConversationSyncState state = stateFor(user.id);
         return ConversationMeta{
                 user.id,
                 userDisplayName(user),
@@ -263,9 +284,12 @@ public:
                 false,
                 0,
                 user.status,
-                user.isDnd
+                hasState(user.id) ? state.isDoNotDisturb : user.isDnd,
+                state.isPinned
         };
     }
+
+    QMap<QString, ConversationSyncState> m_conversationStates;
 };
 
 class ConversationListRequestOperation final
@@ -458,7 +482,8 @@ ChatMessageList MessageRepository::requestConversationMessages(const Conversatio
 
 ConversationMeta MessageRepository::requestConversationMeta(const ConversationMetaRequest& query) const
 {
-    return ConversationMetaRequestOperation().request(query);
+    QMutexLocker locker(&m_mutex);
+    return ConversationMetaRequestOperation(m_conversationStates).request(query);
 }
 
 ConversationThreadData MessageRepository::requestConversationThread(const ConversationThreadRequest& query) const
@@ -556,6 +581,33 @@ void MessageRepository::setConversationPinned(const QString& conversationId, boo
         }
         state.isPinned = pinned;
     }
+    emit conversationListChanged(conversationId);
+}
+
+void MessageRepository::clearConversationMessages(const QString& conversationId)
+{
+    if (conversationId.isEmpty()) {
+        return;
+    }
+
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_mutex);
+        changed = m_store.remove(conversationId) > 0;
+        ConversationSyncState& state = m_conversationStates[conversationId];
+        state.conversationId = conversationId;
+        if (state.unreadCount != 0) {
+            changed = true;
+        }
+        state.unreadCount = 0;
+        state.lastReadAt = QDateTime::currentDateTime();
+    }
+
+    if (!changed) {
+        return;
+    }
+
+    emit lastMessageChanged(conversationId, {});
     emit conversationListChanged(conversationId);
 }
 

@@ -6,7 +6,6 @@
 
 class QAction;
 class QPaintEvent;
-class QShowEvent;
 
 class StyledActionMenu : public QMenu
 {
@@ -34,7 +33,6 @@ public:
 
 protected:
     void paintEvent(QPaintEvent* event) override;
-    void showEvent(QShowEvent* event) override;
 
 private:
     bool usesNativeMenu() const;

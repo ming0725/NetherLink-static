@@ -6,7 +6,6 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QLineEdit>
 #include <QMenu>
 #include <QMap>
 #include <QMessageBox>
@@ -20,6 +19,7 @@
 #include "features/chat/data/GroupRepository.h"
 #include "features/chat/data/MessageRepository.h"
 #include "shared/services/ImageService.h"
+#include "shared/ui/InlineEditableText.h"
 #include "shared/ui/StatefulPushButton.h"
 
 namespace {
@@ -197,7 +197,7 @@ GroupDetailPage::GroupDetailPage(QWidget* parent)
     , m_avatarLabel(new AvatarLabel(this))
     , m_nameLabel(new QLabel(this))
     , m_idLabel(new QLabel(this))
-    , m_remarkEdit(new QLineEdit(this))
+    , m_remarkEdit(new InlineEditableText(this))
     , m_categoryButton(new CategorySelectButton(this))
     , m_introLabel(makeValueLabel(this))
     , m_announcementLabel(makeValueLabel(this))
@@ -262,11 +262,17 @@ GroupDetailPage::GroupDetailPage(QWidget* parent)
     m_remarkEdit->setFocusPolicy(Qt::ClickFocus);
     m_remarkEdit->setFixedHeight(34);
     m_remarkEdit->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_remarkEdit->setStyleSheet(QStringLiteral(
-            "QLineEdit { border: 1px solid transparent; border-radius: 5px; background: transparent; color: #555555; padding: 0 8px; }"
-            "QLineEdit:hover { background: #eeeeee; }"
-            "QLineEdit:focus { border-color: #d8d8d8; background: #ffffff; }"));
-    connect(m_remarkEdit, &QLineEdit::editingFinished, this, &GroupDetailPage::saveRemark);
+    m_remarkEdit->setTextColor(QColor(0x55, 0x55, 0x55));
+    m_remarkEdit->setPlaceholderTextColor(QColor(0x88, 0x88, 0x88));
+    m_remarkEdit->setNormalBackgroundColor(Qt::transparent);
+    m_remarkEdit->setHoverBackgroundColor(QColor(0xEE, 0xEE, 0xEE));
+    m_remarkEdit->setFocusBackgroundColor(Qt::white);
+    m_remarkEdit->setNormalBorderColor(Qt::transparent);
+    m_remarkEdit->setFocusBorderColor(QColor(0xD8, 0xD8, 0xD8));
+    m_remarkEdit->setBorderWidth(1);
+    m_remarkEdit->setRadius(5);
+    m_remarkEdit->setHorizontalPadding(8);
+    connect(m_remarkEdit, &InlineEditableText::editingFinished, this, &GroupDetailPage::saveRemark);
     contentLayout->addLayout(makeInfoRow(QStringLiteral("备注"), m_remarkEdit));
     contentLayout->addItem(makeCompressibleSpacing(24));
 
@@ -349,11 +355,11 @@ void GroupDetailPage::resizeEvent(QResizeEvent* event)
 
 bool GroupDetailPage::eventFilter(QObject* watched, QEvent* event)
 {
-    if (event->type() == QEvent::MouseButtonPress && m_remarkEdit->hasFocus()) {
+    if (event->type() == QEvent::MouseButtonPress && m_remarkEdit->isEditing()) {
         auto* widget = qobject_cast<QWidget*>(watched);
         if (widget && widget != m_remarkEdit && !m_remarkEdit->isAncestorOf(widget)) {
             saveRemark();
-            m_remarkEdit->clearFocus();
+            m_remarkEdit->finishEditing();
         }
     }
     return QWidget::eventFilter(watched, event);
@@ -368,7 +374,7 @@ void GroupDetailPage::setGroup(const Group& group)
 
     m_group = group;
     m_hasGroup = true;
-    m_remarkEdit->clearFocus();
+    m_remarkEdit->finishEditing();
 
     m_nameLabel->setText(m_group.groupName);
     m_idLabel->setText(QStringLiteral("ID %1").arg(m_group.groupId));

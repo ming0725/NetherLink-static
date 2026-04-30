@@ -1,11 +1,13 @@
 #include "GroupRepository.h"
 
 #include <QCollator>
+#include <QSet>
 #include <QStringList>
 
 #include <algorithm>
 
 #include "app/state/CurrentUser.h"
+#include "features/friend/data/UserRepository.h"
 #include "shared/data/RepositoryTemplate.h"
 
 namespace {
@@ -58,6 +60,38 @@ void appendListEntry(QVector<Group>& groups,
     normalized.listGroupId = categoryId;
     normalized.listGroupName = categoryName;
     groups.push_back(normalized);
+}
+
+void appendUniqueMember(QVector<QString>& members, QSet<QString>& seen, const QString& userId)
+{
+    if (userId.isEmpty() || seen.contains(userId)) {
+        return;
+    }
+
+    members.push_back(userId);
+    seen.insert(userId);
+}
+
+void assignSampleMembers(Group& group, const QVector<QString>& userIds, int ordinal)
+{
+    QVector<QString> members;
+    QSet<QString> seen;
+    members.reserve(qMin(group.memberNum, userIds.size()));
+
+    appendUniqueMember(members, seen, group.ownerId);
+    for (const QString& adminId : group.adminsID) {
+        appendUniqueMember(members, seen, adminId);
+    }
+
+    if (!userIds.isEmpty()) {
+        const int start = (ordinal * 11) % userIds.size();
+        for (int index = 0; members.size() < group.memberNum && index < userIds.size(); ++index) {
+            appendUniqueMember(members, seen, userIds.at((start + index) % userIds.size()));
+        }
+    }
+
+    group.membersID = members;
+    group.memberNum = group.membersID.size();
 }
 
 QString effectiveCategoryIdFor(const Group& group)
@@ -301,6 +335,8 @@ Group makeGroup(const QString& groupId,
     group.remark = remark;
     group.introduction = QStringLiteral("%1，用于日常交流、资料同步和协作安排。").arg(groupName);
     group.announcement = QStringLiteral("欢迎来到%1，请保持友好沟通。").arg(groupName);
+    group.currentUserNickname = CurrentUser::instance().getUserName();
+    group.memberNicknames.insert(CurrentUser::instance().getUserId(), group.currentUserNickname);
     group.listGroupId = listGroupId;
     group.listGroupName = listGroupName;
     return group;
@@ -384,6 +420,18 @@ GroupRepository::GroupRepository(QObject* parent)
     addPerformanceGroup(kPerformanceCategoryId, kPerformanceCategoryName, 24, 1000);
     addPerformanceGroup(kPerformanceCategoryId, kPerformanceCategoryName, 128, 2000);
     addPerformanceGroup(kPerformanceCategoryId, kPerformanceCategoryName, 560, 3000);
+
+    QVector<QString> userIds;
+    const QVector<FriendSummary> friends = UserRepository::instance().requestFriendList();
+    userIds.reserve(friends.size());
+    for (const FriendSummary& friendSummary : friends) {
+        userIds.push_back(friendSummary.userId);
+    }
+
+    int ordinal = 0;
+    for (Group& group : groupMap) {
+        assignSampleMembers(group, userIds, ordinal++);
+    }
 }
 
 GroupRepository& GroupRepository::instance()

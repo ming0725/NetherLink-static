@@ -25,6 +25,7 @@ public slots:
     void markConversationUnread(const QString& conversationId, int unreadCount = 1);
     void setConversationDoNotDisturb(const QString& conversationId, bool enabled);
     void setConversationPinned(const QString& conversationId, bool pinned);
+    void clearConversationMessages(const QString& conversationId);
     void removeConversation(const QString& conversationId);
     void addMessage(const QString& conversationId,
                     QSharedPointer<ChatMessage> message);

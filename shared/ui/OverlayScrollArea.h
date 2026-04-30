@@ -1,8 +1,12 @@
 #pragma once
 
 #include <QAbstractScrollArea>
+#include <QMargins>
 #include <QVariantAnimation>
 
+class QLayout;
+class QVBoxLayout;
+class QColor;
 class SmoothScrollBar;
 
 class OverlayScrollArea : public QAbstractScrollArea
@@ -10,21 +14,29 @@ class OverlayScrollArea : public QAbstractScrollArea
 public:
     explicit OverlayScrollArea(QWidget* parent = nullptr);
     QWidget* getContentWidget() const { return contentWidget; }
+    QVBoxLayout* useVerticalContentLayout(const QMargins& margins = QMargins(),
+                                          int spacing = 0);
+    QLayout* contentLayout() const;
     void setWheelStepPixels(int pixels);
     void setScrollBarInsets(int topBottomInset, int rightInset);
+    void setViewportBackgroundColor(const QColor& color);
+    void clearViewportBackground();
+    void relayoutContent();
 
 protected:
-    virtual void layoutContent() = 0;
+    virtual void layoutContent();
     void refreshContentLayout();
     void resizeEvent(QResizeEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void enterEvent(QEnterEvent* event) override;
     void leaveEvent(QEvent* event) override;
     bool viewportEvent(QEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
     QWidget* contentWidget;
 
 private:
+    void scheduleContentLayout();
     void showOverlayScrollBar();
     void updateOverlayScrollBar();
     void updateScrollMetrics();
@@ -49,4 +61,6 @@ private:
     int m_wheelStreak = 0;
     int m_lastWheelDirection = 0;
     bool m_hovered = false;
+    bool m_refreshingLayout = false;
+    bool m_layoutScheduled = false;
 };

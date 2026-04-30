@@ -9,8 +9,6 @@
 
 class PostDetailScrollArea : public OverlayScrollArea {
     Q_OBJECT
-protected:
-    void layoutContent() override;
 public:
     explicit PostDetailScrollArea(QWidget* parent = nullptr);
     void setLabels(QLabel* titleLabel, QLabel* contentLabel);
