@@ -9,11 +9,13 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QPainter>
+#include <QPaintEvent>
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QStyle>
 #include <QTimer>
 #include <QToolButton>
+#include <QVariant>
 #include <QVBoxLayout>
 
 #include "features/friend/data/UserRepository.h"
@@ -35,6 +37,7 @@ QLabel* makeTitleLabel(const QString& text)
     QFont font = label->font();
     font.setPixelSize(14);
     label->setFont(font);
+    label->setProperty("themeTextRole", static_cast<int>(ThemeColor::PrimaryText));
     label->setStyleSheet(QStringLiteral("color: %1;")
                                  .arg(ThemeManager::instance().color(ThemeColor::PrimaryText).name()));
     return label;
@@ -46,6 +49,7 @@ QFrame* makeSeparator()
     line->setFrameShape(QFrame::HLine);
     line->setFrameShadow(QFrame::Plain);
     line->setFixedHeight(1);
+    line->setProperty("themeSeparator", true);
     line->setStyleSheet(QStringLiteral("color: %1; background: %1; border: none;")
                                 .arg(ThemeManager::instance().color(ThemeColor::Divider).name()));
     return line;
@@ -205,11 +209,6 @@ FriendDetailPage::FriendDetailPage(QWidget* parent)
     , m_messageButton(new StatefulPushButton(QStringLiteral("发消息"), this))
     , m_deleteButton(new StatefulPushButton(QStringLiteral("删除好友"), this))
 {
-    setAutoFillBackground(true);
-    QPalette pal = palette();
-    pal.setColor(QPalette::Window, ThemeManager::instance().color(ThemeColor::WindowBackground));
-    setPalette(pal);
-
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(48, 80, 48, 44);
     root->setSpacing(0);
@@ -235,6 +234,7 @@ FriendDetailPage::FriendDetailPage(QWidget* parent)
     nameFont.setPixelSize(20);
     nameFont.setWeight(QFont::DemiBold);
     m_nameLabel->setFont(nameFont);
+    m_nameLabel->setProperty("themeTextRole", static_cast<int>(ThemeColor::PrimaryText));
     m_nameLabel->setStyleSheet(QStringLiteral("color: %1;")
                                        .arg(ThemeManager::instance().color(ThemeColor::PrimaryText).name()));
     m_nameLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
@@ -244,6 +244,9 @@ FriendDetailPage::FriendDetailPage(QWidget* parent)
     m_idLabel->setFont(secondaryFont);
     m_regionLabel->setFont(secondaryFont);
     m_statusLabel->setFont(secondaryFont);
+    m_idLabel->setProperty("themeTextRole", static_cast<int>(ThemeColor::TertiaryText));
+    m_regionLabel->setProperty("themeTextRole", static_cast<int>(ThemeColor::TertiaryText));
+    m_statusLabel->setProperty("themeTextRole", static_cast<int>(ThemeColor::PrimaryText));
     m_idLabel->setStyleSheet(QStringLiteral("color: %1;")
                                      .arg(ThemeManager::instance().color(ThemeColor::TertiaryText).name()));
     m_idLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
@@ -307,6 +310,7 @@ FriendDetailPage::FriendDetailPage(QWidget* parent)
     contentLayout->addLayout(makeInfoRow(QStringLiteral("好友分组"), groupRowHost));
     contentLayout->addSpacing(28);
 
+    m_signatureLabel->setProperty("themeTextRole", static_cast<int>(ThemeColor::PrimaryText));
     m_signatureLabel->setStyleSheet(QStringLiteral("color: %1;")
                                             .arg(ThemeManager::instance().color(ThemeColor::PrimaryText).name()));
     QFont signatureFont = m_signatureLabel->font();
@@ -344,8 +348,12 @@ FriendDetailPage::FriendDetailPage(QWidget* parent)
         static_cast<GroupSelectButton*>(m_groupButton)->setMenuHoverSuppressed(true);
         m_groupButton->update();
     });
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
+        applyTheme();
+    });
 
     qApp->installEventFilter(this);
+    applyTheme();
 }
 
 FriendDetailPage::~FriendDetailPage()
@@ -377,6 +385,12 @@ void FriendDetailPage::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
     updateSignatureText();
+}
+
+void FriendDetailPage::paintEvent(QPaintEvent* event)
+{
+    QPainter painter(this);
+    painter.fillRect(event->rect(), ThemeManager::instance().color(ThemeColor::PageBackground));
 }
 
 bool FriendDetailPage::eventFilter(QObject* watched, QEvent* event)
@@ -422,6 +436,40 @@ void FriendDetailPage::updateAvatar()
                                                                  Qt::KeepAspectRatio,
                                                                  devicePixelRatioF());
     m_statusIcon->setPixmap(statusPixmap);
+}
+
+void FriendDetailPage::applyTheme()
+{
+    const QList<QLabel*> labels = findChildren<QLabel*>();
+    for (QLabel* label : labels) {
+        const QVariant roleValue = label->property("themeTextRole");
+        if (!roleValue.isValid()) {
+            continue;
+        }
+        const auto role = static_cast<ThemeColor>(roleValue.toInt());
+        label->setStyleSheet(QStringLiteral("color: %1;")
+                                     .arg(ThemeManager::instance().color(role).name()));
+    }
+
+    const QList<QFrame*> separators = findChildren<QFrame*>();
+    for (QFrame* separator : separators) {
+        if (!separator->property("themeSeparator").toBool()) {
+            continue;
+        }
+        const QString divider = ThemeManager::instance().color(ThemeColor::Divider).name();
+        separator->setStyleSheet(QStringLiteral("color: %1; background: %1; border: none;").arg(divider));
+    }
+
+    m_remarkEdit->setTextColor(ThemeManager::instance().color(ThemeColor::SecondaryText));
+    m_remarkEdit->setPlaceholderTextColor(ThemeManager::instance().color(ThemeColor::PlaceholderText));
+    m_remarkEdit->setHoverBackgroundColor(ThemeManager::instance().color(ThemeColor::ListHover));
+    m_remarkEdit->setFocusBackgroundColor(ThemeManager::instance().color(ThemeColor::PanelBackground));
+    m_remarkEdit->setFocusBorderColor(ThemeManager::instance().color(ThemeColor::Divider));
+
+    applyPrimaryButtonStyle(m_messageButton);
+    applyDangerOutlineButtonStyle(m_deleteButton);
+    m_groupButton->update();
+    update();
 }
 
 void FriendDetailPage::updateRemarkText()

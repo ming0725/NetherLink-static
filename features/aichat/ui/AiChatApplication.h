@@ -6,6 +6,8 @@
 #include <QSplitter>
 #include <QWidget>
 #include <QLabel>
+#include <QPainter>
+#include <QPaintEvent>
 
 class AiChatApplication : public QWidget {
     Q_OBJECT
@@ -32,14 +34,19 @@ private:
             // 设置按钮
             m_newConversationButton->setFixedSize(newButtonWidth, newButtonHeight);
             m_newConversationButton->setRadius(6);
-            m_newConversationButton->setNormalColor(ThemeManager::instance().color(ThemeColor::Accent));
-            m_newConversationButton->setHoverColor(ThemeManager::instance().color(ThemeColor::AccentHover));
-            m_newConversationButton->setPressColor(ThemeManager::instance().color(ThemeColor::AccentPressed));
-            m_newConversationButton->setTextColor(Qt::white);
             connect(m_newConversationButton, &StatefulPushButton::clicked,
                     m_aiChatList, &AiChatListWidget::createNewConversation);
+            applyTheme();
+            connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
+                applyTheme();
+            });
         }
     protected:
+        void paintEvent(QPaintEvent* event) override {
+            QPainter painter(this);
+            painter.fillRect(event->rect(), ThemeManager::instance().color(ThemeColor::PanelBackground));
+        }
+
         void resizeEvent(QResizeEvent* ev) override {
             QWidget::resizeEvent(ev);
             int y = topMargin;
@@ -58,6 +65,14 @@ private:
             m_aiChatList->setGeometry(0, y, width(), height() - y);
         }
     private:
+        void applyTheme() {
+            m_newConversationButton->setNormalColor(ThemeManager::instance().color(ThemeColor::Accent));
+            m_newConversationButton->setHoverColor(ThemeManager::instance().color(ThemeColor::AccentHover));
+            m_newConversationButton->setPressColor(ThemeManager::instance().color(ThemeColor::AccentPressed));
+            m_newConversationButton->setTextColor(Qt::white);
+            update();
+        }
+
         AiChatListWidget* m_aiChatList;
         QLabel* m_iconLabel;
         StatefulPushButton* m_newConversationButton;

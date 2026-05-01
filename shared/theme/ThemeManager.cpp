@@ -1,6 +1,8 @@
 #include "ThemeManager.h"
 
 #include <QApplication>
+#include <QAbstractItemView>
+#include <QAbstractScrollArea>
 #include <QEvent>
 #include <QGuiApplication>
 #include <QScopedValueRollback>
@@ -14,20 +16,6 @@ namespace {
 QString cssColor(const QColor& color)
 {
     return color.name(QColor::HexRgb);
-}
-
-QColor accentHoverFrom(const QColor& accent)
-{
-    return QColor(qMax(0, accent.red() - 0x11),
-                  qMax(0, accent.green() - 0x11),
-                  qMax(0, accent.blue() - 0x11));
-}
-
-QColor accentPressedFrom(const QColor& accent)
-{
-    return QColor(qMax(0, accent.red() - 0x22),
-                  qMax(0, accent.green() - 0x22),
-                  qMax(0, accent.blue() - 0x22));
 }
 
 } // namespace
@@ -271,16 +259,20 @@ void ThemeManager::refreshApplicationTheme()
             style->unpolish(widget);
             style->polish(widget);
         }
+        if (auto* scrollArea = qobject_cast<QAbstractScrollArea*>(widget)) {
+            if (QWidget* viewport = scrollArea->viewport()) {
+                viewport->update();
+            }
+        }
+        if (auto* itemView = qobject_cast<QAbstractItemView*>(widget)) {
+            itemView->doItemsLayout();
+        }
         widget->update();
     };
 
-    const QList<QWidget*> topLevelWidgets = QApplication::topLevelWidgets();
-    for (QWidget* topLevelWidget : topLevelWidgets) {
-        refreshWidget(topLevelWidget);
-        const QList<QWidget*> childWidgets = topLevelWidget->findChildren<QWidget*>();
-        for (QWidget* childWidget : childWidgets) {
-            refreshWidget(childWidget);
-        }
+    const QWidgetList widgets = QApplication::allWidgets();
+    for (QWidget* widget : widgets) {
+        refreshWidget(widget);
     }
 }
 

@@ -55,6 +55,10 @@ IconLineEdit::IconLineEdit(QWidget *parent)
     setFont(inputFont);
 
     applyThemePalette();
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
+        applyThemePalette();
+        update();
+    });
 
     auto* lineEditStyle = new TextOnlyLineEditStyle;
     lineEditStyle->setParent(this);

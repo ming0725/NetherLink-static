@@ -3,6 +3,8 @@
 #include <QListView>
 #include <QPropertyAnimation>
 
+#include "shared/theme/ThemeManager.h"
+
 class SmoothScrollBar;
 
 class OverlayScrollListView : public QListView
@@ -17,6 +19,7 @@ public:
     void setScrollBarInsets(int topBottomInset, int rightInset);
 
 protected:
+    void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void enterEvent(QEnterEvent* event) override;
@@ -26,6 +29,8 @@ protected:
 
     void showOverlayScrollBar();
     void updateOverlayScrollBar();
+    void setThemeBackgroundRole(ThemeColor role);
+    void refreshTheme();
 
 private slots:
     void onOverlayScrollBarValueChanged(int value);
@@ -52,4 +57,5 @@ private:
     int m_wheelStreak = 0;
     int m_lastWheelDirection = 0;
     bool m_hovered = false;
+    ThemeColor m_themeBackgroundRole = ThemeColor::PanelBackground;
 };

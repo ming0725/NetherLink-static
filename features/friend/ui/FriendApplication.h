@@ -38,6 +38,7 @@ private:
 
     private:
         void updateContentMode(bool animate = true);
+        void applyTheme();
 
         IconLineEdit* m_searchInput;
         StatefulPushButton* m_addButton;

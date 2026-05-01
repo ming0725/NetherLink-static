@@ -139,6 +139,8 @@ void GroupListDelegate::paint(QPainter* painter,
 
     const bool isNotice = index.data(GroupListModel::IsNoticeRole).toBool();
     if (isNotice) {
+        painter->fillRect(option.rect, ThemeManager::instance().color(ThemeColor::PanelBackground));
+
         const bool hovered = option.state & QStyle::State_MouseOver;
         if (hovered) {
             const QRect hoverRect = option.rect.adjusted(6, 3, -6, -3);
@@ -172,6 +174,8 @@ void GroupListDelegate::paint(QPainter* painter,
 
     const bool isCategory = index.data(GroupListModel::IsCategoryRole).toBool();
     if (isCategory) {
+        painter->fillRect(option.rect, ThemeManager::instance().color(ThemeColor::PanelBackground));
+
         const bool hovered = option.state & QStyle::State_MouseOver;
         if (hovered) {
             const QRect hoverRect = option.rect.adjusted(6, 3, -6, -3);

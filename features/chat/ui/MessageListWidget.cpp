@@ -3,7 +3,6 @@
 #include <QAction>
 #include <QItemSelectionModel>
 #include <QMouseEvent>
-#include <QPalette>
 #include <QScrollBar>
 #include <QTimer>
 
@@ -28,13 +27,7 @@ MessageListWidget::MessageListWidget(QWidget* parent)
     setUniformItemSizes(true);
     setSpacing(0);
     setEditTriggers(QAbstractItemView::NoEditTriggers);
-    setAutoFillBackground(true);
-    viewport()->setAutoFillBackground(true);
-    QPalette palette = this->palette();
-    palette.setColor(QPalette::Base, ThemeManager::instance().color(ThemeColor::PanelBackground));
-    palette.setColor(QPalette::Window, ThemeManager::instance().color(ThemeColor::PanelBackground));
-    setPalette(palette);
-    viewport()->setPalette(palette);
+    refreshTheme();
     setWheelStepPixels(64);
     setScrollBarInsets(8, 4);
 

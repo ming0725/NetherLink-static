@@ -34,6 +34,8 @@ private:
         void resizeEvent(QResizeEvent* event) override;
 
     private:
+        void applyTheme();
+
         IconLineEdit* m_searchInput;
         StatefulPushButton* m_addButton;
         MessageListWidget* m_msgList;

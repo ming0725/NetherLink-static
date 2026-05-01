@@ -28,6 +28,7 @@ signals:
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
+    void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
 
 private:
@@ -35,6 +36,7 @@ private:
 
     void setGroup(const Group& group);
     void updateAvatar();
+    void applyTheme();
     void updateRemarkText();
     void updateCategoryButtonText();
     void updateIntroText();

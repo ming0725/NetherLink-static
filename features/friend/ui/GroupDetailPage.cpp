@@ -10,10 +10,12 @@
 #include <QMap>
 #include <QMessageBox>
 #include <QPainter>
+#include <QPaintEvent>
 #include <QResizeEvent>
 #include <QSizePolicy>
 #include <QTimer>
 #include <QToolButton>
+#include <QVariant>
 #include <QVBoxLayout>
 
 #include "features/chat/data/GroupRepository.h"
@@ -36,6 +38,7 @@ QLabel* makeTitleLabel(const QString& text)
     QFont font = label->font();
     font.setPixelSize(14);
     label->setFont(font);
+    label->setProperty("themeTextRole", static_cast<int>(ThemeColor::PrimaryText));
     label->setStyleSheet(QStringLiteral("color: %1;")
                                  .arg(ThemeManager::instance().color(ThemeColor::PrimaryText).name()));
     return label;
@@ -47,6 +50,7 @@ QFrame* makeSeparator()
     line->setFrameShape(QFrame::HLine);
     line->setFrameShadow(QFrame::Plain);
     line->setFixedHeight(1);
+    line->setProperty("themeSeparator", true);
     line->setStyleSheet(QStringLiteral("color: %1; background: %1; border: none;")
                                 .arg(ThemeManager::instance().color(ThemeColor::Divider).name()));
     return line;
@@ -71,6 +75,7 @@ QLabel* makeValueLabel(QWidget* parent)
     QFont font = label->font();
     font.setPixelSize(14);
     label->setFont(font);
+    label->setProperty("themeTextRole", static_cast<int>(ThemeColor::PrimaryText));
     label->setStyleSheet(QStringLiteral("color: %1;")
                                  .arg(ThemeManager::instance().color(ThemeColor::PrimaryText).name()));
     label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -247,11 +252,6 @@ GroupDetailPage::GroupDetailPage(QWidget* parent)
     , m_messageButton(new StatefulPushButton(QStringLiteral("发消息"), this))
     , m_exitButton(new StatefulPushButton(QStringLiteral("退出群聊"), this))
 {
-    setAutoFillBackground(true);
-    QPalette pal = palette();
-    pal.setColor(QPalette::Window, ThemeManager::instance().color(ThemeColor::WindowBackground));
-    setPalette(pal);
-
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(88, 64, 88, 40);
     root->setSpacing(0);
@@ -277,6 +277,7 @@ GroupDetailPage::GroupDetailPage(QWidget* parent)
     nameFont.setPixelSize(20);
     nameFont.setWeight(QFont::DemiBold);
     m_nameLabel->setFont(nameFont);
+    m_nameLabel->setProperty("themeTextRole", static_cast<int>(ThemeColor::PrimaryText));
     m_nameLabel->setStyleSheet(QStringLiteral("color: %1;")
                                        .arg(ThemeManager::instance().color(ThemeColor::PrimaryText).name()));
     m_nameLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
@@ -284,6 +285,7 @@ GroupDetailPage::GroupDetailPage(QWidget* parent)
     QFont secondaryFont = m_idLabel->font();
     secondaryFont.setPixelSize(13);
     m_idLabel->setFont(secondaryFont);
+    m_idLabel->setProperty("themeTextRole", static_cast<int>(ThemeColor::TertiaryText));
     m_idLabel->setStyleSheet(QStringLiteral("color: %1;")
                                      .arg(ThemeManager::instance().color(ThemeColor::TertiaryText).name()));
     m_idLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
@@ -364,8 +366,12 @@ GroupDetailPage::GroupDetailPage(QWidget* parent)
         static_cast<CategorySelectButton*>(m_categoryButton)->setMenuHoverSuppressed(true);
         m_categoryButton->update();
     });
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
+        applyTheme();
+    });
 
     qApp->installEventFilter(this);
+    applyTheme();
 }
 
 GroupDetailPage::~GroupDetailPage()
@@ -394,6 +400,12 @@ void GroupDetailPage::resizeEvent(QResizeEvent* event)
     QWidget::resizeEvent(event);
     updateIntroText();
     updateAnnouncementText();
+}
+
+void GroupDetailPage::paintEvent(QPaintEvent* event)
+{
+    QPainter painter(this);
+    painter.fillRect(event->rect(), ThemeManager::instance().color(ThemeColor::PageBackground));
 }
 
 bool GroupDetailPage::eventFilter(QObject* watched, QEvent* event)
@@ -435,6 +447,40 @@ void GroupDetailPage::setGroup(const Group& group)
 void GroupDetailPage::updateAvatar()
 {
     m_avatarLabel->setAvatarSource(m_group.groupAvatarPath);
+}
+
+void GroupDetailPage::applyTheme()
+{
+    const QList<QLabel*> labels = findChildren<QLabel*>();
+    for (QLabel* label : labels) {
+        const QVariant roleValue = label->property("themeTextRole");
+        if (!roleValue.isValid()) {
+            continue;
+        }
+        const auto role = static_cast<ThemeColor>(roleValue.toInt());
+        label->setStyleSheet(QStringLiteral("color: %1;")
+                                     .arg(ThemeManager::instance().color(role).name()));
+    }
+
+    const QList<QFrame*> separators = findChildren<QFrame*>();
+    for (QFrame* separator : separators) {
+        if (!separator->property("themeSeparator").toBool()) {
+            continue;
+        }
+        const QString divider = ThemeManager::instance().color(ThemeColor::Divider).name();
+        separator->setStyleSheet(QStringLiteral("color: %1; background: %1; border: none;").arg(divider));
+    }
+
+    m_remarkEdit->setTextColor(ThemeManager::instance().color(ThemeColor::SecondaryText));
+    m_remarkEdit->setPlaceholderTextColor(ThemeManager::instance().color(ThemeColor::PlaceholderText));
+    m_remarkEdit->setHoverBackgroundColor(ThemeManager::instance().color(ThemeColor::ListHover));
+    m_remarkEdit->setFocusBackgroundColor(ThemeManager::instance().color(ThemeColor::PanelBackground));
+    m_remarkEdit->setFocusBorderColor(ThemeManager::instance().color(ThemeColor::Divider));
+
+    applyPrimaryButtonStyle(m_messageButton);
+    applyDangerOutlineButtonStyle(m_exitButton);
+    m_categoryButton->update();
+    update();
 }
 
 void GroupDetailPage::updateRemarkText()

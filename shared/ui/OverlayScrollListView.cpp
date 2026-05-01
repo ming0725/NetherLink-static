@@ -3,6 +3,8 @@
 #include <QCursor>
 #include <QDateTime>
 #include <QMouseEvent>
+#include <QPainter>
+#include <QPaintEvent>
 #include <QScrollBar>
 #include <QWheelEvent>
 
@@ -32,6 +34,19 @@ OverlayScrollListView::OverlayScrollListView(QWidget* parent)
             this, &OverlayScrollListView::onVerticalScrollRangeChanged);
     connect(verticalScrollBar(), &QScrollBar::valueChanged,
             this, &OverlayScrollListView::onVerticalScrollValueChanged);
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
+            this, &OverlayScrollListView::refreshTheme);
+
+    refreshTheme();
+}
+
+void OverlayScrollListView::paintEvent(QPaintEvent* event)
+{
+    QPainter painter(viewport());
+    painter.fillRect(event->rect(), ThemeManager::instance().color(m_themeBackgroundRole));
+    painter.end();
+
+    QListView::paintEvent(event);
 }
 
 void OverlayScrollListView::setWheelStepPixels(int pixels)
@@ -158,6 +173,30 @@ void OverlayScrollListView::updateOverlayScrollBar()
     } else if (m_hovered || m_overlayScrollBar->isDragging()) {
         m_overlayScrollBar->showScrollBar();
     }
+}
+
+void OverlayScrollListView::setThemeBackgroundRole(ThemeColor role)
+{
+    if (m_themeBackgroundRole == role) {
+        return;
+    }
+
+    m_themeBackgroundRole = role;
+    refreshTheme();
+}
+
+void OverlayScrollListView::refreshTheme()
+{
+    if (QWidget* view = viewport()) {
+        view->update();
+    }
+
+    doItemsLayout();
+    updateOverlayScrollBar();
+    if (m_overlayScrollBar) {
+        m_overlayScrollBar->update();
+    }
+    update();
 }
 
 void OverlayScrollListView::onOverlayScrollBarValueChanged(int value)

@@ -13,7 +13,6 @@
 class PostFeedPage;
 class PostApplicationBar;
 class PostDetailView;
-class PostCreatePage;
 class PostOverlay;
 
 class PostApplication : public QWidget {
@@ -47,7 +46,6 @@ private:
         }
     };
 
-    void onPageChanged(int index);
     void onPostUpdated(const PostSummary& summary);
     void fadeOverlay(qreal startOpacity, qreal endOpacity, bool hideAfter);
     void fadeBar(qreal startOpacity, qreal endOpacity, bool hideAfter);
@@ -73,12 +71,10 @@ private:
     QMetaObject::Connection m_barFadeFinishedConnection;
     QStackedWidget*       m_stack;
     PostFeedPage* m_homeFeedPage = nullptr;
-    PostFeedPage* m_followFeedPage = nullptr;
     PostDetailView* m_detailView;
     QWidget* m_detailSnapshot = nullptr;
     QVariantAnimation* m_detailSnapshotFadeAnimation = nullptr;
     QWidget* m_transitionImage = nullptr;
-    PostCreatePage* m_createPage = nullptr;
     OpenPostSession m_openPostSession;
     std::optional<PostDetailData> m_pendingPostDetail;
     TransitionPhase m_transitionPhase = TransitionPhase::Idle;

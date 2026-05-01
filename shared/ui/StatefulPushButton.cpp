@@ -119,13 +119,13 @@ QColor StatefulPushButton::normalColor() const { return m_normalColor; }
 void StatefulPushButton::setNormalColor(const QColor& c) { m_normalColor = c; applyStateColor(); }
 
 QColor StatefulPushButton::hoverColor() const { return m_hoverColor; }
-void StatefulPushButton::setHoverColor(const QColor& c) { m_hoverColor = c; }
+void StatefulPushButton::setHoverColor(const QColor& c) { m_hoverColor = c; applyStateColor(); }
 
 QColor StatefulPushButton::pressColor() const { return m_pressColor; }
-void StatefulPushButton::setPressColor(const QColor& c) { m_pressColor = c; }
+void StatefulPushButton::setPressColor(const QColor& c) { m_pressColor = c; applyStateColor(); }
 
 QColor StatefulPushButton::disabledColor() const { return m_disabledColor; }
-void StatefulPushButton::setDisabledColor(const QColor& c) { m_disabledColor = c; }
+void StatefulPushButton::setDisabledColor(const QColor& c) { m_disabledColor = c; applyStateColor(); }
 
 QColor StatefulPushButton::currentColor() const { return m_currentColor; }
 void StatefulPushButton::setCurrentColor(const QColor& c)

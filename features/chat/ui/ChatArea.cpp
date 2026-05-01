@@ -16,9 +16,9 @@
 #include <QScrollBar>
 #include <QTimer>
 #include <QResizeEvent>
+#include <QPaintEvent>
 #include <QDateTime>
 #include <QFont>
-#include <QPalette>
 #include <QPropertyAnimation>
 #include <QPushButton>
 #include <QLabel>
@@ -123,6 +123,45 @@ protected:
     }
 };
 
+class ThemeFillWidget : public QWidget
+{
+public:
+    explicit ThemeFillWidget(ThemeColor role, QWidget* parent = nullptr)
+        : QWidget(parent)
+        , m_role(role)
+    {
+    }
+
+protected:
+    void paintEvent(QPaintEvent* event) override
+    {
+        QPainter painter(this);
+        painter.fillRect(event->rect(), ThemeManager::instance().color(m_role));
+    }
+
+private:
+    ThemeColor m_role;
+};
+
+class ThemeTextLabel : public QLabel
+{
+public:
+    explicit ThemeTextLabel(QWidget* parent = nullptr)
+        : QLabel(parent)
+    {
+    }
+
+protected:
+    void paintEvent(QPaintEvent* event) override
+    {
+        Q_UNUSED(event);
+        QPainter painter(this);
+        painter.setFont(font());
+        painter.setPen(ThemeManager::instance().color(ThemeColor::PrimaryText));
+        painter.drawText(rect(), alignment() | Qt::TextSingleLine, text());
+    }
+};
+
 } // namespace
 
 ChatArea::ChatArea(QWidget *parent)
@@ -175,18 +214,10 @@ ChatArea::ChatArea(QWidget *parent)
     inputBar = new FloatingInputBar(this);
     inputBar->show();
 
-    QWidget* chatInfo = new QWidget(this);
-    chatInfo->setAutoFillBackground(true);
+    QWidget* chatInfo = new ThemeFillWidget(ThemeColor::PageBackground, this);
     chatInfo->setFixedHeight(kChatInfoHeight);
-    QPalette chatInfoPalette = chatInfo->palette();
-    chatInfoPalette.setColor(QPalette::Window, ThemeManager::instance().color(ThemeColor::PageBackground));
-    chatInfo->setPalette(chatInfoPalette);
-    QWidget* chatInfoDivider = new QWidget(this);
+    QWidget* chatInfoDivider = new ThemeFillWidget(ThemeColor::Divider, this);
     chatInfoDivider->setFixedHeight(1);
-    chatInfoDivider->setAutoFillBackground(true);
-    QPalette dividerPalette = chatInfoDivider->palette();
-    dividerPalette.setColor(QPalette::Window, ThemeManager::instance().color(ThemeColor::Divider));
-    chatInfoDivider->setPalette(dividerPalette);
 
     // 外层垂直布局：用于将内容推到底部
     QVBoxLayout* outerLayout = new QVBoxLayout(chatInfo);
@@ -202,13 +233,19 @@ ChatArea::ChatArea(QWidget *parent)
     statusIcon = new QLabel(chatInfo);
 
     // 名字 Label
-    nameLabel = new QLabel("", chatInfo);
+    nameLabel = new ThemeTextLabel(chatInfo);
     QFont nameFont = nameLabel->font();
     nameFont.setPixelSize(17);
     nameLabel->setFont(nameFont);
-    QPalette namePalette = nameLabel->palette();
-    namePalette.setColor(QPalette::WindowText, ThemeManager::instance().color(ThemeColor::PrimaryText));
-    nameLabel->setPalette(namePalette);
+    auto applyHeaderTheme = [this, chatInfo, chatInfoDivider]() {
+        nameLabel->update();
+        chatInfo->update();
+        chatInfoDivider->update();
+        if (chatView) {
+            chatView->viewport()->update();
+        }
+    };
+    applyHeaderTheme();
 
     infoButton = new SquareDotsButton(chatInfo);
 
@@ -246,6 +283,7 @@ ChatArea::ChatArea(QWidget *parent)
             this, &ChatArea::onDeleteMessageRequested);
     connect(infoButton, &QPushButton::clicked,
             this, &ChatArea::onInfoButtonClicked);
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, applyHeaderTheme);
     connect(sessionController, &ChatSessionController::sessionChanged,
             this, [this](const ConversationMeta& meta, const User&, const Group&) {
                 onSessionChanged(meta);
@@ -261,13 +299,6 @@ ChatArea::ChatArea(QWidget *parent)
     connect(sessionController, &ChatSessionController::conversationRemoved,
             this, &ChatArea::onSessionConversationRemoved);
 
-    chatView->setAutoFillBackground(true);
-    chatView->viewport()->setAutoFillBackground(true);
-    QPalette chatViewPalette = chatView->palette();
-    chatViewPalette.setColor(QPalette::Base, ThemeManager::instance().color(ThemeColor::PageBackground));
-    chatViewPalette.setColor(QPalette::Window, ThemeManager::instance().color(ThemeColor::PageBackground));
-    chatView->setPalette(chatViewPalette);
-    chatView->viewport()->setPalette(chatViewPalette);
 }
 
 

@@ -61,6 +61,7 @@ private:
     QRect fittedImageRect(const QRect& bounds, const QSize& imageSize) const;
     void setupUI();
     void updateLayout();
+    void applyTheme();
     void applySummaryState(const PostSummary& summary, bool resetDetailContent);
     void syncUiFromState();
     void syncEngagementUi();

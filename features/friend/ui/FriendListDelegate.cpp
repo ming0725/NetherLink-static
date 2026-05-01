@@ -140,6 +140,8 @@ void FriendListDelegate::paint(QPainter* painter,
 
     const bool isNotice = index.data(FriendListModel::IsNoticeRole).toBool();
     if (isNotice) {
+        painter->fillRect(option.rect, ThemeManager::instance().color(ThemeColor::PanelBackground));
+
         const bool hovered = option.state & QStyle::State_MouseOver;
         if (hovered) {
             const QRect hoverRect = option.rect.adjusted(6, 3, -6, -3);
@@ -173,6 +175,8 @@ void FriendListDelegate::paint(QPainter* painter,
 
     const bool isGroup = index.data(FriendListModel::IsGroupRole).toBool();
     if (isGroup) {
+        painter->fillRect(option.rect, ThemeManager::instance().color(ThemeColor::PanelBackground));
+
         const bool hovered = option.state & QStyle::State_MouseOver;
         if (hovered) {
             const QRect hoverRect = option.rect.adjusted(6, 3, -6, -3);

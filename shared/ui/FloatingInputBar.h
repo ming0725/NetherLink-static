@@ -45,6 +45,7 @@ private:
     void sendHelloWorld();
     void chooseAndSendImage();
     void syncPlatformInput();
+    void applyTheme();
 private:
     QTextEdit *m_inputEdit = nullptr;
     QLabel *m_emojiLabel = nullptr;

@@ -33,6 +33,7 @@ ChatListView::ChatListView(QWidget *parent)
 {
     setSelectionMode(QAbstractItemView::NoSelection);
     setFocusPolicy(Qt::NoFocus);
+    setThemeBackgroundRole(ThemeColor::PageBackground);
     setScrollBarInsets(8, 4);
 
     m_scrollAnimation->setEasingCurve(QEasingCurve::OutCubic);

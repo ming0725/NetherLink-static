@@ -34,6 +34,10 @@ PostApplicationBar::PostApplicationBar(QWidget* parent)
     highlightAnim->setEasingCurve(QEasingCurve::OutCubic);
     connect(highlightAnim, &QVariantAnimation::valueChanged,
             this, &PostApplicationBar::onHighlightValueChanged);
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
+        syncPlatformBar();
+        update();
+    });
 
     initItems();
     resize(sizeHint());

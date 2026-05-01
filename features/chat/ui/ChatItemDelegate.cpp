@@ -2,7 +2,6 @@
 #include "features/chat/model/ChatListModel.h"
 #include "features/friend/data/UserRepository.h"
 #include "ChatArea.h"
-#include "app/frame/NotificationManager.h"
 #include "shared/services/ImageService.h"
 #include "shared/theme/ThemeManager.h"
 #include <QPainter>
@@ -18,17 +17,15 @@
 
 namespace {
 
-QWidget* notificationTargetForDelegate(const QObject* delegate)
+QColor groupRoleBackgroundColor(GroupRole role)
 {
-    auto* widget = qobject_cast<QWidget*>(delegate ? delegate->parent() : nullptr);
-    return widget ? widget->window() : nullptr;
-}
-
-void showSuccessNotificationForDelegate(const QObject* delegate, const QString& message)
-{
-    NotificationManager::instance().showMessage(message,
-                                                NotificationManager::Success,
-                                                notificationTargetForDelegate(delegate));
+    if (role == GroupRole::Owner) {
+        return QColor(0xF5, 0xDD, 0xCB);
+    }
+    if (role == GroupRole::Admin && !ThemeManager::instance().isDark()) {
+        return QColor(0xC2, 0xE1, 0xF5);
+    }
+    return ThemeManager::instance().color(ThemeColor::PanelRaisedBackground);
 }
 
 } // namespace
@@ -312,7 +309,7 @@ void ChatItemDelegate::drawGroupInfo(QPainter* painter, const QRect& rect,
     GroupRole role = message->getRole();
     if (role != GroupRole::Member) {
         QString roleText = (role == GroupRole::Owner) ? "群主" : "管理员";
-        QColor bgColor = (role == GroupRole::Owner) ? QColor(0xF5DDCB) : ThemeManager::instance().color(ThemeColor::PanelRaisedBackground);
+        QColor bgColor = groupRoleBackgroundColor(role);
         QColor textColor = (role == GroupRole::Owner) ? QColor(0xFF9C00) : ThemeManager::instance().color(ThemeColor::Accent);
 
         // 计算身份标签的宽度和位置
@@ -374,7 +371,7 @@ void ChatItemDelegate::drawGroupInfoForMe(QPainter* painter, const QRect& rect,
 
     // 如果有特殊身份，先绘制身份标签（在左边）
     if (role != GroupRole::Member) {
-        QColor bgColor = (role == GroupRole::Owner) ? QColor(0xF5DDCB) : ThemeManager::instance().color(ThemeColor::PanelRaisedBackground);
+        QColor bgColor = groupRoleBackgroundColor(role);
         QColor textColor = (role == GroupRole::Owner) ? QColor(0xFF9C00) : ThemeManager::instance().color(ThemeColor::Accent);
 
         QRect roleRect(startX, rect.top() + (rect.height() - ROLE_HEIGHT) / 2,
@@ -562,7 +559,6 @@ void ChatItemDelegate::showContextMenu(const QPoint& pos, const QModelIndex& ind
         connect(copyAction, &QAction::triggered, [this, message, index, model = const_cast<QAbstractItemModel*>(index.model())]() {
             const TextMessage* textMessage = static_cast<const TextMessage*>(message);
             QApplication::clipboard()->setText(textMessage->getText());
-            showSuccessNotificationForDelegate(this, QStringLiteral("复制成功！"));
             model->setData(index, false, Qt::UserRole + 1);
         });
         menu->addSeparator();
@@ -577,7 +573,6 @@ void ChatItemDelegate::showContextMenu(const QPoint& pos, const QModelIndex& ind
     connect(deleteAction, &QAction::triggered, [this, index, model = index.model()]() {
         Q_UNUSED(model);
         emit const_cast<ChatItemDelegate*>(this)->deleteRequested(index.row());
-        showSuccessNotificationForDelegate(this, QStringLiteral("删除成功！"));
     });
 
     // 菜单关闭后自动删除，并取消选中状态

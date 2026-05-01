@@ -126,10 +126,6 @@ FriendApplication::LeftPane::LeftPane(QWidget* parent)
     setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
     m_searchInput->setFixedHeight(26);
     m_addButton->setRadius(8);
-    m_addButton->setNormalColor(ThemeManager::instance().color(ThemeColor::InputBackground));
-    m_addButton->setHoverColor(ThemeManager::instance().color(ThemeColor::ListHover));
-    m_addButton->setPressColor(ThemeManager::instance().color(ThemeColor::Divider));
-    m_addButton->setTextColor(ThemeManager::instance().color(ThemeColor::PrimaryText));
     m_addButton->setFixedHeight(26);
 
     QFont addFont = m_addButton->font();
@@ -141,18 +137,35 @@ FriendApplication::LeftPane::LeftPane(QWidget* parent)
     m_friendModeButton->setAutoExclusive(true);
     m_friendModeButton->setCursor(Qt::PointingHandCursor);
     m_friendModeButton->setFocusPolicy(Qt::NoFocus);
-    m_friendModeButton->setStyleSheet(modeButtonStyle());
     m_groupModeButton->setCheckable(true);
     m_groupModeButton->setAutoExclusive(true);
     m_groupModeButton->setCursor(Qt::PointingHandCursor);
     m_groupModeButton->setFocusPolicy(Qt::NoFocus);
-    m_groupModeButton->setStyleSheet(modeButtonStyle());
     static_cast<ModeSwitchBar*>(m_modeBar)->setButtons(m_friendModeButton, m_groupModeButton);
 
     m_groupList->hide();
 
+    applyTheme();
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
+        applyTheme();
+    });
+
     connect(m_friendModeButton, &QPushButton::clicked, this, [this]() { updateContentMode(true); });
     connect(m_groupModeButton, &QPushButton::clicked, this, [this]() { updateContentMode(true); });
+}
+
+void FriendApplication::LeftPane::applyTheme()
+{
+    m_addButton->setNormalColor(ThemeManager::instance().color(ThemeColor::InputBackground));
+    m_addButton->setHoverColor(ThemeManager::instance().color(ThemeColor::ListHover));
+    m_addButton->setPressColor(ThemeManager::instance().color(ThemeColor::Divider));
+    m_addButton->setTextColor(ThemeManager::instance().color(ThemeColor::PrimaryText));
+
+    const QString buttonStyle = modeButtonStyle();
+    m_friendModeButton->setStyleSheet(buttonStyle);
+    m_groupModeButton->setStyleSheet(buttonStyle);
+    m_modeBar->update();
+    update();
 }
 
 void FriendApplication::LeftPane::resizeEvent(QResizeEvent* ev)

@@ -2,10 +2,7 @@
 #include "PostApplication.h"
 #include "PostApplicationBar.h"
 #include "PostFeedPage.h"
-#include "app/frame/DefaultPage.h"
-#include "app/state/CurrentUser.h"
 #include "PostDetailView.h"
-#include "PostCreatePage.h"
 #include "PostOverlay.h"
 #include "features/post/data/PostRepository.h"
 #include "shared/services/ImageService.h"
@@ -210,10 +207,7 @@ PostApplication::PostApplication(QWidget* parent)
 #endif
 
     m_stack->addWidget(createPlaceholderPage());
-    m_stack->addWidget(createPlaceholderPage());
-    m_stack->addWidget(createPlaceholderPage());
     m_stack->setCurrentIndex(0);
-    connect(m_bar, &PostApplicationBar::pageClicked, this, &PostApplication::onPageChanged);
     connect(&PostRepository::instance(), &PostRepository::postDetailReady,
             this, &PostApplication::onPostDetailReady);
     connect(&PostRepository::instance(), &PostRepository::postUpdated,
@@ -437,16 +431,6 @@ void PostApplication::onPostUpdated(const PostSummary& summary)
     }
 }
 
-void PostApplication::onPageChanged(int index)
-{
-    if (index < 0 || index >= m_stack->count()) {
-        return;
-    }
-
-    ensurePageLoaded(index);
-    m_stack->setCurrentIndex(index);
-}
-
 QWidget* PostApplication::createPlaceholderPage() const
 {
     auto* page = new QWidget(m_stack);
@@ -493,21 +477,6 @@ void PostApplication::ensurePageLoaded(int index)
                     this, &PostApplication::onPostClickedWithGeometry);
             m_homeFeedPage->ensureInitialized();
             replaceStackPage(index, m_homeFeedPage);
-        }
-        break;
-    case 1:
-        if (!m_followFeedPage) {
-            m_followFeedPage = new PostFeedPage(this);
-            connect(m_followFeedPage, &PostFeedPage::postClickedWithGeometry,
-                    this, &PostApplication::onPostClickedWithGeometry);
-            m_followFeedPage->ensureInitialized();
-            replaceStackPage(index, m_followFeedPage);
-        }
-        break;
-    case 2:
-        if (!m_createPage) {
-            m_createPage = new PostCreatePage(this);
-            replaceStackPage(index, m_createPage);
         }
         break;
     default:

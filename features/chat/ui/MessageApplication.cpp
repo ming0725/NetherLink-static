@@ -25,15 +25,25 @@ MessageApplication::LeftPane::LeftPane(QWidget* parent)
 
     m_searchInput->setFixedHeight(26);
     m_addButton->setRadius(8);
-    m_addButton->setNormalColor(ThemeManager::instance().color(ThemeColor::InputBackground));
-    m_addButton->setHoverColor(ThemeManager::instance().color(ThemeColor::ListHover));
-    m_addButton->setPressColor(ThemeManager::instance().color(ThemeColor::Divider));
-    m_addButton->setTextColor(ThemeManager::instance().color(ThemeColor::PrimaryText));
     m_addButton->setFixedHeight(26);
 
     QFont addFont = m_addButton->font();
     addFont.setPixelSize(18);
     m_addButton->setFont(addFont);
+
+    applyTheme();
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
+        applyTheme();
+    });
+}
+
+void MessageApplication::LeftPane::applyTheme()
+{
+    m_addButton->setNormalColor(ThemeManager::instance().color(ThemeColor::InputBackground));
+    m_addButton->setHoverColor(ThemeManager::instance().color(ThemeColor::ListHover));
+    m_addButton->setPressColor(ThemeManager::instance().color(ThemeColor::Divider));
+    m_addButton->setTextColor(ThemeManager::instance().color(ThemeColor::PrimaryText));
+    update();
 }
 
 void MessageApplication::LeftPane::resizeEvent(QResizeEvent* event)

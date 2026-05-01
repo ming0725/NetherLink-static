@@ -7,6 +7,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <utility>
 
 ApplicationBar::ApplicationBar(QWidget* parent)
     : QWidget(parent)
@@ -109,10 +110,10 @@ void ApplicationBar::paintEvent(QPaintEvent*) {
         painter.restore();
     }
 
-    for (auto* item : topItems) {
+    for (auto* item : std::as_const(topItems)) {
         item->paint(painter);
     }
-    for (auto* item : bottomItems) {
+    for (auto* item : std::as_const(bottomItems)) {
         item->paint(painter);
     }
 }
@@ -161,13 +162,13 @@ void ApplicationBar::layoutItems() {
     int y = topInset + marginTop + spacing + avatarSize + avatarAndItemDist;
     int w = width();
 
-    for (auto* item : topItems) {
+    for (auto* item : std::as_const(topItems)) {
         int x = (w - iconSize) / 2;
         item->setRect(QRect(x, y, iconSize, iconSize));
         y += iconSize + spacing;
     }
     int yb = height() - marginBottom - iconSize;
-    for (auto* item : bottomItems) {
+    for (auto* item : std::as_const(bottomItems)) {
         int x = (w - iconSize) / 2;
         item->setRect(QRect(x, yb, iconSize, iconSize));
         yb -= (iconSize + spacing);
@@ -232,12 +233,12 @@ void ApplicationBar::leaveEvent(QEvent* event)
 
 ApplicationBarItem* ApplicationBar::itemAtPosition(const QPoint& pos) const
 {
-    for (auto* item : topItems) {
+    for (auto* item : std::as_const(topItems)) {
         if (item->contains(pos)) {
             return item;
         }
     }
-    for (auto* item : bottomItems) {
+    for (auto* item : std::as_const(bottomItems)) {
         if (item->contains(pos)) {
             return item;
         }

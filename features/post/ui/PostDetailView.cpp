@@ -8,6 +8,7 @@
 
 #include "shared/services/ImageService.h"
 #include "shared/theme/ThemeManager.h"
+#include "shared/ui/StatefulPushButton.h"
 #include "PostDetailView.h"
 
 namespace {
@@ -181,21 +182,11 @@ void PostDetailView::setupUI()
     m_authorName->setFont(nameFont);
     setWidgetTextColor(m_authorName, ThemeManager::instance().color(ThemeColor::PrimaryText));
 
-    m_followBtn = new QPushButton("关注", m_panelContainer);
+    auto* followButton = new StatefulPushButton("关注", m_panelContainer);
+    followButton->setRadius(8);
+    followButton->setPrimaryStyle();
+    m_followBtn = followButton;
     m_followBtn->setFixedSize(80, 32);
-    m_followBtn->setCursor(Qt::PointingHandCursor);
-    m_followBtn->setStyleSheet(QStringLiteral(
-        "QPushButton {"
-        " background: %1;"
-        " color: white;"
-        " border: none;"
-        " border-radius: 8px;"
-        "}"
-        "QPushButton:hover { background: %2; }"
-        "QPushButton:pressed { background: %3; }")
-            .arg(ThemeManager::instance().color(ThemeColor::Accent).name(),
-                 ThemeManager::instance().color(ThemeColor::AccentHover).name(),
-                 ThemeManager::instance().color(ThemeColor::AccentPressed).name()));
 
     m_contentArea = new PostDetailScrollArea(m_panelContainer);
 
@@ -247,6 +238,9 @@ void PostDetailView::setupUI()
     connect(m_likeBtn, &QPushButton::clicked, this, [this]() {
         emit likeClicked(!m_state.isLiked);
     });
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
+            this, &PostDetailView::applyTheme);
+    applyTheme();
 }
 
 void PostDetailView::resizeEvent(QResizeEvent* ev)
@@ -371,6 +365,23 @@ void PostDetailView::updateLayout()
     x += 40;
     m_commentCount->setGeometry(x - 10, btnY, 50, 32);
     m_contentArea->setGeometry(0, topH, rightW, h - topH - bottomH);
+}
+
+void PostDetailView::applyTheme()
+{
+    setWidgetTextColor(m_authorName, ThemeManager::instance().color(ThemeColor::PrimaryText));
+    setWidgetTextColor(m_titleLabel, ThemeManager::instance().color(ThemeColor::PrimaryText));
+    setWidgetTextColor(m_contentLabel, ThemeManager::instance().color(ThemeColor::SecondaryText));
+    setWidgetTextColor(m_likeCount, ThemeManager::instance().color(ThemeColor::SecondaryText));
+    setWidgetTextColor(m_commentCount, ThemeManager::instance().color(ThemeColor::SecondaryText));
+    if (auto* followButton = qobject_cast<StatefulPushButton*>(m_followBtn)) {
+        followButton->setPrimaryStyle();
+    }
+    m_contentArea->setViewportBackgroundColor(ThemeManager::instance().color(ThemeColor::PanelBackground));
+    syncEngagementUi();
+    m_likeBtn->update();
+    m_commentBtn->update();
+    update();
 }
 
 void PostDetailView::setPreviewSummary(const PostSummary& summary)

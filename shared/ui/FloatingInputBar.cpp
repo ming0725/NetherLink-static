@@ -46,6 +46,7 @@ FloatingInputBar::FloatingInputBar(QWidget *parent)
     if (!m_usesNativeInput) {
         initQtFallbackUi();
     }
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, &FloatingInputBar::applyTheme);
 
     auto *shadow = new QGraphicsDropShadowEffect(this);
     shadow->setBlurRadius(30);
@@ -143,45 +144,15 @@ void FloatingInputBar::initQtFallbackUi()
     m_inputEdit->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_inputEdit->setMinimumHeight(60);
     m_inputEdit->setMaximumHeight(120);
-    QPalette inputPalette = m_inputEdit->palette();
-    inputPalette.setColor(QPalette::Text, ThemeManager::instance().color(ThemeColor::PrimaryText));
-    inputPalette.setColor(QPalette::PlaceholderText,
-                          ThemeManager::instance().color(ThemeColor::PlaceholderText));
-    inputPalette.setColor(QPalette::Highlight, ThemeManager::instance().color(ThemeColor::Accent));
-    inputPalette.setColor(QPalette::HighlightedText, Qt::white);
-    m_inputEdit->setPalette(inputPalette);
     m_inputEdit->setStyleSheet(QStringLiteral(
             "QTextEdit {"
-            "   background-color: transparent;"
             "   border: none;"
-            "   color: %1;"
-            "   font-size: 15px;"
             "   padding: 5px;"
-            "   selection-background-color: %2;"
-            "   selection-color: white;"
-            "}"
-            "QTextEdit::cursor {"
-            "   border-left: 2px solid #3064CE;"
             "}"
             "QScrollBar:vertical {"
             "   border: none;"
-            "   background: transparent;"
-            "   width: 8px;"
-            "   margin: 0px;"
             "}"
-            "QScrollBar::handle:vertical {"
-            "   background: rgba(0, 0, 0, 0.2);"
-            "   border-radius: 4px;"
-            "   min-height: 20px;"
-            "}"
-            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {"
-            "   height: 0px;"
-            "}"
-            "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {"
-            "   background: none;"
-            "}"
-    ).arg(ThemeManager::instance().color(ThemeColor::PrimaryText).name(),
-          ThemeManager::instance().color(ThemeColor::Accent).name()));
+    ));
     m_inputEdit->installEventFilter(this);
     setFocusProxy(m_inputEdit);
 
@@ -209,6 +180,31 @@ void FloatingInputBar::initQtFallbackUi()
 
     m_tooltip = new CustomTooltip(this);
     m_tooltip->hide();
+    applyTheme();
+}
+
+void FloatingInputBar::applyTheme()
+{
+#ifdef Q_OS_MACOS
+    if (m_usesNativeGlass) {
+        syncPlatformInput();
+    }
+#endif
+
+    if (m_inputEdit) {
+        QPalette inputPalette = m_inputEdit->palette();
+        inputPalette.setColor(QPalette::Base, Qt::transparent);
+        inputPalette.setColor(QPalette::Window, Qt::transparent);
+        inputPalette.setColor(QPalette::Text, ThemeManager::instance().color(ThemeColor::PrimaryText));
+        inputPalette.setColor(QPalette::PlaceholderText,
+                              ThemeManager::instance().color(ThemeColor::PlaceholderText));
+        inputPalette.setColor(QPalette::Highlight, ThemeManager::instance().color(ThemeColor::Accent));
+        inputPalette.setColor(QPalette::HighlightedText, Qt::white);
+        m_inputEdit->setPalette(inputPalette);
+        m_inputEdit->update();
+    }
+
+    update();
 }
 
 void FloatingInputBar::updateLabelIcon(QLabel *label,
