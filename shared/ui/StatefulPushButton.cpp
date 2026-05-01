@@ -1,5 +1,7 @@
 #include "StatefulPushButton.h"
 
+#include "shared/theme/ThemeManager.h"
+
 #include <QMouseEvent>
 #include <QHoverEvent>
 #include <QPainter>
@@ -9,9 +11,9 @@
 StatefulPushButton::StatefulPushButton(QWidget* parent)
         : QPushButton(parent)
         , m_radius(8)
-        , m_normalColor(0x0099ff)
-        , m_hoverColor(0x0088ee)
-        , m_pressColor(0x0077dd)
+        , m_normalColor(ThemeManager::instance().color(ThemeColor::Accent))
+        , m_hoverColor(ThemeManager::instance().color(ThemeColor::AccentHover))
+        , m_pressColor(ThemeManager::instance().color(ThemeColor::AccentPressed))
         , m_disabledColor(0xa0a0a0)
         , m_currentColor(m_normalColor)
         , m_textColor(Qt::white)
@@ -30,9 +32,9 @@ StatefulPushButton::StatefulPushButton(QWidget* parent)
 StatefulPushButton::StatefulPushButton(const QString& text, QWidget* parent)
         : QPushButton(text, parent)
         , m_radius(8)
-        , m_normalColor(0x0099ff)
-        , m_hoverColor(0x0088ee)
-        , m_pressColor(0x0077dd)
+        , m_normalColor(ThemeManager::instance().color(ThemeColor::Accent))
+        , m_hoverColor(ThemeManager::instance().color(ThemeColor::AccentHover))
+        , m_pressColor(ThemeManager::instance().color(ThemeColor::AccentPressed))
         , m_disabledColor(0xa0a0a0)
         , m_currentColor(m_normalColor)
         , m_textColor(Qt::white)
@@ -160,13 +162,17 @@ void StatefulPushButton::setAnimationDuration(int ms)
 int StatefulPushButton::animationDuration() const { return m_animationDuration; }
 
 void StatefulPushButton::setDefaultStyle() {
-    setNormalColor(0xE0E0E0); setHoverColor(0xD0D0D0);
-    setPressColor(0xC0C0C0); setTextColor(0x333333);
+    setNormalColor(ThemeManager::instance().color(ThemeColor::PanelRaisedBackground));
+    setHoverColor(ThemeManager::instance().color(ThemeColor::ListHover));
+    setPressColor(ThemeManager::instance().color(ThemeColor::Divider));
+    setTextColor(ThemeManager::instance().color(ThemeColor::PrimaryText));
 }
 
 void StatefulPushButton::setPrimaryStyle() {
-    setNormalColor(0x0099FF); setHoverColor(0x0088EE);
-    setPressColor(0x0077DD); setTextColor(0xFFFFFF);
+    setNormalColor(ThemeManager::instance().color(ThemeColor::Accent));
+    setHoverColor(ThemeManager::instance().color(ThemeColor::AccentHover));
+    setPressColor(ThemeManager::instance().color(ThemeColor::AccentPressed));
+    setTextColor(0xFFFFFF);
 }
 
 void StatefulPushButton::setSuccessStyle() {

@@ -4,12 +4,12 @@
 #include <QPainter>
 
 #include "shared/services/ImageService.h"
+#include "shared/theme/ThemeManager.h"
 #include "features/post/model/PostFeedModel.h"
 #include "PostMasonryView.h"
 
 namespace {
 
-const QColor kImagePlaceholder(0xF2, 0xF2, 0xF2);
 constexpr int kCachedTitleFontSize = 12;
 constexpr int kCachedMetaFontSize = 9;
 
@@ -70,7 +70,7 @@ void PostCardDelegate::paint(QPainter* painter,
         painter->drawPixmap(layout.imageRect, cover);
     } else {
         painter->setPen(Qt::NoPen);
-        painter->setBrush(kImagePlaceholder);
+        painter->setBrush(ThemeManager::instance().color(ThemeColor::ImagePlaceholder));
         painter->drawRoundedRect(layout.imageRect, 12, 12);
     }
 
@@ -91,7 +91,7 @@ void PostCardDelegate::paint(QPainter* painter,
     }
 
     painter->setFont(titleFont());
-    painter->setPen(Qt::black);
+    painter->setPen(ThemeManager::instance().color(ThemeColor::PrimaryText));
     painter->drawText(layout.titleRect,
                       Qt::TextWordWrap | Qt::AlignLeft | Qt::AlignTop,
                       index.data(PostFeedModel::TitleRole).toString());
@@ -103,7 +103,7 @@ void PostCardDelegate::paint(QPainter* painter,
     painter->drawPixmap(layout.avatarRect, avatar);
 
     painter->setFont(metaFont());
-    painter->setPen(QColor(0x33, 0x33, 0x33));
+    painter->setPen(ThemeManager::instance().color(ThemeColor::SecondaryText));
     painter->drawText(layout.authorRect,
                       Qt::AlignVCenter | Qt::AlignLeft,
                       metaMetrics().elidedText(index.data(PostFeedModel::AuthorNameRole).toString(),
@@ -113,14 +113,16 @@ void PostCardDelegate::paint(QPainter* painter,
     const bool liked = index.data(PostFeedModel::IsLikedRole).toBool();
     const QString likeIconPath = liked
             ? QStringLiteral(":/resources/icon/full_heart.png")
-            : QStringLiteral(":/resources/icon/heart.png");
+            : (ThemeManager::instance().isDark()
+               ? QStringLiteral(":/resources/icon/empty_heart_darkmode.png")
+               : QStringLiteral(":/resources/icon/heart.png"));
     const QPixmap likeIcon = ImageService::instance().scaled(likeIconPath,
                                                              layout.likeIconRect.size(),
                                                              Qt::KeepAspectRatio,
                                                              devicePixelRatio);
     painter->drawPixmap(layout.likeIconRect, likeIcon);
 
-    painter->setPen(QColor(0x55, 0x55, 0x55));
+    painter->setPen(ThemeManager::instance().color(ThemeColor::SecondaryText));
     painter->drawText(layout.likeCountRect,
                       Qt::AlignVCenter | Qt::AlignRight,
                       QString::number(index.data(PostFeedModel::LikeCountRole).toInt()));

@@ -32,6 +32,7 @@ private:
     void ensureApplicationLoaded(int index);
     void connectFriendConversationRequests();
     void openConversationFromContacts(const QString& conversationId);
+    void updateBackdropTheme();
     void layoutWindow();
 
     ApplicationBar *appBar;

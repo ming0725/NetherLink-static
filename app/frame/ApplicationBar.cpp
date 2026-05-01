@@ -1,14 +1,18 @@
 #include "ApplicationBarItem.h"
 #include "ApplicationBar.h"
 #include "shared/services/ImageService.h"
+#include "shared/theme/ThemeManager.h"
 #include "features/friend/data/UserRepository.h"
 #include "app/state/CurrentUser.h"
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 
 ApplicationBar::ApplicationBar(QWidget* parent)
     : QWidget(parent)
 {
+    setMouseTracking(true);
+
 #ifdef Q_OS_MACOS
     setAttribute(Qt::WA_TranslucentBackground);
 #endif
@@ -41,6 +45,7 @@ ApplicationBar::ApplicationBar(QWidget* parent)
             ":/resources/icon/unselected_nether.png",
             ":/resources/icon/nether.png");
     notItem->setPixmapScale(0.72);
+    notItem->setDarkModeInversionEnabled(false);
     addItem(notItem);
 
     auto menuItem = new ApplicationBarItem(":/resources/icon/menu.png");
@@ -78,13 +83,15 @@ void ApplicationBar::paintEvent(QPaintEvent*) {
     painter.setRenderHints(QPainter::Antialiasing |
                            QPainter::SmoothPixmapTransform);
 #ifdef Q_OS_WIN
-    painter.fillRect(rect(), QColor(0xFF, 0xFF, 0xFF, 128));
+    QColor windowColor = ThemeManager::instance().color(ThemeColor::PanelBackground);
+    windowColor.setAlpha(128);
+    painter.fillRect(rect(), windowColor);
 #endif
     int w = width();
     if (selectedItem) {
         painter.save();
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(0xD8, 0xD8, 0xD8));
+        painter.setBrush(ThemeManager::instance().color(ThemeColor::AppBarItemSelectedBackground));
         int x = (width() - iconSize) / 2;
         QRect r(x, highlightPosY, iconSize, iconSize);
         painter.drawRoundedRect(r, 10, 10);
@@ -101,13 +108,24 @@ void ApplicationBar::paintEvent(QPaintEvent*) {
         painter.drawPixmap(x, y, avatarSize, avatarSize, avatarPixmap);
         painter.restore();
     }
+
+    for (auto* item : topItems) {
+        item->paint(painter);
+    }
+    for (auto* item : bottomItems) {
+        item->paint(painter);
+    }
 }
 
 void ApplicationBar::addItem(ApplicationBarItem* item)
 {
+    if (!item) {
+        return;
+    }
+
     topItems.append(item);
     item->setParent(this);
-    connect(item, &ApplicationBarItem::itemClicked, this, &ApplicationBar::onItemClicked);
+    connect(item, &ApplicationBarItem::updateRequested, this, QOverload<>::of(&ApplicationBar::update));
     layoutItems();
 }
 
@@ -145,13 +163,13 @@ void ApplicationBar::layoutItems() {
 
     for (auto* item : topItems) {
         int x = (w - iconSize) / 2;
-        item->setGeometry(x, y, iconSize, iconSize);
+        item->setRect(QRect(x, y, iconSize, iconSize));
         y += iconSize + spacing;
     }
     int yb = height() - marginBottom - iconSize;
     for (auto* item : bottomItems) {
         int x = (w - iconSize) / 2;
-        item->setGeometry(x, yb, iconSize, iconSize);
+        item->setRect(QRect(x, yb, iconSize, iconSize));
         yb -= (iconSize + spacing);
     }
 
@@ -162,7 +180,7 @@ void ApplicationBar::layoutItems() {
 
 void ApplicationBar::onItemClicked(ApplicationBarItem* item)
 {
-    if (selectedItem == item)
+    if (!item || !topItems.contains(item) || selectedItem == item)
         return;
 
     if (selectedItem) selectedItem->setSelected(false);
@@ -181,7 +199,63 @@ void ApplicationBar::onItemClicked(ApplicationBarItem* item)
 
 void ApplicationBar::addBottomItem(ApplicationBarItem* item)
 {
+    if (!item) {
+        return;
+    }
+
     bottomItems.append(item);
     item->setParent(this);
+    connect(item, &ApplicationBarItem::updateRequested, this, QOverload<>::of(&ApplicationBar::update));
     layoutItems();
+}
+
+void ApplicationBar::mouseMoveEvent(QMouseEvent* event)
+{
+    setHoveredItem(itemAtPosition(event->pos()));
+    QWidget::mouseMoveEvent(event);
+}
+
+void ApplicationBar::mousePressEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton) {
+        onItemClicked(itemAtPosition(event->pos()));
+    }
+
+    QWidget::mousePressEvent(event);
+}
+
+void ApplicationBar::leaveEvent(QEvent* event)
+{
+    setHoveredItem(nullptr);
+    QWidget::leaveEvent(event);
+}
+
+ApplicationBarItem* ApplicationBar::itemAtPosition(const QPoint& pos) const
+{
+    for (auto* item : topItems) {
+        if (item->contains(pos)) {
+            return item;
+        }
+    }
+    for (auto* item : bottomItems) {
+        if (item->contains(pos)) {
+            return item;
+        }
+    }
+    return nullptr;
+}
+
+void ApplicationBar::setHoveredItem(ApplicationBarItem* item)
+{
+    if (hoveredItem == item) {
+        return;
+    }
+
+    if (hoveredItem) {
+        hoveredItem->setHovered(false);
+    }
+    hoveredItem = item;
+    if (hoveredItem) {
+        hoveredItem->setHovered(true);
+    }
 }

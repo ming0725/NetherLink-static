@@ -2,15 +2,16 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPalette>
 #include <QVBoxLayout>
 #include <QVariantAnimation>
 
 #include "shared/services/ImageService.h"
+#include "shared/theme/ThemeManager.h"
 #include "PostDetailView.h"
 
 namespace {
 
-const QColor kDetailImagePlaceholder(0xF2, 0xF2, 0xF2);
 constexpr int kPreferredSidePanelWidth = 380;
 constexpr int kMinSidePanelWidth = 340;
 constexpr int kMinImageWidth = 220;
@@ -81,7 +82,9 @@ protected:
 
         if (m_hovered || m_pressed) {
             painter.setPen(Qt::NoPen);
-            painter.setBrush(m_pressed ? QColor(0, 0, 0, 28) : QColor(0, 0, 0, 14));
+            painter.setBrush(m_pressed
+                             ? ThemeManager::instance().color(ThemeColor::ControlPressed)
+                             : ThemeManager::instance().color(ThemeColor::ControlHover));
             painter.drawRoundedRect(rect().adjusted(2, 2, -2, -2), 8, 8);
         }
 
@@ -101,6 +104,14 @@ private:
     bool m_pressed = false;
 };
 
+void setWidgetTextColor(QWidget* widget, const QColor& color)
+{
+    QPalette palette = widget->palette();
+    palette.setColor(QPalette::WindowText, color);
+    palette.setColor(QPalette::Text, color);
+    widget->setPalette(palette);
+}
+
 } // namespace
 
 PostDetailScrollArea::PostDetailScrollArea(QWidget* parent)
@@ -108,7 +119,7 @@ PostDetailScrollArea::PostDetailScrollArea(QWidget* parent)
 {
     getContentWidget()->setObjectName("PostDetailContentWidget");
     useVerticalContentLayout(QMargins(20, 20, 20, 20), 20);
-    setViewportBackgroundColor(Qt::white);
+    setViewportBackgroundColor(ThemeManager::instance().color(ThemeColor::PanelBackground));
     setWheelStepPixels(64);
     setScrollBarInsets(8, 4);
 }
@@ -168,10 +179,23 @@ void PostDetailView::setupUI()
     nameFont.setPointSize(13);
     nameFont.setBold(true);
     m_authorName->setFont(nameFont);
+    setWidgetTextColor(m_authorName, ThemeManager::instance().color(ThemeColor::PrimaryText));
 
     m_followBtn = new QPushButton("关注", m_panelContainer);
     m_followBtn->setFixedSize(80, 32);
     m_followBtn->setCursor(Qt::PointingHandCursor);
+    m_followBtn->setStyleSheet(QStringLiteral(
+        "QPushButton {"
+        " background: %1;"
+        " color: white;"
+        " border: none;"
+        " border-radius: 8px;"
+        "}"
+        "QPushButton:hover { background: %2; }"
+        "QPushButton:pressed { background: %3; }")
+            .arg(ThemeManager::instance().color(ThemeColor::Accent).name(),
+                 ThemeManager::instance().color(ThemeColor::AccentHover).name(),
+                 ThemeManager::instance().color(ThemeColor::AccentPressed).name()));
 
     m_contentArea = new PostDetailScrollArea(m_panelContainer);
 
@@ -183,6 +207,7 @@ void PostDetailView::setupUI()
     titleFont.setPointSize(16);
     titleFont.setBold(true);
     m_titleLabel->setFont(titleFont);
+    setWidgetTextColor(m_titleLabel, ThemeManager::instance().color(ThemeColor::PrimaryText));
 
     m_contentLabel = new QLabel(m_contentArea->getContentWidget());
     m_contentLabel->setWordWrap(true);
@@ -193,20 +218,25 @@ void PostDetailView::setupUI()
     contentFont.setStyleStrategy(QFont::PreferAntialias);
     contentFont.setPointSize(13);
     m_contentLabel->setFont(contentFont);
+    setWidgetTextColor(m_contentLabel, ThemeManager::instance().color(ThemeColor::SecondaryText));
 
     m_contentArea->setLabels(m_titleLabel, m_contentLabel);
 
     m_likeBtn = new IconActionButton(m_panelContainer);
-    m_likeBtn->setIcon(QIcon(":/resources/icon/heart.png"));
+    m_likeBtn->setIcon(QIcon(ThemeManager::instance().isDark()
+                             ? ":/resources/icon/empty_heart_darkmode.png"
+                             : ":/resources/icon/heart.png"));
     m_likeBtn->setIconSize(QSize(18, 18));
 
     m_likeCount = new QLabel("666", m_panelContainer);
+    setWidgetTextColor(m_likeCount, ThemeManager::instance().color(ThemeColor::SecondaryText));
 
     m_commentBtn = new IconActionButton(m_panelContainer);
     m_commentBtn->setIcon(QIcon(":/resources/icon/selected_message.png"));
     m_commentBtn->setIconSize(QSize(18, 18));
 
     m_commentCount = new QLabel("0", m_panelContainer);
+    setWidgetTextColor(m_commentCount, ThemeManager::instance().color(ThemeColor::SecondaryText));
 
     connect(m_followBtn, &QPushButton::clicked, this, [this]() {
         m_state.isFollowed = !m_state.isFollowed;
@@ -273,14 +303,14 @@ void PostDetailView::paintEvent(QPaintEvent*)
 
     QPainterPath outerPath;
     outerPath.addRoundedRect(rect(), 12, 12);
-    p.fillPath(outerPath, Qt::white);
+    p.fillPath(outerPath, ThemeManager::instance().color(ThemeColor::PanelBackground));
     p.setClipPath(outerPath);
 
     const QRect detailImageRect = imageRect();
-    p.fillRect(detailImageRect, kDetailImagePlaceholder);
+    p.fillRect(detailImageRect, ThemeManager::instance().color(ThemeColor::ImagePlaceholder));
     const int topH = 60;
     const int bottomH = 60;
-    p.setPen(QColor(0xE9, 0xE9, 0xE9));
+    p.setPen(ThemeManager::instance().color(ThemeColor::Divider));
     p.drawLine(QPoint(detailImageRect.right() + 1, topH - 1), QPoint(width() - 1, topH - 1));
     p.drawLine(QPoint(detailImageRect.right() + 1, height() - 1), QPoint(width() - 1, height() - 1));
 
@@ -432,7 +462,9 @@ void PostDetailView::syncUiFromState()
 void PostDetailView::syncEngagementUi()
 {
     m_likeBtn->setIcon(QIcon(m_state.isLiked ? ":/resources/icon/full_heart.png"
-                                             : ":/resources/icon/heart.png"));
+                                             : (ThemeManager::instance().isDark()
+                                                ? ":/resources/icon/empty_heart_darkmode.png"
+                                                : ":/resources/icon/heart.png")));
     m_likeCount->setText(QString::number(m_state.likeCount));
     m_commentCount->setText(QString::number(m_state.commentCount));
 }

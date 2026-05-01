@@ -1,5 +1,6 @@
 #include "FriendApplication.h"
 #include "shared/ui/TransparentSplitter.h"
+#include "shared/theme/ThemeManager.h"
 #include <QPainter>
 #include <QPaintEvent>
 #include <QPushButton>
@@ -59,7 +60,7 @@ protected:
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(0xf2, 0xf2, 0xf2));
+        painter.setBrush(ThemeManager::instance().color(ThemeColor::PageBackground));
         painter.drawRoundedRect(rect(), 6, 6);
 
         const QRectF friendRect = segmentRect(m_friendButton);
@@ -71,7 +72,7 @@ protected:
         const qreal x = friendRect.x() + (groupRect.x() - friendRect.x()) * m_thumbProgress;
         const qreal width = friendRect.width() + (groupRect.width() - friendRect.width()) * m_thumbProgress;
         const QRectF thumbRect(x, friendRect.y(), width, friendRect.height());
-        painter.setBrush(Qt::white);
+        painter.setBrush(ThemeManager::instance().color(ThemeColor::PanelBackground));
         painter.drawRoundedRect(thumbRect, 4, 4);
     }
 
@@ -94,17 +95,19 @@ QString modeButtonStyle()
             "border: none;"
             "border-radius: 4px;"
             "background: transparent;"
-            "color: #606060;"
+            "color: %1;"
             "font-size: 12px;"
             "}"
             "QPushButton:checked {"
             "background: transparent;"
-            "color: #0099ff;"
+            "color: %2;"
             "font-weight: 500;"
             "}"
             "QPushButton:hover:!checked {"
             "background: transparent;"
-            "}");
+            "}")
+            .arg(ThemeManager::instance().color(ThemeColor::SecondaryText).name(),
+                 ThemeManager::instance().color(ThemeColor::Accent).name());
 }
 
 } // namespace
@@ -123,10 +126,10 @@ FriendApplication::LeftPane::LeftPane(QWidget* parent)
     setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
     m_searchInput->setFixedHeight(26);
     m_addButton->setRadius(8);
-    m_addButton->setNormalColor(QColor(0xF5, 0xF5, 0xF5));
-    m_addButton->setHoverColor(QColor(0xEB, 0xEB, 0xEB));
-    m_addButton->setPressColor(QColor(0xD7, 0xD7, 0xD7));
-    m_addButton->setTextColor(QColor(0x33, 0x33, 0x33));
+    m_addButton->setNormalColor(ThemeManager::instance().color(ThemeColor::InputBackground));
+    m_addButton->setHoverColor(ThemeManager::instance().color(ThemeColor::ListHover));
+    m_addButton->setPressColor(ThemeManager::instance().color(ThemeColor::Divider));
+    m_addButton->setTextColor(ThemeManager::instance().color(ThemeColor::PrimaryText));
     m_addButton->setFixedHeight(26);
 
     QFont addFont = m_addButton->font();
@@ -283,6 +286,6 @@ void FriendApplication::paintEvent(QPaintEvent*)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
     p.setPen(Qt::NoPen);
-    p.setBrush(Qt::white);
+    p.setBrush(ThemeManager::instance().color(ThemeColor::PanelBackground));
     p.drawRect(rect());
 }

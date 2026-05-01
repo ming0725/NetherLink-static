@@ -15,6 +15,8 @@
 #include <QMetaObject>
 #include <QWidget>
 
+#include "shared/theme/ThemeManager.h"
+
 @interface NLPostBarTarget : NSObject
 @property(nonatomic, assign) QWidget* owner;
 - (instancetype)initWithOwner:(QWidget*)owner;
@@ -88,6 +90,32 @@ struct AppearanceStyle {
     CGFloat backgroundAlpha;
     CGFloat borderAlpha;
 };
+
+NSAppearance* appThemeAppearance()
+{
+    return [NSAppearance appearanceNamed:ThemeManager::instance().isDark()
+                                             ? NSAppearanceNameDarkAqua
+                                             : NSAppearanceNameAqua];
+}
+
+NSColor* nsColorForTheme(ThemeColor role, CGFloat alpha = -1.0)
+{
+    QColor color = ThemeManager::instance().color(role);
+    if (alpha >= 0.0) {
+        color.setAlphaF(alpha);
+    }
+    return [NSColor colorWithCalibratedRed:color.redF()
+                                     green:color.greenF()
+                                      blue:color.blueF()
+                                     alpha:color.alphaF()];
+}
+
+void applyAppThemeAppearance(NSView* view)
+{
+    if (view) {
+        view.appearance = appThemeAppearance();
+    }
+}
 
 constexpr CGFloat kNativeBlurShadowOpacity = 0.26;
 constexpr CGFloat kNativeBlurShadowRadius = 26.0;
@@ -323,6 +351,7 @@ NSView* ensureGlassContentView(NSView* hostView, NSView* container)
         contentView = [[NSView alloc] initWithFrame:container.bounds];
         contentView.wantsLayer = YES;
         contentView.layer.backgroundColor = NSColor.clearColor.CGColor;
+        applyAppThemeAppearance(contentView);
         glassContainer.contentView = contentView;
         objc_setAssociatedObject(hostView,
                                  kContentAssociationKey,
@@ -332,6 +361,7 @@ NSView* ensureGlassContentView(NSView* hostView, NSView* container)
         contentView = contentForView(hostView);
     } else {
         contentView.frame = container.bounds;
+        applyAppThemeAppearance(contentView);
     }
 
     return contentView;
@@ -415,15 +445,18 @@ NSView* ensureVisualEffectContainer(NSView* hostView, const AppearanceStyle& sty
     }
 
     // Native blur should sample the Qt content behind the bar inside the same window.
+    applyAppThemeAppearance(container);
     container.blendingMode = NSVisualEffectBlendingModeWithinWindow;
     container.material = NSVisualEffectMaterialPopover;
     container.state = NSVisualEffectStateActive;
     container.wantsLayer = YES;
     container.layer.cornerRadius = kCornerRadius;
     container.layer.masksToBounds = YES;
-    container.layer.backgroundColor = [[NSColor colorWithWhite:1.0 alpha:style.backgroundAlpha] CGColor];
+    container.layer.backgroundColor = nsColorForTheme(ThemeColor::PanelBackground,
+                                                      style.backgroundAlpha).CGColor;
     container.layer.borderWidth = 1.0;
-    container.layer.borderColor = [[NSColor colorWithWhite:1.0 alpha:style.borderAlpha] CGColor];
+    container.layer.borderColor = nsColorForTheme(ThemeColor::Divider,
+                                                  style.borderAlpha).CGColor;
     applyCommonContainerShadow(shadowHost, style);
     return container;
 }
@@ -460,6 +493,7 @@ NSView* ensureGlassContainer(NSView* hostView, const AppearanceStyle& style)
             [hostView addSubview:container positioned:NSWindowAbove relativeTo:shadowHost];
         }
 
+        applyAppThemeAppearance(container);
         container.style = NSGlassEffectViewStyleRegular;
         container.cornerRadius = kCornerRadius;
         container.tintColor = nil;
@@ -506,7 +540,6 @@ NSView* ensureSelectionView(NSView* qtView, NSView* contentView)
         selectionView = [[NSView alloc] initWithFrame:NSZeroRect];
         selectionView.hidden = YES;
         selectionView.wantsLayer = YES;
-        selectionView.layer.backgroundColor = [[NSColor colorWithWhite:0.55 alpha:0.26] CGColor];
         selectionView.layer.cornerRadius = kSelectionCornerRadius;
         selectionView.layer.masksToBounds = YES;
         objc_setAssociatedObject(qtView,
@@ -521,6 +554,9 @@ NSView* ensureSelectionView(NSView* qtView, NSView* contentView)
         [contentView addSubview:selectionView];
     }
 
+    applyAppThemeAppearance(selectionView);
+    selectionView.layer.backgroundColor = nsColorForTheme(ThemeColor::AppBarItemSelectedBackground,
+                                                          ThemeManager::instance().isDark() ? 0.74 : 0.26).CGColor;
     return selectionView;
 }
 
@@ -553,11 +589,11 @@ NSFont* labelFont()
 
 NSDictionary<NSAttributedStringKey, id>* labelAttributes(bool selected)
 {
+    const ThemeColor textRole = selected ? ThemeColor::PrimaryText : ThemeColor::PrimaryText;
+    const CGFloat alpha = selected ? 0.95 : 0.88;
     return @{
         NSFontAttributeName: labelFont(),
-        NSForegroundColorAttributeName: selected
-                ? [NSColor colorWithWhite:0.15 alpha:0.95]
-                : [NSColor colorWithWhite:0.05 alpha:0.88]
+        NSForegroundColorAttributeName: nsColorForTheme(textRole, alpha)
     };
 }
 
@@ -631,6 +667,7 @@ NSMutableArray<NSButton*>* ensureButtons(NSView* qtView,
             button.buttonType = NSButtonTypeMomentaryChange;
             button.focusRingType = NSFocusRingTypeNone;
             button.bezelStyle = NSBezelStyleRegularSquare;
+            applyAppThemeAppearance(button);
             [contentView addSubview:button];
             [buttons addObject:button];
             [button release];
@@ -641,6 +678,7 @@ NSMutableArray<NSButton*>* ensureButtons(NSView* qtView,
         }
 
         button.tag = index;
+        applyAppThemeAppearance(button);
         button.target = target;
         button.action = @selector(handleButtonTap:);
         applyButtonStyle(button, labels.at(index), index == selectedIndex);

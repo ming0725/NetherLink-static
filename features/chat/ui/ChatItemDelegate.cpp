@@ -4,6 +4,7 @@
 #include "ChatArea.h"
 #include "app/frame/NotificationManager.h"
 #include "shared/services/ImageService.h"
+#include "shared/theme/ThemeManager.h"
 #include <QPainter>
 #include <QTextLayout>
 #include <QTextOption>
@@ -167,12 +168,20 @@ void ChatItemDelegate::drawBubble(QPainter* painter, const QRect& rect,
         return;
     }
 
-    // 设置气泡颜色
     QColor bubbleColor;
-    if (isFromMe) {
-        bubbleColor = isSelected ? QColor(0, 120, 215) : QColor(0, 145, 255);
+    const bool dark = ThemeManager::instance().isDark();
+    if (dark && isFromMe) {
+        bubbleColor = isSelected ? QColor(0x16, 0x6e, 0xbb)
+                                 : QColor(0x1e, 0x86, 0xdf);
+    } else if (dark) {
+        bubbleColor = isSelected ? QColor(0x25, 0x29, 0x30)
+                                 : QColor(0x2d, 0x31, 0x38);
+    } else if (isFromMe) {
+        bubbleColor = isSelected ? QColor(0x1b, 0xa6, 0xff)
+                                 : ThemeManager::instance().color(ThemeColor::Accent);
     } else {
-        bubbleColor = isSelected ? QColor(220, 220, 220) : QColor(255, 255, 255);
+        bubbleColor = isSelected ? QColor(0xea, 0xea, 0xea)
+                                 : ThemeManager::instance().color(ThemeColor::PanelBackground);
     }
     painter->setBrush(bubbleColor);
     painter->setPen(Qt::NoPen);
@@ -215,7 +224,7 @@ void ChatItemDelegate::drawTextMessage(QPainter* painter, const QRect& rect,
     if (isFromMe) {
         textColor = isSelected ? Qt::white : Qt::white;
     } else {
-        textColor = isSelected ? Qt::black : Qt::black;
+        textColor = ThemeManager::instance().color(ThemeColor::PrimaryText);
     }
     painter->setPen(textColor);
 
@@ -294,7 +303,7 @@ void ChatItemDelegate::drawGroupInfo(QPainter* painter, const QRect& rect,
     QString elidedName = fm.elidedText(name, Qt::ElideRight, NAME_MAX_WIDTH);
 
     // 绘制名字（灰色）
-    painter->setPen(QColor(0xB1B1B1));
+    painter->setPen(ThemeManager::instance().color(ThemeColor::TertiaryText));
     QRect nameRect = rect;
     nameRect.setWidth(fm.horizontalAdvance(elidedName));
     painter->drawText(nameRect, Qt::AlignLeft | Qt::AlignVCenter, elidedName);
@@ -303,8 +312,8 @@ void ChatItemDelegate::drawGroupInfo(QPainter* painter, const QRect& rect,
     GroupRole role = message->getRole();
     if (role != GroupRole::Member) {
         QString roleText = (role == GroupRole::Owner) ? "群主" : "管理员";
-        QColor bgColor = (role == GroupRole::Owner) ? QColor(0xF5DDCB) : QColor(0xC2E1F5);
-        QColor textColor = (role == GroupRole::Owner) ? QColor(0xFF9C00) : QColor(0x0066CC);
+        QColor bgColor = (role == GroupRole::Owner) ? QColor(0xF5DDCB) : ThemeManager::instance().color(ThemeColor::PanelRaisedBackground);
+        QColor textColor = (role == GroupRole::Owner) ? QColor(0xFF9C00) : ThemeManager::instance().color(ThemeColor::Accent);
 
         // 计算身份标签的宽度和位置
         QRect roleRect = nameRect;
@@ -365,8 +374,8 @@ void ChatItemDelegate::drawGroupInfoForMe(QPainter* painter, const QRect& rect,
 
     // 如果有特殊身份，先绘制身份标签（在左边）
     if (role != GroupRole::Member) {
-        QColor bgColor = (role == GroupRole::Owner) ? QColor(0xF5DDCB) : QColor(0xC2E1F5);
-        QColor textColor = (role == GroupRole::Owner) ? QColor(0xFF9C00) : QColor(0x0099FF);
+        QColor bgColor = (role == GroupRole::Owner) ? QColor(0xF5DDCB) : ThemeManager::instance().color(ThemeColor::PanelRaisedBackground);
+        QColor textColor = (role == GroupRole::Owner) ? QColor(0xFF9C00) : ThemeManager::instance().color(ThemeColor::Accent);
 
         QRect roleRect(startX, rect.top() + (rect.height() - ROLE_HEIGHT) / 2,
                       roleWidth, ROLE_HEIGHT);
@@ -384,7 +393,7 @@ void ChatItemDelegate::drawGroupInfoForMe(QPainter* painter, const QRect& rect,
     }
 
     // 绘制名字（灰色）
-    painter->setPen(QColor(0xB1B1B1));
+    painter->setPen(ThemeManager::instance().color(ThemeColor::TertiaryText));
     QRect nameRect(startX, rect.top(), nameWidth, rect.height());
 
     painter->drawText(nameRect, Qt::AlignLeft | Qt::AlignVCenter, elidedName);
@@ -609,11 +618,11 @@ void ChatItemDelegate::drawTimeHeader(QPainter* painter, const QRect& rect,
 
     // 绘制背景
     painter->setPen(Qt::NoPen);
-    painter->setBrush(QColor(0xF6F6F6));  // 浅灰色背景
+    painter->setBrush(ThemeManager::instance().color(ThemeColor::PanelRaisedBackground));
     painter->drawRoundedRect(timeRect, TIME_HEADER_RADIUS, TIME_HEADER_RADIUS);
 
     // 绘制文本
-    painter->setPen(QColor(153, 153, 153));  // 灰色文字
+    painter->setPen(ThemeManager::instance().color(ThemeColor::TertiaryText));
     painter->drawText(timeRect, Qt::AlignCenter, text);
 }
 

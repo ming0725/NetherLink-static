@@ -21,6 +21,8 @@
 #include "shared/services/ImageService.h"
 #include "shared/ui/InlineEditableText.h"
 #include "shared/ui/StatefulPushButton.h"
+#include "shared/ui/StyledActionMenu.h"
+#include "shared/theme/ThemeManager.h"
 
 namespace {
 
@@ -34,7 +36,8 @@ QLabel* makeTitleLabel(const QString& text)
     QFont font = label->font();
     font.setPixelSize(14);
     label->setFont(font);
-    label->setStyleSheet(QStringLiteral("color: #222222;"));
+    label->setStyleSheet(QStringLiteral("color: %1;")
+                                 .arg(ThemeManager::instance().color(ThemeColor::PrimaryText).name()));
     return label;
 }
 
@@ -44,7 +47,8 @@ QFrame* makeSeparator()
     line->setFrameShape(QFrame::HLine);
     line->setFrameShadow(QFrame::Plain);
     line->setFixedHeight(1);
-    line->setStyleSheet(QStringLiteral("color: #dedede; background: #dedede; border: none;"));
+    line->setStyleSheet(QStringLiteral("color: %1; background: %1; border: none;")
+                                .arg(ThemeManager::instance().color(ThemeColor::Divider).name()));
     return line;
 }
 
@@ -67,7 +71,8 @@ QLabel* makeValueLabel(QWidget* parent)
     QFont font = label->font();
     font.setPixelSize(14);
     label->setFont(font);
-    label->setStyleSheet(QStringLiteral("color: #222222;"));
+    label->setStyleSheet(QStringLiteral("color: %1;")
+                                 .arg(ThemeManager::instance().color(ThemeColor::PrimaryText).name()));
     label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     label->setWordWrap(false);
     label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
@@ -89,11 +94,15 @@ void applyPrimaryButtonStyle(StatefulPushButton* button)
 void applyDangerOutlineButtonStyle(StatefulPushButton* button)
 {
     button->setRadius(8);
-    button->setNormalColor(Qt::white);
-    button->setHoverColor(QColor(0xff, 0xf4, 0xf4));
-    button->setPressColor(QColor(0xff, 0xe8, 0xe8));
+    button->setNormalColor(ThemeManager::instance().color(ThemeColor::PanelBackground));
+    button->setHoverColor(ThemeManager::instance().isDark()
+                          ? QColor(0x45, 0x2b, 0x2f)
+                          : QColor(0xff, 0xf4, 0xf4));
+    button->setPressColor(ThemeManager::instance().isDark()
+                          ? QColor(0x54, 0x30, 0x35)
+                          : QColor(0xff, 0xe8, 0xe8));
     button->setTextColor(QColor(0xd9, 0x36, 0x36));
-    button->setBorderColor(QColor(0xdd, 0xdd, 0xdd));
+    button->setBorderColor(ThemeManager::instance().color(ThemeColor::Divider));
     button->setBorderWidth(1);
 }
 
@@ -151,21 +160,44 @@ public:
         setFixedSize(172, 34);
         setCursor(Qt::PointingHandCursor);
         setFocusPolicy(Qt::NoFocus);
-        setPopupMode(QToolButton::InstantPopup);
+        setPopupMode(QToolButton::DelayedPopup);
         setToolButtonStyle(Qt::ToolButtonTextOnly);
     }
 
+    void setMenuHoverSuppressed(bool suppressed)
+    {
+        if (m_menuHoverSuppressed == suppressed) {
+            return;
+        }
+
+        m_menuHoverSuppressed = suppressed;
+        update();
+    }
+
 protected:
+    bool event(QEvent* event) override
+    {
+        if (event->type() == QEvent::Enter ||
+            event->type() == QEvent::MouseButtonPress) {
+            setMenuHoverSuppressed(false);
+        }
+        return QToolButton::event(event);
+    }
+
     void paintEvent(QPaintEvent* event) override
     {
         Q_UNUSED(event);
 
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
-        const QColor borderColor = isEnabled() ? QColor(0xd8, 0xd8, 0xd8) : QColor(0xe2, 0xe2, 0xe2);
+        const QColor borderColor = isEnabled()
+                ? ThemeManager::instance().color(ThemeColor::Divider)
+                : ThemeManager::instance().color(ThemeColor::ListHover);
         const QColor bgColor = isEnabled()
-                ? (underMouse() ? QColor(0xee, 0xee, 0xee) : QColor(0xf7, 0xf7, 0xf7))
-                : QColor(0xf4, 0xf4, 0xf4);
+                ? ((underMouse() && !m_menuHoverSuppressed)
+                   ? ThemeManager::instance().color(ThemeColor::ListHover)
+                   : ThemeManager::instance().color(ThemeColor::InputBackground))
+                : ThemeManager::instance().color(ThemeColor::PanelRaisedBackground);
         painter.setPen(QPen(borderColor, 1));
         painter.setBrush(bgColor);
         painter.drawRoundedRect(rect().adjusted(0, 0, -1, -1), 5, 5);
@@ -173,7 +205,9 @@ protected:
         QFont textFont = font();
         textFont.setPixelSize(14);
         painter.setFont(textFont);
-        painter.setPen(isEnabled() ? QColor(0x22, 0x22, 0x22) : QColor(0x88, 0x88, 0x88));
+        painter.setPen(isEnabled()
+                       ? ThemeManager::instance().color(ThemeColor::PrimaryText)
+                       : ThemeManager::instance().color(ThemeColor::TertiaryText));
         const QRect textRect = rect().adjusted(14, 0, -34, 0);
         painter.drawText(textRect,
                          Qt::AlignLeft | Qt::AlignVCenter,
@@ -185,11 +219,18 @@ protected:
 
         const int centerX = width() - 19;
         const int centerY = height() / 2 + 1;
-        QPen arrowPen(QColor(0x9a, 0x9a, 0x9a), 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+        QPen arrowPen(ThemeManager::instance().color(ThemeColor::TertiaryText),
+                      1.8,
+                      Qt::SolidLine,
+                      Qt::RoundCap,
+                      Qt::RoundJoin);
         painter.setPen(arrowPen);
         painter.drawLine(QPointF(centerX - 6.0, centerY - 3.0), QPointF(centerX, centerY + 4.0));
         painter.drawLine(QPointF(centerX, centerY + 4.0), QPointF(centerX + 6.0, centerY - 3.0));
     }
+
+private:
+    bool m_menuHoverSuppressed = false;
 };
 
 GroupDetailPage::GroupDetailPage(QWidget* parent)
@@ -199,6 +240,7 @@ GroupDetailPage::GroupDetailPage(QWidget* parent)
     , m_idLabel(new QLabel(this))
     , m_remarkEdit(new InlineEditableText(this))
     , m_categoryButton(new CategorySelectButton(this))
+    , m_categoryMenu(new StyledActionMenu(this))
     , m_introLabel(makeValueLabel(this))
     , m_announcementLabel(makeValueLabel(this))
     , m_memberCountLabel(makeValueLabel(this))
@@ -207,7 +249,7 @@ GroupDetailPage::GroupDetailPage(QWidget* parent)
 {
     setAutoFillBackground(true);
     QPalette pal = palette();
-    pal.setColor(QPalette::Window, QColor(0xf7, 0xf7, 0xf7));
+    pal.setColor(QPalette::Window, ThemeManager::instance().color(ThemeColor::WindowBackground));
     setPalette(pal);
 
     auto* root = new QVBoxLayout(this);
@@ -235,13 +277,15 @@ GroupDetailPage::GroupDetailPage(QWidget* parent)
     nameFont.setPixelSize(20);
     nameFont.setWeight(QFont::DemiBold);
     m_nameLabel->setFont(nameFont);
-    m_nameLabel->setStyleSheet(QStringLiteral("color: #111111;"));
+    m_nameLabel->setStyleSheet(QStringLiteral("color: %1;")
+                                       .arg(ThemeManager::instance().color(ThemeColor::PrimaryText).name()));
     m_nameLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
     QFont secondaryFont = m_idLabel->font();
     secondaryFont.setPixelSize(13);
     m_idLabel->setFont(secondaryFont);
-    m_idLabel->setStyleSheet(QStringLiteral("color: #777777;"));
+    m_idLabel->setStyleSheet(QStringLiteral("color: %1;")
+                                     .arg(ThemeManager::instance().color(ThemeColor::TertiaryText).name()));
     m_idLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_idLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     m_idLabel->setFixedHeight(QFontMetrics(secondaryFont).height() + 2);
@@ -262,13 +306,13 @@ GroupDetailPage::GroupDetailPage(QWidget* parent)
     m_remarkEdit->setFocusPolicy(Qt::ClickFocus);
     m_remarkEdit->setFixedHeight(34);
     m_remarkEdit->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_remarkEdit->setTextColor(QColor(0x55, 0x55, 0x55));
-    m_remarkEdit->setPlaceholderTextColor(QColor(0x88, 0x88, 0x88));
+    m_remarkEdit->setTextColor(ThemeManager::instance().color(ThemeColor::SecondaryText));
+    m_remarkEdit->setPlaceholderTextColor(ThemeManager::instance().color(ThemeColor::PlaceholderText));
     m_remarkEdit->setNormalBackgroundColor(Qt::transparent);
-    m_remarkEdit->setHoverBackgroundColor(QColor(0xEE, 0xEE, 0xEE));
-    m_remarkEdit->setFocusBackgroundColor(Qt::white);
+    m_remarkEdit->setHoverBackgroundColor(ThemeManager::instance().color(ThemeColor::ListHover));
+    m_remarkEdit->setFocusBackgroundColor(ThemeManager::instance().color(ThemeColor::PanelBackground));
     m_remarkEdit->setNormalBorderColor(Qt::transparent);
-    m_remarkEdit->setFocusBorderColor(QColor(0xD8, 0xD8, 0xD8));
+    m_remarkEdit->setFocusBorderColor(ThemeManager::instance().color(ThemeColor::Divider));
     m_remarkEdit->setBorderWidth(1);
     m_remarkEdit->setRadius(5);
     m_remarkEdit->setHorizontalPadding(8);
@@ -314,13 +358,12 @@ GroupDetailPage::GroupDetailPage(QWidget* parent)
         confirmExitGroup();
     });
 
-    auto* categoryMenu = new QMenu(m_categoryButton);
-    categoryMenu->setStyleSheet(QStringLiteral(
-            "QMenu { background: #f0f0f0; border: 1px solid #d6d6d6; padding: 4px; }"
-            "QMenu::item { padding: 6px 26px 6px 24px; border-radius: 4px; }"
-            "QMenu::item:selected { background: #e2e2e2; }"));
-    connect(categoryMenu, &QMenu::aboutToShow, this, &GroupDetailPage::rebuildCategoryMenu);
-    m_categoryButton->setMenu(categoryMenu);
+    connect(m_categoryButton, &QToolButton::clicked, this, &GroupDetailPage::showCategoryMenu);
+    connect(m_categoryMenu, &QMenu::aboutToHide, this, [this]() {
+        m_categoryButton->setDown(false);
+        static_cast<CategorySelectButton*>(m_categoryButton)->setMenuHoverSuppressed(true);
+        m_categoryButton->update();
+    });
 
     qApp->installEventFilter(this);
 }
@@ -457,9 +500,24 @@ void GroupDetailPage::saveRemark()
     updateRemarkText();
 }
 
+void GroupDetailPage::showCategoryMenu()
+{
+    if (!m_hasGroup || !m_categoryButton->isEnabled()) {
+        return;
+    }
+
+    static_cast<CategorySelectButton*>(m_categoryButton)->setMenuHoverSuppressed(false);
+    rebuildCategoryMenu();
+    m_categoryMenu->setFixedWidth(m_categoryButton->width());
+    m_categoryMenu->popup(m_categoryButton->mapToGlobal(QPoint(0, m_categoryButton->height())));
+    m_categoryButton->setDown(false);
+    static_cast<CategorySelectButton*>(m_categoryButton)->setMenuHoverSuppressed(true);
+    m_categoryButton->update();
+}
+
 void GroupDetailPage::rebuildCategoryMenu()
 {
-    QMenu* menu = m_categoryButton->menu();
+    QMenu* menu = m_categoryMenu;
     if (!menu) {
         return;
     }

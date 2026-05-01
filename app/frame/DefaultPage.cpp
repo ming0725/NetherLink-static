@@ -1,5 +1,6 @@
 #include "DefaultPage.h"
 #include "shared/services/ImageService.h"
+#include "shared/theme/ThemeManager.h"
 #include <QPainter>
 
 DefaultPage::DefaultPage(QWidget *parent)
@@ -19,7 +20,7 @@ void DefaultPage::setImageSize(const QSize size)
 void DefaultPage::paintEvent(QPaintEvent*)
 {
     QPainter painter(this);
-    painter.fillRect(rect(), QColor(0xF2F2F2));
+    painter.fillRect(rect(), ThemeManager::instance().color(ThemeColor::PageBackground));
     if (!m_imageSource.isEmpty()) {
         QPixmap scaled = ImageService::instance().scaled(m_imageSource,
                                                          m_displaySize,

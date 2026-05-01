@@ -6,6 +6,7 @@
 #include "features/chat/ui/ChatSessionController.h"
 #include "app/state/CurrentUser.h"
 #include "shared/services/ImageService.h"
+#include "shared/theme/ThemeManager.h"
 #ifdef Q_OS_MACOS
 #include "platform/macos/MacFloatingInputBarBridge_p.h"
 #endif
@@ -65,16 +66,16 @@ protected:
         painter.setRenderHint(QPainter::Antialiasing);
 
         if (isDown()) {
-            painter.setBrush(QColor(0xDF, 0xDF, 0xDF));
+            painter.setBrush(ThemeManager::instance().color(ThemeColor::Divider));
         } else if (underMouse()) {
-            painter.setBrush(QColor(0xE8, 0xE8, 0xE8));
+            painter.setBrush(ThemeManager::instance().color(ThemeColor::ListHover));
         } else {
             painter.setBrush(Qt::transparent);
         }
         painter.setPen(Qt::NoPen);
         painter.drawRoundedRect(rect().adjusted(1, 1, -1, -1), 6, 6);
 
-        painter.setBrush(QColor(0x33, 0x33, 0x33));
+        painter.setBrush(ThemeManager::instance().color(ThemeColor::SecondaryText));
         const int dotSize = 4;
         const int spacing = 4;
         const int totalWidth = dotSize * 3 + spacing * 2;
@@ -112,9 +113,12 @@ protected:
                          static_cast<qreal>(kInputBarBottomGradientFadeHeight) / rect().height(),
                          1.0)
                 : 1.0;
-        gradient.setColorAt(0.0, QColor(0xF2, 0xF2, 0xF2, 0));
-        gradient.setColorAt(fadeStop, QColor(0xF2, 0xF2, 0xF2, kInputBarBottomGradientSolidAlpha));
-        gradient.setColorAt(1.0, QColor(0xF2, 0xF2, 0xF2, kInputBarBottomGradientSolidAlpha));
+        QColor pageBackground = ThemeManager::instance().color(ThemeColor::PageBackground);
+        pageBackground.setAlpha(0);
+        gradient.setColorAt(0.0, pageBackground);
+        pageBackground.setAlpha(kInputBarBottomGradientSolidAlpha);
+        gradient.setColorAt(fadeStop, pageBackground);
+        gradient.setColorAt(1.0, pageBackground);
         painter.fillRect(rect(), gradient);
     }
 };
@@ -175,13 +179,13 @@ ChatArea::ChatArea(QWidget *parent)
     chatInfo->setAutoFillBackground(true);
     chatInfo->setFixedHeight(kChatInfoHeight);
     QPalette chatInfoPalette = chatInfo->palette();
-    chatInfoPalette.setColor(QPalette::Window, QColor(0xF2, 0xF2, 0xF2));
+    chatInfoPalette.setColor(QPalette::Window, ThemeManager::instance().color(ThemeColor::PageBackground));
     chatInfo->setPalette(chatInfoPalette);
     QWidget* chatInfoDivider = new QWidget(this);
     chatInfoDivider->setFixedHeight(1);
     chatInfoDivider->setAutoFillBackground(true);
     QPalette dividerPalette = chatInfoDivider->palette();
-    dividerPalette.setColor(QPalette::Window, QColor(0xE9, 0xE9, 0xE9));
+    dividerPalette.setColor(QPalette::Window, ThemeManager::instance().color(ThemeColor::Divider));
     chatInfoDivider->setPalette(dividerPalette);
 
     // 外层垂直布局：用于将内容推到底部
@@ -203,7 +207,7 @@ ChatArea::ChatArea(QWidget *parent)
     nameFont.setPixelSize(17);
     nameLabel->setFont(nameFont);
     QPalette namePalette = nameLabel->palette();
-    namePalette.setColor(QPalette::WindowText, Qt::black);
+    namePalette.setColor(QPalette::WindowText, ThemeManager::instance().color(ThemeColor::PrimaryText));
     nameLabel->setPalette(namePalette);
 
     infoButton = new SquareDotsButton(chatInfo);
@@ -260,8 +264,8 @@ ChatArea::ChatArea(QWidget *parent)
     chatView->setAutoFillBackground(true);
     chatView->viewport()->setAutoFillBackground(true);
     QPalette chatViewPalette = chatView->palette();
-    chatViewPalette.setColor(QPalette::Base, QColor(0xF2, 0xF2, 0xF2));
-    chatViewPalette.setColor(QPalette::Window, QColor(0xF2, 0xF2, 0xF2));
+    chatViewPalette.setColor(QPalette::Base, ThemeManager::instance().color(ThemeColor::PageBackground));
+    chatViewPalette.setColor(QPalette::Window, ThemeManager::instance().color(ThemeColor::PageBackground));
     chatView->setPalette(chatViewPalette);
     chatView->viewport()->setPalette(chatViewPalette);
 }

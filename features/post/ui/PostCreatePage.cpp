@@ -1,5 +1,6 @@
 #include "PostCreatePage.h"
 #include "shared/services/ImageService.h"
+#include "shared/theme/ThemeManager.h"
 #include "app/frame/NotificationManager.h"
 #include "app/state/CurrentUser.h"
 #include <QVBoxLayout>
@@ -20,7 +21,7 @@ PostCreatePage::PostCreatePage(QWidget* parent)
     setAttribute(Qt::WA_StyledBackground, true);
     setAutoFillBackground(true);
     QPalette palette = this->palette();
-    palette.setColor(QPalette::Window, QColor(0xF8, 0xF8, 0xFC));
+    palette.setColor(QPalette::Window, ThemeManager::instance().color(ThemeColor::WindowBackground));
     setPalette(palette);
 #else
     setAttribute(Qt::WA_TranslucentBackground);
@@ -39,36 +40,50 @@ void PostCreatePage::setupUI()
     // 创建内容输入框
     m_contentEdit = new QTextEdit(this);
     m_contentEdit->setPlaceholderText("请输入内容...");
-    m_contentEdit->setStyleSheet(
+    QPalette contentPalette = m_contentEdit->palette();
+    contentPalette.setColor(QPalette::Text, ThemeManager::instance().color(ThemeColor::PrimaryText));
+    contentPalette.setColor(QPalette::PlaceholderText,
+                            ThemeManager::instance().color(ThemeColor::PlaceholderText));
+    contentPalette.setColor(QPalette::Highlight, ThemeManager::instance().color(ThemeColor::Accent));
+    contentPalette.setColor(QPalette::HighlightedText, Qt::white);
+    m_contentEdit->setPalette(contentPalette);
+    m_contentEdit->setStyleSheet(QStringLiteral(
         "QTextEdit {"
-        "   background-color: #F5F5F5;"
+        "   color: %1;"
+        "   background-color: %2;"
         "   border: none;"
         "   border-radius: 10px;"
         "   padding: 10px;"
         "   font-size: 14px;"
         "}"
         "QTextEdit:focus {"
-        "   background-color: #FFFFFF;"
-        "   border: 2px solid #0099FF;"
+        "   background-color: %3;"
+        "   border: 2px solid %4;"
         "}"
-    );
+    ).arg(ThemeManager::instance().color(ThemeColor::PrimaryText).name(),
+          ThemeManager::instance().color(ThemeColor::InputBackground).name(),
+          ThemeManager::instance().color(ThemeColor::InputFocusBackground).name(),
+          ThemeManager::instance().color(ThemeColor::Accent).name()));
 
     // 创建图片按钮
     m_imageButton = new QPushButton(this);
     m_imageButton->setText("+");
-    m_imageButton->setStyleSheet(
+    m_imageButton->setStyleSheet(QStringLiteral(
         "QPushButton {"
-        "   background-color: #F5F5F5;"
-        "   border: 2px dashed #CCCCCC;"
+        "   background-color: %1;"
+        "   border: 2px dashed %2;"
         "   border-radius: 10px;"
         "   font-size: 24px;"
-        "   color: #999999;"
+        "   color: %3;"
         "}"
         "QPushButton:hover {"
-        "   background-color: #EBEBEB;"
-        "   border-color: #999999;"
+        "   background-color: %4;"
+        "   border-color: %3;"
         "}"
-    );
+    ).arg(ThemeManager::instance().color(ThemeColor::InputBackground).name(),
+          ThemeManager::instance().color(ThemeColor::Divider).name(),
+          ThemeManager::instance().color(ThemeColor::TertiaryText).name(),
+          ThemeManager::instance().color(ThemeColor::ListHover).name()));
     m_imageButton->setFixedSize(100, 100);
     m_imageButton->setCursor(Qt::PointingHandCursor);
 
@@ -80,9 +95,9 @@ void PostCreatePage::setupUI()
 
     // 创建发送按钮
     m_sendButton = new QPushButton("发布", this);
-    m_sendButton->setStyleSheet(
+    m_sendButton->setStyleSheet(QStringLiteral(
         "QPushButton {"
-        "   background-color: #0099FF;"
+        "   background-color: %1;"
         "   color: white;"
         "   border: none;"
         "   border-radius: 5px;"
@@ -90,12 +105,14 @@ void PostCreatePage::setupUI()
         "   font-size: 14px;"
         "}"
         "QPushButton:hover {"
-        "   background-color: #0088EE;"
+        "   background-color: %2;"
         "}"
         "QPushButton:pressed {"
-        "   background-color: #0077DD;"
+        "   background-color: %3;"
         "}"
-    );
+    ).arg(ThemeManager::instance().color(ThemeColor::Accent).name(),
+          ThemeManager::instance().color(ThemeColor::AccentHover).name(),
+          ThemeManager::instance().color(ThemeColor::AccentPressed).name()));
     m_sendButton->setCursor(Qt::PointingHandCursor);
 
     // 连接信号槽
@@ -131,7 +148,7 @@ void PostCreatePage::paintEvent(QPaintEvent* event)
 {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-
+    painter.fillRect(rect(), ThemeManager::instance().color(ThemeColor::WindowBackground));
 }
 
 void PostCreatePage::onImageButtonClicked()

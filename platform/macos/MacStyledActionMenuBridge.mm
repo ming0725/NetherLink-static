@@ -207,6 +207,9 @@ NSMenu* buildNativeMenu(QMenu* sourceMenu,
 {
     NSMenu* nativeMenu = [[[NSMenu alloc] initWithTitle:nsStringFromQString(sourceMenu ? sourceMenu->title() : QString())] autorelease];
     nativeMenu.autoenablesItems = NO;
+    if (sourceMenu && sourceMenu->minimumWidth() > 0) {
+        nativeMenu.minimumWidth = static_cast<CGFloat>(sourceMenu->minimumWidth());
+    }
     applyNativeMenuAppearance(nativeMenu, appearance);
 
     if (!sourceMenu) {

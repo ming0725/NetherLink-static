@@ -9,6 +9,8 @@
 
 #include <QWidget>
 
+#include "shared/theme/ThemeManager.h"
+
 static void configureStandardButtons(NSWindow* window);
 
 @interface NLTrafficLightsObserver : NSObject
@@ -82,6 +84,13 @@ NSColor* toNSColor(const QColor& color, const QColor& fallback)
                                      green:resolved.greenF()
                                       blue:resolved.blueF()
                                      alpha:resolved.alphaF()];
+}
+
+NSAppearance* appThemeAppearance()
+{
+    return [NSAppearance appearanceNamed:ThemeManager::instance().isDark()
+                                             ? NSAppearanceNameDarkAqua
+                                             : NSAppearanceNameAqua];
 }
 
 NSView* qtViewForWidget(QWidget* widget)
@@ -448,6 +457,7 @@ WindowMetrics configureWindow(QWidget* widget, const QColor& tintColor)
     NSVisualEffectView* effectView = ensureBackdropView(hostView, qtView);
     if (effectView) {
         prepareLayerBackedView(effectView);
+        effectView.appearance = appThemeAppearance();
         effectView.material = backdropMaterial();
         effectView.state = NSVisualEffectStateActive;
         effectView.blendingMode = NSVisualEffectBlendingModeBehindWindow;

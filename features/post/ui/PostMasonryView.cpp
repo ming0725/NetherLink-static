@@ -12,12 +12,7 @@
 #include "PostCardDelegate.h"
 #include "features/post/model/PostFeedModel.h"
 #include "shared/ui/SmoothScrollBar.h"
-
-namespace {
-
-const QColor kPostPageBackground(0xF8, 0xF8, 0xFC);
-
-} // namespace
+#include "shared/theme/ThemeManager.h"
 
 PostMasonryView::PostMasonryView(QWidget* parent)
     : QAbstractItemView(parent)
@@ -40,8 +35,8 @@ PostMasonryView::PostMasonryView(QWidget* parent)
 #ifdef Q_OS_WIN
     viewport()->setAutoFillBackground(true);
     QPalette palette = viewport()->palette();
-    palette.setColor(QPalette::Base, kPostPageBackground);
-    palette.setColor(QPalette::Window, kPostPageBackground);
+    palette.setColor(QPalette::Base, ThemeManager::instance().color(ThemeColor::WindowBackground));
+    palette.setColor(QPalette::Window, ThemeManager::instance().color(ThemeColor::WindowBackground));
     viewport()->setPalette(palette);
 #else
     viewport()->setAutoFillBackground(false);

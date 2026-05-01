@@ -5,6 +5,7 @@
 #include <QPainter>
 
 #include "features/aichat/model/AiChatListModel.h"
+#include "shared/theme/ThemeManager.h"
 
 AiChatListDelegate::AiChatListDelegate(QObject* parent)
     : QStyledItemDelegate(parent)
@@ -29,7 +30,7 @@ void AiChatListDelegate::paint(QPainter* painter,
         headerFont.setPixelSize(13);
         headerFont.setBold(true);
         painter->setFont(headerFont);
-        painter->setPen(QColor(0x66, 0x66, 0x66));
+        painter->setPen(ThemeManager::instance().color(ThemeColor::SecondaryText));
         painter->drawText(sectionRect,
                           Qt::AlignLeft | Qt::AlignVCenter,
                           index.data(AiChatListModel::SectionTitleRole).toString());
@@ -37,8 +38,9 @@ void AiChatListDelegate::paint(QPainter* painter,
 
     const QRect bodyRect = itemBodyRect(option, index);
     const QColor backgroundColor = selected
-            ? QColor(0xec, 0xec, 0xec)
-            : (hovered ? QColor(0xf9, 0xf9, 0xf9) : QColor(0xff, 0xff, 0xff));
+            ? ThemeManager::instance().color(ThemeColor::ListPinned)
+            : (hovered ? ThemeManager::instance().color(ThemeColor::ListHover)
+                       : ThemeManager::instance().color(ThemeColor::PanelBackground));
 
     painter->setPen(Qt::NoPen);
     painter->setBrush(backgroundColor);
@@ -48,7 +50,7 @@ void AiChatListDelegate::paint(QPainter* painter,
     QFont titleFont = option.font;
     titleFont.setPixelSize(14);
     painter->setFont(titleFont);
-    painter->setPen(Qt::black);
+    painter->setPen(ThemeManager::instance().color(ThemeColor::PrimaryText));
     painter->drawText(textRect,
                       Qt::AlignLeft | Qt::AlignVCenter,
                       QFontMetrics(titleFont).elidedText(index.data(AiChatListModel::TitleRole).toString(),
@@ -64,7 +66,7 @@ void AiChatListDelegate::paint(QPainter* painter,
         const bool buttonHovered = buttonRect.contains(cursorPos);
         if (buttonHovered) {
             painter->setPen(Qt::NoPen);
-            painter->setBrush(QColor(0xdf, 0xdf, 0xdf));
+            painter->setBrush(ThemeManager::instance().color(ThemeColor::Divider));
             painter->drawRoundedRect(drawButtonRect, 5, 5);
         }
 
@@ -72,7 +74,9 @@ void AiChatListDelegate::paint(QPainter* painter,
         const int startX = drawButtonRect.center().x() - dotsWidth / 2;
         const int y = drawButtonRect.center().y() - kMoreDotSize / 2;
         painter->setPen(Qt::NoPen);
-        painter->setBrush(buttonHovered ? QColor(0x33, 0x33, 0x33) : QColor(0x66, 0x66, 0x66));
+        painter->setBrush(buttonHovered
+                          ? ThemeManager::instance().color(ThemeColor::PrimaryText)
+                          : ThemeManager::instance().color(ThemeColor::SecondaryText));
         for (int dot = 0; dot < 3; ++dot) {
             painter->drawRect(startX + dot * (kMoreDotSize + kMoreDotGap),
                               y,

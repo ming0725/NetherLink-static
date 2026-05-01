@@ -1,4 +1,5 @@
 #include "PostApplicationBar.h"
+#include "shared/theme/ThemeManager.h"
 
 #include <QFontMetrics>
 #include <QGraphicsDropShadowEffect>
@@ -190,15 +191,19 @@ void PostApplicationBar::paintEvent(QPaintEvent*)
     const QRectF contentRect = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
     const qreal outerRadius = 15.0;
 
-    painter.setBrush(QColor(255, 255, 255, 100));
+    QColor barBackground = ThemeManager::instance().color(ThemeColor::PanelBackground);
+    barBackground.setAlpha(ThemeManager::instance().isDark() ? 190 : 100);
+    painter.setBrush(barBackground);
     painter.drawRoundedRect(contentRect, outerRadius, outerRadius);
 
     if (!selectedRect.isEmpty()) {
-        painter.setBrush(QColor(192, 192, 192, 192));
+        QColor selectedBackground = ThemeManager::instance().color(ThemeColor::AppBarItemSelectedBackground);
+        selectedBackground.setAlpha(192);
+        painter.setBrush(selectedBackground);
         painter.drawRoundedRect(selectedRect, 10, 10);
     }
 
-    painter.setPen(Qt::black);
+    painter.setPen(ThemeManager::instance().color(ThemeColor::PrimaryText));
     for (const TabItem& item : items) {
         painter.drawText(item.rect, Qt::AlignCenter, item.label);
     }
@@ -206,7 +211,7 @@ void PostApplicationBar::paintEvent(QPaintEvent*)
     const qreal borderWidth = 2.0;
     const qreal inset = borderWidth / 2.0;
     const QRectF borderRect = rect().adjusted(inset, inset, -inset, -inset);
-    QPen pen(QColor(0x00, 0x99, 0xff));
+    QPen pen(ThemeManager::instance().color(ThemeColor::Accent));
     pen.setWidthF(borderWidth);
     pen.setJoinStyle(Qt::RoundJoin);
     pen.setCapStyle(Qt::RoundCap);

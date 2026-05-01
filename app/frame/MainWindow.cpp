@@ -5,6 +5,7 @@
 #include "features/post/ui/PostApplication.h"
 #include "shared/ui/IconLineEdit.h"
 #include "shared/ui/FloatingInputBar.h"
+#include "shared/theme/ThemeManager.h"
 #include <QHBoxLayout>
 #include <QLineEdit>
 #include <QPushButton>
@@ -86,7 +87,10 @@ MainWindow::MainWindow(QWidget* parent)
     setMinimumWidth(kMainWindowMinimumWidth);
     setAttribute(Qt::WA_TranslucentBackground);
 
-    setBackdropColor(QColor(248, 248, 252, 92));
+    updateBackdropTheme();
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
+        updateBackdropTheme();
+    });
 
     appBar = new ApplicationBar(this);
     appBar->setFixedWidth(54);
@@ -118,7 +122,7 @@ MainWindow::MainWindow(QWidget* parent)
             border: none;
         }
         QPushButton:hover {
-            background-color: #E9E9E9;
+            background-color: palette(midlight);
         }
     )";
     btnMinimize->setStyleSheet(btnStyle);
@@ -226,7 +230,7 @@ QWidget* MainWindow::createPlaceholderPage() const
     auto* page = new QWidget(stack);
     page->setAutoFillBackground(true);
     QPalette pagePalette = page->palette();
-    pagePalette.setColor(QPalette::Window, Qt::white);
+    pagePalette.setColor(QPalette::Window, ThemeManager::instance().color(ThemeColor::PanelBackground));
     page->setPalette(pagePalette);
     return page;
 }
@@ -289,6 +293,13 @@ void MainWindow::connectFriendConversationRequests()
     connect(m_friendApp, &FriendApplication::requestOpenConversation,
             this, &MainWindow::openConversationFromContacts,
             Qt::UniqueConnection);
+}
+
+void MainWindow::updateBackdropTheme()
+{
+    QColor backdropColor = ThemeManager::instance().color(ThemeColor::WindowBackground);
+    backdropColor.setAlpha(92);
+    setBackdropColor(backdropColor);
 }
 
 void MainWindow::openConversationFromContacts(const QString& conversationId)

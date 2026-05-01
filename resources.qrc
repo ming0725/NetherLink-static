@@ -9,6 +9,7 @@
         <file>resources/icon/close.png</file>
         <file>resources/icon/correct.png</file>
         <file>resources/icon/empty_heart.png</file>
+        <file>resources/icon/empty_heart_darkmode.png</file>
         <file>resources/icon/ender_pearl.png</file>
         <file>resources/icon/fail.png</file>
         <file>resources/icon/mining.png</file>
@@ -41,6 +42,7 @@
         <file>resources/icon/redstone_lamp.png</file>
         <file>resources/icon/redstone_lamp_on.png</file>
         <file>resources/icon/search.png</file>
+        <file>resources/icon/search_darkmode.png</file>
         <file>resources/icon/selected_message.png</file>
         <file>resources/icon/selected_notification.png</file>
         <file>resources/icon/shears.png</file>

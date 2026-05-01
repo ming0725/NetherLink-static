@@ -16,6 +16,7 @@
 #include "features/aichat/data/AiChatRepository.h"
 #include "AiChatListDelegate.h"
 #include "features/aichat/model/AiChatListModel.h"
+#include "shared/theme/ThemeManager.h"
 
 AiChatListWidget::AiChatListWidget(QWidget* parent)
     : OverlayScrollListView(parent)
@@ -34,8 +35,8 @@ AiChatListWidget::AiChatListWidget(QWidget* parent)
     viewport()->setAutoFillBackground(true);
     viewport()->setMouseTracking(true);
     QPalette palette = this->palette();
-    palette.setColor(QPalette::Base, Qt::white);
-    palette.setColor(QPalette::Window, Qt::white);
+    palette.setColor(QPalette::Base, ThemeManager::instance().color(ThemeColor::PanelBackground));
+    palette.setColor(QPalette::Window, ThemeManager::instance().color(ThemeColor::PanelBackground));
     setPalette(palette);
     viewport()->setPalette(palette);
     setWheelStepPixels(64);
@@ -351,7 +352,7 @@ void AiChatListWidget::drawStickyHeader() const
     painter.setClipRect(QRect(0, m_stickyOffsetY, viewport()->width(), m_delegate->stickyHeaderHeight()));
 
     const QRect headerRect(0, m_stickyOffsetY, viewport()->width(), m_delegate->stickyHeaderHeight());
-    painter.fillRect(headerRect, Qt::white);
+    painter.fillRect(headerRect, ThemeManager::instance().color(ThemeColor::PanelBackground));
 
     QFont headerFont = QApplication::font();
     headerFont.setPixelSize(13);
@@ -359,6 +360,6 @@ void AiChatListWidget::drawStickyHeader() const
     painter.setFont(headerFont);
 
     const QRect textRect(12, headerRect.top(), headerRect.width() - 24, headerRect.height());
-    painter.setPen(QColor(0x66, 0x66, 0x66));
+    painter.setPen(ThemeManager::instance().color(ThemeColor::SecondaryText));
     painter.drawText(textRect, Qt::AlignLeft | Qt::AlignVCenter, m_stickyTitle);
 }

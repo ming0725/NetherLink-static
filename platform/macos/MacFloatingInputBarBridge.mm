@@ -17,6 +17,7 @@
 #include <QPixmap>
 #include <QWidget>
 #include "shared/ui/FloatingInputBar.h"
+#include "shared/theme/ThemeManager.h"
 
 class FloatingInputBar;
 
@@ -45,7 +46,12 @@ static constexpr CGFloat kInactiveGlassShadowYOffset = 8.0;
 
 NSColor* chatInputBorderColor(CGFloat alpha)
 {
-    return [NSColor colorWithSRGBRed:0.62 green:0.65 blue:0.70 alpha:alpha];
+    QColor color = ThemeManager::instance().color(ThemeColor::Divider);
+    color.setAlphaF(alpha);
+    return [NSColor colorWithCalibratedRed:color.redF()
+                                     green:color.greenF()
+                                      blue:color.blueF()
+                                     alpha:color.alphaF()];
 }
 
 QString qStringFromNSString(NSString* string)
@@ -464,6 +470,32 @@ const void* const kInactiveBorderLayerAssociationKey = &kInactiveBorderLayerAsso
 const void* const kInactiveShadowLayerAssociationKey = &kInactiveShadowLayerAssociationKey;
 const void* const kWindowObserverAssociationKey = &kWindowObserverAssociationKey;
 const void* const kVisualOpacityAssociationKey = &kVisualOpacityAssociationKey;
+
+NSAppearance* appThemeAppearance()
+{
+    return [NSAppearance appearanceNamed:ThemeManager::instance().isDark()
+                                             ? NSAppearanceNameDarkAqua
+                                             : NSAppearanceNameAqua];
+}
+
+NSColor* nsColorForTheme(ThemeColor role, CGFloat alpha = -1.0)
+{
+    QColor color = ThemeManager::instance().color(role);
+    if (alpha >= 0.0) {
+        color.setAlphaF(alpha);
+    }
+    return [NSColor colorWithCalibratedRed:color.redF()
+                                     green:color.greenF()
+                                      blue:color.blueF()
+                                     alpha:color.alphaF()];
+}
+
+void applyAppThemeAppearance(NSView* view)
+{
+    if (view) {
+        view.appearance = appThemeAppearance();
+    }
+}
 
 struct AppearanceStyle {
     CGFloat shadowOpacity;
@@ -1031,6 +1063,7 @@ NSView* ensureGlassContentView(NSView* hostView, NSView* container)
         contentView = [[NSView alloc] initWithFrame:container.bounds];
         contentView.wantsLayer = YES;
         contentView.layer.backgroundColor = NSColor.clearColor.CGColor;
+        applyAppThemeAppearance(contentView);
         glassContainer.contentView = contentView;
         objc_setAssociatedObject(hostView,
                                  kContentAssociationKey,
@@ -1040,6 +1073,7 @@ NSView* ensureGlassContentView(NSView* hostView, NSView* container)
         contentView = contentForView(hostView);
     } else {
         contentView.frame = container.bounds;
+        applyAppThemeAppearance(contentView);
     }
 
     return contentView;
@@ -1080,12 +1114,14 @@ NSView* ensureVisualEffectContainer(NSView* hostView, const AppearanceStyle& sty
     }
 
     container.blendingMode = NSVisualEffectBlendingModeWithinWindow;
+    applyAppThemeAppearance(container);
     container.material = NSVisualEffectMaterialPopover;
     container.state = NSVisualEffectStateActive;
     container.wantsLayer = YES;
     container.layer.cornerRadius = kCornerRadius;
     container.layer.masksToBounds = YES;
-    container.layer.backgroundColor = [[NSColor colorWithWhite:1.0 alpha:style.backgroundAlpha] CGColor];
+    container.layer.backgroundColor = nsColorForTheme(ThemeColor::PanelBackground,
+                                                      style.backgroundAlpha).CGColor;
     container.layer.borderWidth = 1.0;
     container.layer.borderColor = chatInputBorderColor(style.borderAlpha).CGColor;
     applyCommonContainerShadow(shadowHost, style);
@@ -1124,6 +1160,7 @@ NSView* ensureGlassContainer(NSView* hostView, const AppearanceStyle& style)
             [hostView addSubview:container positioned:NSWindowAbove relativeTo:shadowHost];
         }
 
+        applyAppThemeAppearance(container);
         container.style = NSGlassEffectViewStyleRegular;
         container.cornerRadius = kCornerRadius;
         container.tintColor = nil;
@@ -1249,6 +1286,7 @@ void configureIconButton(NLFloatingInputIconButton* button,
     button.bordered = NO;
     button.buttonType = NSButtonTypeMomentaryChange;
     button.bezelStyle = NSBezelStyleRegularSquare;
+    applyAppThemeAppearance(button);
     button.focusRingType = NSFocusRingTypeNone;
     button.imagePosition = NSImageOnly;
     button.imageScaling = NSImageScaleNone;
@@ -1403,8 +1441,6 @@ NLFloatingInputShortcutTextView* ensureInputField(NSView* qtView,
         inputField.editable = YES;
         inputField.selectable = YES;
         inputField.font = [NSFont systemFontOfSize:14.0 weight:NSFontWeightRegular];
-        inputField.textColor = [NSColor colorWithWhite:0.08 alpha:0.95];
-        inputField.insertionPointColor = [NSColor colorWithCalibratedRed:0.19 green:0.39 blue:0.81 alpha:1.0];
         inputField.horizontallyResizable = NO;
         inputField.verticallyResizable = YES;
         inputField.textContainer.widthTracksTextView = YES;
@@ -1438,6 +1474,10 @@ NLFloatingInputShortcutTextView* ensureInputField(NSView* qtView,
     }
 
     NLFloatingInputBarTarget* target = ensureTarget(qtView, widget);
+    applyAppThemeAppearance(inputScroll);
+    applyAppThemeAppearance(inputField);
+    inputField.textColor = nsColorForTheme(ThemeColor::PrimaryText, 0.95);
+    inputField.insertionPointColor = nsColorForTheme(ThemeColor::Accent);
     inputField.shortcutTarget = target;
     return inputField;
 }

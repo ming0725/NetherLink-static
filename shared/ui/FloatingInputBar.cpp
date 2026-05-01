@@ -1,5 +1,6 @@
 #include "FloatingInputBar.h"
 #include "shared/services/ImageService.h"
+#include "shared/theme/ThemeManager.h"
 
 #include <QEvent>
 #include <QFileDialog>
@@ -8,6 +9,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPalette>
 #include <QHBoxLayout>
 #include <QScrollBar>
 #include <QStandardPaths>
@@ -141,14 +143,21 @@ void FloatingInputBar::initQtFallbackUi()
     m_inputEdit->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_inputEdit->setMinimumHeight(60);
     m_inputEdit->setMaximumHeight(120);
-    m_inputEdit->setStyleSheet(
+    QPalette inputPalette = m_inputEdit->palette();
+    inputPalette.setColor(QPalette::Text, ThemeManager::instance().color(ThemeColor::PrimaryText));
+    inputPalette.setColor(QPalette::PlaceholderText,
+                          ThemeManager::instance().color(ThemeColor::PlaceholderText));
+    inputPalette.setColor(QPalette::Highlight, ThemeManager::instance().color(ThemeColor::Accent));
+    inputPalette.setColor(QPalette::HighlightedText, Qt::white);
+    m_inputEdit->setPalette(inputPalette);
+    m_inputEdit->setStyleSheet(QStringLiteral(
             "QTextEdit {"
             "   background-color: transparent;"
             "   border: none;"
-            "   color: #333333;"
+            "   color: %1;"
             "   font-size: 15px;"
             "   padding: 5px;"
-            "   selection-background-color: #3064CE;"
+            "   selection-background-color: %2;"
             "   selection-color: white;"
             "}"
             "QTextEdit::cursor {"
@@ -171,7 +180,8 @@ void FloatingInputBar::initQtFallbackUi()
             "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {"
             "   background: none;"
             "}"
-    );
+    ).arg(ThemeManager::instance().color(ThemeColor::PrimaryText).name(),
+          ThemeManager::instance().color(ThemeColor::Accent).name()));
     m_inputEdit->installEventFilter(this);
     setFocusProxy(m_inputEdit);
 
@@ -303,7 +313,9 @@ void FloatingInputBar::paintEvent(QPaintEvent *event)
     painter.setOpacity(m_visualOpacity);
     QPainterPath path;
     path.addRoundedRect(rect(), CORNER_RADIUS, CORNER_RADIUS);
-    painter.fillPath(path, QColor(255, 255, 255, 100));
+    QColor background = ThemeManager::instance().color(ThemeColor::PanelBackground);
+    background.setAlpha(ThemeManager::instance().isDark() ? 190 : 100);
+    painter.fillPath(path, background);
 }
 
 void FloatingInputBar::resizeEvent(QResizeEvent *event)

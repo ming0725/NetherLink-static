@@ -8,6 +8,7 @@
 #include <QTimer>
 
 #include "shared/ui/StyledActionMenu.h"
+#include "shared/theme/ThemeManager.h"
 #include "features/friend/data/UserRepository.h"
 #include "features/chat/ui/MessageListDelegate.h"
 #include "features/chat/model/MessageListModel.h"
@@ -30,8 +31,8 @@ MessageListWidget::MessageListWidget(QWidget* parent)
     setAutoFillBackground(true);
     viewport()->setAutoFillBackground(true);
     QPalette palette = this->palette();
-    palette.setColor(QPalette::Base, Qt::white);
-    palette.setColor(QPalette::Window, Qt::white);
+    palette.setColor(QPalette::Base, ThemeManager::instance().color(ThemeColor::PanelBackground));
+    palette.setColor(QPalette::Window, ThemeManager::instance().color(ThemeColor::PanelBackground));
     setPalette(palette);
     viewport()->setPalette(palette);
     setWheelStepPixels(64);

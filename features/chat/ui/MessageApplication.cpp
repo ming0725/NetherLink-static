@@ -2,6 +2,7 @@
 #include "MessageApplication.h"
 #include "features/chat/data/MessageRepository.h"
 #include "shared/ui/TransparentSplitter.h"
+#include "shared/theme/ThemeManager.h"
 
 #include <QDateTime>
 #include <QPainter>
@@ -24,10 +25,10 @@ MessageApplication::LeftPane::LeftPane(QWidget* parent)
 
     m_searchInput->setFixedHeight(26);
     m_addButton->setRadius(8);
-    m_addButton->setNormalColor(QColor(0xF5, 0xF5, 0xF5));
-    m_addButton->setHoverColor(QColor(0xEB, 0xEB, 0xEB));
-    m_addButton->setPressColor(QColor(0xD7, 0xD7, 0xD7));
-    m_addButton->setTextColor(QColor(0x33, 0x33, 0x33));
+    m_addButton->setNormalColor(ThemeManager::instance().color(ThemeColor::InputBackground));
+    m_addButton->setHoverColor(ThemeManager::instance().color(ThemeColor::ListHover));
+    m_addButton->setPressColor(ThemeManager::instance().color(ThemeColor::Divider));
+    m_addButton->setTextColor(ThemeManager::instance().color(ThemeColor::PrimaryText));
     m_addButton->setFixedHeight(26);
 
     QFont addFont = m_addButton->font();
@@ -108,7 +109,7 @@ void MessageApplication::paintEvent(QPaintEvent*)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
     p.setPen(Qt::NoPen);
-    p.setBrush(Qt::white);
+    p.setBrush(ThemeManager::instance().color(ThemeColor::PanelBackground));
     p.drawRect(rect());
 }
 

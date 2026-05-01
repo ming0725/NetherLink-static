@@ -5,6 +5,7 @@
 #include "PostCardDelegate.h"
 #include "features/post/model/PostFeedModel.h"
 #include "features/post/data/PostRepository.h"
+#include "shared/theme/ThemeManager.h"
 
 PostFeedPage::PostFeedPage(QWidget* parent)
     : PostMasonryView(parent)
@@ -14,7 +15,7 @@ PostFeedPage::PostFeedPage(QWidget* parent)
 #ifdef Q_OS_WIN
     setAutoFillBackground(true);
     QPalette palette = this->palette();
-    palette.setColor(QPalette::Window, QColor(0xF8, 0xF8, 0xFC));
+    palette.setColor(QPalette::Window, ThemeManager::instance().color(ThemeColor::WindowBackground));
     setPalette(palette);
 #endif
     setModel(m_model);

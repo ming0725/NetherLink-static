@@ -1,9 +1,12 @@
 #pragma once
 #include <QWidget>
 #include <QPropertyAnimation>
+#include <QPoint>
 #include <QString>
 
 class ApplicationBarItem;
+class QEvent;
+class QMouseEvent;
 class ApplicationBar : public QWidget {
     Q_OBJECT
 public:
@@ -20,13 +23,20 @@ public:
 protected:
     void paintEvent(QPaintEvent*) Q_DECL_OVERRIDE;
     void resizeEvent(QResizeEvent*) Q_DECL_OVERRIDE;
+    void mouseMoveEvent(QMouseEvent*) Q_DECL_OVERRIDE;
+    void mousePressEvent(QMouseEvent*) Q_DECL_OVERRIDE;
+    void leaveEvent(QEvent*) Q_DECL_OVERRIDE;
 private slots:
     void onItemClicked(ApplicationBarItem*);
 signals:
     void applicationClicked(ApplicationBarItem*);
 private:
     void layoutItems();
+    ApplicationBarItem* itemAtPosition(const QPoint& pos) const;
+    void setHoveredItem(ApplicationBarItem* item);
+
     ApplicationBarItem* selectedItem = nullptr;
+    ApplicationBarItem* hoveredItem = nullptr;
     QString avatarSource;
     QVector<ApplicationBarItem*> topItems;
     QVector<ApplicationBarItem*> bottomItems;

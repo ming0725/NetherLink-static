@@ -4,6 +4,7 @@
 #include <QPainter>
 
 #include "shared/services/ImageService.h"
+#include "shared/theme/ThemeManager.h"
 #include "features/chat/model/MessageListModel.h"
 
 namespace {
@@ -146,10 +147,12 @@ void MessageListDelegate::paint(QPainter* painter,
             index.data(MessageListModel::ContextMenuActiveRole).toBool();
     const bool pinned = index.data(MessageListModel::IsPinnedRole).toBool();
     const QColor backgroundColor = selected
-            ? QColor(0x00, 0x99, 0xff)
+            ? ThemeManager::instance().color(ThemeColor::ListSelected)
             : (pinned
-               ? (hovered ? QColor(0xe2, 0xe2, 0xe2) : QColor(0xf3, 0xf3, 0xf3))
-               : (hovered ? QColor(0xf0, 0xf0, 0xf0) : QColor(0xff, 0xff, 0xff)));
+               ? (hovered ? ThemeManager::instance().color(ThemeColor::ListHover)
+                          : ThemeManager::instance().color(ThemeColor::ListPinned))
+               : (hovered ? ThemeManager::instance().color(ThemeColor::ListHover)
+                          : ThemeManager::instance().color(ThemeColor::PanelBackground)));
     painter->fillRect(option.rect, backgroundColor);
 
     const int itemCenterY = option.rect.center().y();
@@ -202,7 +205,7 @@ void MessageListDelegate::paint(QPainter* painter,
                          nameHeight);
 
     painter->setFont(nameFont());
-    painter->setPen(selected ? Qt::white : Qt::black);
+    painter->setPen(selected ? Qt::white : ThemeManager::instance().color(ThemeColor::PrimaryText));
     painter->drawText(nameRect,
                       Qt::AlignLeft | Qt::AlignVCenter,
                       nameMetrics().elidedText(index.data(MessageListModel::TitleRole).toString(),
@@ -211,12 +214,12 @@ void MessageListDelegate::paint(QPainter* painter,
 
     if (!timeText.isEmpty()) {
         painter->setFont(timeFont());
-        painter->setPen(selected ? Qt::white : QColor(0x88, 0x88, 0x88));
+        painter->setPen(selected ? Qt::white : ThemeManager::instance().color(ThemeColor::TertiaryText));
         painter->drawText(timeRect, Qt::AlignLeft | Qt::AlignVCenter, timeText);
     }
 
     painter->setFont(previewFont());
-    painter->setPen(selected ? Qt::white : QColor(0x88, 0x88, 0x88));
+    painter->setPen(selected ? Qt::white : ThemeManager::instance().color(ThemeColor::TertiaryText));
     painter->drawText(previewRect,
                       Qt::AlignLeft | Qt::AlignVCenter,
                       previewMetrics().elidedText(index.data(MessageListModel::PreviewTextRole).toString(),
@@ -261,12 +264,17 @@ MessageListDelegate::BadgeLayout MessageListDelegate::badgeLayoutForItem(const Q
     const int textWidth = badgeMetrics().horizontalAdvance(layout.text);
     const int width = qMax(kBadgeHeight, textWidth + kBadgeHorizontalPadding * 2);
     layout.size = QSize(width, kBadgeHeight);
-    layout.backgroundColor = doNotDisturb ? QColor(0xcc, 0xcc, 0xcc) : QColor(0xf7, 0x4c, 0x30);
-    layout.textColor = doNotDisturb ? QColor(0xff, 0xfa, 0xfa) : QColor(0xff, 0xff, 0xff);
+    if (doNotDisturb && ThemeManager::instance().isDark()) {
+        layout.backgroundColor = QColor(0x4e, 0x4e, 0x4e);
+        layout.textColor = Qt::white;
+    } else {
+        layout.backgroundColor = doNotDisturb ? QColor(0xcc, 0xcc, 0xcc) : QColor(0xf7, 0x4c, 0x30);
+        layout.textColor = doNotDisturb ? QColor(0xff, 0xfa, 0xfa) : QColor(0xff, 0xff, 0xff);
+    }
 
     if (selected && !doNotDisturb) {
         layout.backgroundColor = QColor(0xff, 0xff, 0xff, 210);
-        layout.textColor = QColor(0x00, 0x99, 0xff);
+        layout.textColor = ThemeManager::instance().color(ThemeColor::Accent);
     }
 
     return layout;

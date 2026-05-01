@@ -1,6 +1,7 @@
 #include "IconLineEdit.h"
 
 #include "shared/services/ImageService.h"
+#include "shared/theme/ThemeManager.h"
 
 #include <QFocusEvent>
 #include <QKeyEvent>
@@ -53,10 +54,7 @@ IconLineEdit::IconLineEdit(QWidget *parent)
     inputFont.setPixelSize(12);
     setFont(inputFont);
 
-    QPalette transparentPalette = palette();
-    transparentPalette.setColor(QPalette::Base, Qt::transparent);
-    transparentPalette.setColor(QPalette::Window, Qt::transparent);
-    setPalette(transparentPalette);
+    applyThemePalette();
 
     auto* lineEditStyle = new TextOnlyLineEditStyle;
     lineEditStyle->setParent(this);
@@ -88,11 +86,13 @@ void IconLineEdit::paintEvent(QPaintEvent *event)
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(0xF5, 0xF5, 0xF5));
+    painter.setBrush(hasFocus
+                     ? ThemeManager::instance().color(ThemeColor::InputFocusBackground)
+                     : ThemeManager::instance().color(ThemeColor::InputBackground));
     painter.drawRoundedRect(rect(), kRadius, kRadius);
 
     if (hasFocus) {
-        QPen pen(QColor(0x0099ff));
+        QPen pen(ThemeManager::instance().color(ThemeColor::Accent));
         pen.setWidth(2);
         painter.setPen(pen);
         painter.setBrush(Qt::NoBrush);
@@ -104,8 +104,11 @@ void IconLineEdit::paintEvent(QPaintEvent *event)
 
     QPainter foregroundPainter(this);
     foregroundPainter.setRenderHint(QPainter::SmoothPixmapTransform);
+    const QString currentIconSource = ThemeManager::instance().isDark() && !darkIconSource.isEmpty()
+            ? darkIconSource
+            : iconSource;
     foregroundPainter.drawPixmap(iconRect,
-                                 ImageService::instance().scaled(iconSource,
+                                 ImageService::instance().scaled(currentIconSource,
                                                                  iconRect.size(),
                                                                  Qt::IgnoreAspectRatio,
                                                                  foregroundPainter.device()->devicePixelRatioF()));
@@ -153,6 +156,13 @@ void IconLineEdit::resizeEvent(QResizeEvent *event)
 void IconLineEdit::setIcon(const QString& source)
 {
     iconSource = source;
+    darkIconSource.clear();
+    update();
+}
+
+void IconLineEdit::setDarkIcon(const QString& source)
+{
+    darkIconSource = source;
     update();
 }
 
@@ -279,4 +289,17 @@ void IconLineEdit::focusInnerLineEdit()
 {
     setFocus();
     setCursorPosition(text().size());
+}
+
+void IconLineEdit::applyThemePalette()
+{
+    QPalette inputPalette = palette();
+    inputPalette.setColor(QPalette::Base, Qt::transparent);
+    inputPalette.setColor(QPalette::Window, Qt::transparent);
+    inputPalette.setColor(QPalette::Text, ThemeManager::instance().color(ThemeColor::PrimaryText));
+    inputPalette.setColor(QPalette::PlaceholderText,
+                          ThemeManager::instance().color(ThemeColor::PlaceholderText));
+    inputPalette.setColor(QPalette::Highlight, ThemeManager::instance().color(ThemeColor::Accent));
+    inputPalette.setColor(QPalette::HighlightedText, Qt::white);
+    setPalette(inputPalette);
 }

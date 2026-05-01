@@ -1,5 +1,6 @@
 #include "AiChatApplication.h"
 #include "shared/ui/TransparentSplitter.h"
+#include "shared/theme/ThemeManager.h"
 #include <QPainter>
 
 AiChatApplication::AiChatApplication(QWidget* parent)
@@ -32,5 +33,5 @@ void AiChatApplication::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.setRenderHints(QPainter::Antialiasing |
                            QPainter::SmoothPixmapTransform);
-    painter.fillRect(rect(), QColor(255, 255, 255, 255));
+    painter.fillRect(rect(), ThemeManager::instance().color(ThemeColor::PanelBackground));
 }

@@ -1,31 +1,44 @@
 #pragma once
-#include <QWidget>
+#include <QObject>
+#include <QPoint>
 #include <QString>
-#include <QEvent>
-#include <QPropertyAnimation>
+#include <QRect>
+#include <QVariantAnimation>
 
-class ApplicationBarItem : public QWidget {
+class QPainter;
+
+class ApplicationBarItem : public QObject {
     Q_OBJECT
 public:
-    ApplicationBarItem(const QString& normalSource, QWidget* parent = nullptr);
-    ApplicationBarItem(const QString& normalSource, const QString& selectedSource, QWidget* parent = nullptr);
+    ApplicationBarItem(const QString& normalSource, QObject* parent = nullptr);
+    ApplicationBarItem(const QString& normalSource, const QString& selectedSource, QObject* parent = nullptr);
+
     void setPixmapScale(qreal scale);
+    void setDarkModeInversionEnabled(bool enabled);
     void setSelected(bool);
-    bool isSelected();
-protected:
-    void enterEvent(QEnterEvent*) Q_DECL_OVERRIDE;
-    void leaveEvent(QEvent*) Q_DECL_OVERRIDE;
-    void paintEvent(QPaintEvent*) Q_DECL_OVERRIDE;
-    void mousePressEvent(QMouseEvent*) Q_DECL_OVERRIDE;
+    bool isSelected() const;
+
+    void setHovered(bool hover);
+    bool isHovered() const;
+
+    void setRect(const QRect& rect);
+    QRect rect() const;
+    int y() const;
+    bool contains(const QPoint& pos) const;
+
+    void paint(QPainter& painter) const;
 signals:
-    void itemClicked(ApplicationBarItem* item);
+    void updateRequested();
 private:
+    qreal maxRippleRadius() const;
+
     QString selectedSource;
     QString normalSource;
-    bool hoverd = false;
+    QRect itemRect;
+    bool hovered = false;
     bool selected = false;
+    bool darkModeInversionEnabled = true;
     qreal pixmapScale = 0.6;
     qreal rippleRadius = 0.0;
     QVariantAnimation* rippleAnim = nullptr;
 };
-

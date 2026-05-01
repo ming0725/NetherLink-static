@@ -6,6 +6,7 @@
 #include "shared/services/ImageService.h"
 #include "features/friend/model/FriendListModel.h"
 #include "shared/types/User.h"
+#include "shared/theme/ThemeManager.h"
 
 extern const int kContactGroupArrowYOffset = 1;
 
@@ -37,9 +38,9 @@ void drawFriendDisplayName(QPainter* painter,
     const QString remark = index.data(FriendListModel::RemarkRole).toString();
     const QString nickName = index.data(FriendListModel::NickNameRole).toString();
     const QString displayName = index.data(FriendListModel::DisplayNameRole).toString();
-    const QColor primaryColor = selected ? Qt::white : Qt::black;
+    const QColor primaryColor = selected ? Qt::white : ThemeManager::instance().color(ThemeColor::PrimaryText);
     const QColor secondaryColor = selected ? QColor(0xff, 0xff, 0xff, 165)
-                                           : QColor(0x00, 0x00, 0x00, 120);
+                                           : ThemeManager::instance().color(ThemeColor::TertiaryText);
 
     painter->setFont(nameFont());
     if (remark.isEmpty() || nickName.isEmpty()) {
@@ -143,13 +144,13 @@ void FriendListDelegate::paint(QPainter* painter,
         if (hovered) {
             const QRect hoverRect = option.rect.adjusted(6, 3, -6, -3);
             painter->setRenderHint(QPainter::Antialiasing, true);
-            painter->setBrush(QColor(0xe9, 0xe9, 0xe9));
+            painter->setBrush(ThemeManager::instance().color(ThemeColor::ListHover));
             painter->setPen(Qt::NoPen);
             painter->drawRoundedRect(hoverRect, 6, 6);
         }
 
         painter->setFont(groupFont());
-        painter->setPen(QColor(0x11, 0x11, 0x11));
+        painter->setPen(ThemeManager::instance().color(ThemeColor::PrimaryText));
         painter->drawText(option.rect.adjusted(20, 0, -28, 0),
                           Qt::AlignLeft | Qt::AlignVCenter,
                           groupMetrics().elidedText(index.data(FriendListModel::DisplayNameRole).toString(),
@@ -158,7 +159,11 @@ void FriendListDelegate::paint(QPainter* painter,
 
         const int centerX = option.rect.right() - kGroupCountRightPadding;
         const int centerY = option.rect.center().y() + kNoticeArrowYOffset;
-        QPen arrowPen(QColor(0x66, 0x66, 0x66), 1.3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+        QPen arrowPen(ThemeManager::instance().color(ThemeColor::SecondaryText),
+                      1.3,
+                      Qt::SolidLine,
+                      Qt::RoundCap,
+                      Qt::RoundJoin);
         painter->setPen(arrowPen);
         painter->drawLine(QPointF(centerX - 2.0, centerY - 4.0), QPointF(centerX + 2.0, centerY));
         painter->drawLine(QPointF(centerX + 2.0, centerY), QPointF(centerX - 2.0, centerY + 4.0));
@@ -172,7 +177,7 @@ void FriendListDelegate::paint(QPainter* painter,
         if (hovered) {
             const QRect hoverRect = option.rect.adjusted(6, 3, -6, -3);
             painter->setRenderHint(QPainter::Antialiasing, true);
-            painter->setBrush(QColor(0xee, 0xee, 0xee));
+            painter->setBrush(ThemeManager::instance().color(ThemeColor::ListHover));
             painter->setPen(Qt::NoPen);
             painter->drawRoundedRect(hoverRect, 6, 6);
         }
@@ -188,7 +193,11 @@ void FriendListDelegate::paint(QPainter* painter,
         painter->setRenderHint(QPainter::Antialiasing, true);
         painter->translate(arrowRect.center());
         painter->rotate(progress * 90.0);
-        QPen arrowPen(QColor(0x78, 0x86, 0x94), 1.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+        QPen arrowPen(ThemeManager::instance().color(ThemeColor::TertiaryText),
+                      1.5,
+                      Qt::SolidLine,
+                      Qt::RoundCap,
+                      Qt::RoundJoin);
         painter->setPen(arrowPen);
         painter->drawLine(QPointF(-2.5, -4.0), QPointF(2.5, 0.0));
         painter->drawLine(QPointF(2.5, 0.0), QPointF(-2.5, 4.0));
@@ -209,12 +218,12 @@ void FriendListDelegate::paint(QPainter* painter,
                               option.rect.height());
 
         painter->setFont(groupFont());
-        painter->setPen(QColor(0x38, 0x45, 0x52));
+        painter->setPen(ThemeManager::instance().color(ThemeColor::SecondaryText));
         painter->drawText(titleRect,
                           Qt::AlignLeft | Qt::AlignVCenter,
                           groupMetrics().elidedText(title, Qt::ElideRight, titleRect.width()));
         painter->setFont(groupCountFont());
-        painter->setPen(QColor(0x99, 0xa3, 0xad));
+        painter->setPen(ThemeManager::instance().color(ThemeColor::TertiaryText));
         painter->drawText(countRect, Qt::AlignRight | Qt::AlignVCenter, countText);
         painter->restore();
         return;
@@ -230,8 +239,9 @@ void FriendListDelegate::paint(QPainter* painter,
     const bool hovered = (option.state & QStyle::State_MouseOver) ||
             index.data(FriendListModel::ContextMenuActiveRole).toBool();
     const QColor backgroundColor = selected
-            ? QColor(0x00, 0x99, 0xff)
-            : (hovered ? QColor(0xf0, 0xf0, 0xf0) : QColor(0xff, 0xff, 0xff));
+            ? ThemeManager::instance().color(ThemeColor::ListSelected)
+            : (hovered ? ThemeManager::instance().color(ThemeColor::ListHover)
+                       : ThemeManager::instance().color(ThemeColor::PanelBackground));
     painter->fillRect(option.rect, backgroundColor);
     painter->setOpacity(qMin(1.0, progress * 1.25));
 
@@ -253,7 +263,7 @@ void FriendListDelegate::paint(QPainter* painter,
     }
     if (avatar.isNull()) {
         painter->setPen(Qt::NoPen);
-        painter->setBrush(QColor(0xea, 0xea, 0xea));
+        painter->setBrush(ThemeManager::instance().color(ThemeColor::ImagePlaceholder));
         painter->drawEllipse(avatarRect);
     } else {
         painter->drawPixmap(avatarRect, avatar);
@@ -296,7 +306,7 @@ void FriendListDelegate::paint(QPainter* painter,
                              subtitleHeight);
 
     painter->setFont(subtitleFont());
-    painter->setPen(selected ? Qt::white : Qt::gray);
+    painter->setPen(selected ? Qt::white : ThemeManager::instance().color(ThemeColor::TertiaryText));
     painter->drawText(subtitleRect,
                       Qt::AlignLeft | Qt::AlignVCenter,
                       subtitleMetrics().elidedText(subtitle,

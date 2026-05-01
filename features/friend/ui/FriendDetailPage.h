@@ -7,6 +7,7 @@
 class QLabel;
 class InlineEditableText;
 class StatefulPushButton;
+class StyledActionMenu;
 class QToolButton;
 class QVBoxLayout;
 class QWidget;
@@ -40,6 +41,7 @@ private:
     void updateGroupButtonText();
     void updateSignatureText();
     void saveRemark();
+    void showGroupMenu();
     void rebuildGroupMenu();
     void changeGroup(const QString& groupId, const QString& groupName);
     void confirmDeleteFriend();
@@ -56,6 +58,7 @@ private:
     QLabel* m_statusLabel;
     InlineEditableText* m_remarkEdit;
     QToolButton* m_groupButton;
+    StyledActionMenu* m_groupMenu;
     QLabel* m_signatureLabel;
     StatefulPushButton* m_messageButton;
     StatefulPushButton* m_deleteButton;

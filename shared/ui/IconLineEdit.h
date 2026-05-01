@@ -14,6 +14,7 @@ public:
     void keyPressEvent(QKeyEvent* event) Q_DECL_OVERRIDE;
     QLineEdit* getLineEdit() const;
     void setIcon(const QString& iconSource);
+    void setDarkIcon(const QString& iconSource);
     void setIconSize(QSize);
 
 protected:
@@ -28,6 +29,7 @@ protected:
 
 private:
     QString iconSource = QStringLiteral(":/resources/icon/search.png");
+    QString darkIconSource = QStringLiteral(":/resources/icon/search_darkmode.png");
     QSize iconSize = QSize(15, 15);
     bool hasFocus = false;
     QRect iconRect;
@@ -40,6 +42,7 @@ private:
     bool showsClearButton() const;
     void updateClearHoverState(const QPoint& pos);
     void focusInnerLineEdit();
+    void applyThemePalette();
 
 signals:
     void requestNextFocus();

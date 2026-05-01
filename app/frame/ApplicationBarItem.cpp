@@ -1,8 +1,9 @@
 #include "ApplicationBarItem.h"
 #include "shared/services/ImageService.h"
+#include "shared/theme/ThemeManager.h"
 #include <QPainter>
-#include <QMouseEvent>
 #include <QPainterPath>
+#include <QtMath>
 
 namespace {
 
@@ -17,12 +18,26 @@ QSize logicalPixmapSize(const QPixmap& pixmap)
                  qRound(pixmap.height() / dpr));
 }
 
+QPixmap invertedPixmap(const QPixmap& pixmap)
+{
+    if (pixmap.isNull()) {
+        return pixmap;
+    }
+
+    QImage image = pixmap.toImage();
+    image.invertPixels(QImage::InvertRgb);
+
+    QPixmap inverted = QPixmap::fromImage(image);
+    inverted.setDevicePixelRatio(pixmap.devicePixelRatio());
+    return inverted;
+}
+
 }
 
 ApplicationBarItem::ApplicationBarItem(const QString& normalSource,
                                        const QString& selectedSource,
-                                       QWidget* parent)
-    : QWidget(parent)
+                                       QObject* parent)
+    : QObject(parent)
     , selectedSource(selectedSource)
     , normalSource(normalSource)
 {
@@ -31,52 +46,132 @@ ApplicationBarItem::ApplicationBarItem(const QString& normalSource,
     rippleAnim->setEasingCurve(QEasingCurve::OutCubic);
     connect(rippleAnim, &QVariantAnimation::valueChanged, this, [this](const QVariant &value) {
         rippleRadius = value.toReal();
-        update();
+        emit updateRequested();
+    });
+    connect(rippleAnim, &QVariantAnimation::finished, this, [this]() {
+        if (selected) {
+            rippleRadius = maxRippleRadius();
+            emit updateRequested();
+        }
     });
 }
 
-ApplicationBarItem::ApplicationBarItem(const QString& normalSource, QWidget* parent)
+ApplicationBarItem::ApplicationBarItem(const QString& normalSource, QObject* parent)
     : ApplicationBarItem(normalSource, normalSource, parent)
 {
 }
 
 void ApplicationBarItem::setPixmapScale(qreal scale) {
     pixmapScale = qBound<qreal>(0.0, scale, 1.0);
-    update();
+    emit updateRequested();
 }
 
-void ApplicationBarItem::enterEvent(QEnterEvent*)
+void ApplicationBarItem::setDarkModeInversionEnabled(bool enabled)
 {
-    hoverd = true;
-    update();
+    if (darkModeInversionEnabled == enabled) {
+        return;
+    }
+
+    darkModeInversionEnabled = enabled;
+    emit updateRequested();
 }
 
-void ApplicationBarItem::paintEvent(QPaintEvent*)
+void ApplicationBarItem::setSelected(bool select)
 {
-    QPainter painter(this);
-    painter.setRenderHints(
-            QPainter::Antialiasing |
-            QPainter::TextAntialiasing |
-            QPainter::SmoothPixmapTransform);
+    if (selected == select) {
+        return;
+    }
+
+    selected = select;
+
+    if (selected) {
+        const qreal maxR = maxRippleRadius();
+        rippleAnim->stop();
+        rippleAnim->setStartValue(0.0);
+        rippleAnim->setEndValue(maxR);
+        rippleAnim->start();
+    } else {
+        rippleAnim->stop();
+        rippleRadius = 0.0;
+        emit updateRequested();
+    }
+}
+
+bool ApplicationBarItem::isSelected() const
+{
+    return selected;
+}
+
+void ApplicationBarItem::setHovered(bool hover)
+{
+    if (hovered == hover) {
+        return;
+    }
+
+    hovered = hover;
+    emit updateRequested();
+}
+
+bool ApplicationBarItem::isHovered() const
+{
+    return hovered;
+}
+
+void ApplicationBarItem::setRect(const QRect& rect)
+{
+    if (itemRect == rect) {
+        return;
+    }
+
+    itemRect = rect;
+    if (selected && rippleAnim->state() != QAbstractAnimation::Running) {
+        rippleRadius = maxRippleRadius();
+    }
+    emit updateRequested();
+}
+
+QRect ApplicationBarItem::rect() const
+{
+    return itemRect;
+}
+
+int ApplicationBarItem::y() const
+{
+    return itemRect.y();
+}
+
+bool ApplicationBarItem::contains(const QPoint& pos) const
+{
+    return itemRect.contains(pos);
+}
+
+void ApplicationBarItem::paint(QPainter& painter) const
+{
+    if (itemRect.isEmpty()) {
+        return;
+    }
 
     // 1) hover/selected 背景圆角
-    if (hoverd || selected) {
+    if (hovered || selected) {
         painter.save();
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(0xD8, 0xD8, 0xD8, 224));
-        painter.drawRoundedRect(rect(), 10, 10);
+        painter.setBrush(ThemeManager::instance().color(ThemeColor::AppBarItemBackground));
+        painter.drawRoundedRect(itemRect, 10, 10);
         painter.restore();
     }
 
     // 2) 正常状态下的图标（按 pixmapScale 缩放并居中）
-    QSizeF tgtF = QSizeF(width(), height()) * pixmapScale;
+    QSizeF tgtF = QSizeF(itemRect.size()) * pixmapScale;
     QPixmap normalScaled = ImageService::instance().scaled(normalSource,
                                                            tgtF.toSize(),
                                                            Qt::KeepAspectRatio,
                                                            painter.device()->devicePixelRatioF());
+    if (ThemeManager::instance().isDark() && darkModeInversionEnabled && !selected) {
+        normalScaled = invertedPixmap(normalScaled);
+    }
     const QSize normalLogicalSize = logicalPixmapSize(normalScaled);
-    int x0 = qFloor((width()  - normalLogicalSize.width())  / 2.0);
-    int y0 = qFloor((height() - normalLogicalSize.height()) / 2.0);
+    int x0 = itemRect.x() + qFloor((itemRect.width()  - normalLogicalSize.width())  / 2.0);
+    int y0 = itemRect.y() + qFloor((itemRect.height() - normalLogicalSize.height()) / 2.0);
     painter.drawPixmap(QRect(x0, y0,
                              normalLogicalSize.width(),
                              normalLogicalSize.height()),
@@ -85,12 +180,12 @@ void ApplicationBarItem::paintEvent(QPaintEvent*)
     // 3) 如果已选中且正在 ripple 动画中，则“揭露”selectedPixmap
     if (selected && rippleRadius > 0.0) {
         painter.save();
-        // 剪裁一个圆形区域，圆心在 (0, height())，半径为 rippleRadius
+        // 从 item 左下角扩散，揭露选中态图标。
         QPainterPath clipPath;
         clipPath.addEllipse(
                 QRectF(
-                        -rippleRadius,
-                        height() - rippleRadius,
+                        itemRect.left() - rippleRadius,
+                        itemRect.bottom() + 1 - rippleRadius,
                         rippleRadius * 2,
                         rippleRadius * 2
                 )
@@ -102,8 +197,8 @@ void ApplicationBarItem::paintEvent(QPaintEvent*)
                                                             Qt::KeepAspectRatio,
                                                             painter.device()->devicePixelRatioF());
         const QSize selectedLogicalSize = logicalPixmapSize(selScaled);
-        const int sx = qFloor((width()  - selectedLogicalSize.width())  / 2.0);
-        const int sy = qFloor((height() - selectedLogicalSize.height()) / 2.0);
+        const int sx = itemRect.x() + qFloor((itemRect.width()  - selectedLogicalSize.width())  / 2.0);
+        const int sy = itemRect.y() + qFloor((itemRect.height() - selectedLogicalSize.height()) / 2.0);
         painter.drawPixmap(QRect(sx, sy,
                                  selectedLogicalSize.width(),
                                  selectedLogicalSize.height()),
@@ -112,40 +207,8 @@ void ApplicationBarItem::paintEvent(QPaintEvent*)
     }
 }
 
-
-void ApplicationBarItem::mousePressEvent(QMouseEvent* event)
+qreal ApplicationBarItem::maxRippleRadius() const
 {
-    QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
-    if (mouseEvent->button() == Qt::LeftButton) {
-        emit itemClicked(this);
-    }
-}
-
-void ApplicationBarItem::leaveEvent(QEvent*)
-{
-    hoverd = false;
-    update();
-}
-
-void ApplicationBarItem::setSelected(bool select)
-{
-    if (selected == select)
-        return;
-    selected = select;
-
-    if (selected) {
-        qreal maxR = qSqrt(width()*width() + height()*height());
-        rippleAnim->stop();
-        rippleAnim->setStartValue(0.0);
-        rippleAnim->setEndValue(maxR);
-        rippleAnim->start();
-    } else {
-        rippleAnim->stop();
-        rippleRadius = 0.0;
-    }
-    update();
-}
-
-bool ApplicationBarItem::isSelected() {
-    return selected;
+    return qSqrt(itemRect.width() * itemRect.width() +
+                 itemRect.height() * itemRect.height());
 }

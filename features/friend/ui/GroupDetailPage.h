@@ -7,6 +7,7 @@
 class QLabel;
 class InlineEditableText;
 class StatefulPushButton;
+class StyledActionMenu;
 class QToolButton;
 
 class GroupDetailPage : public QWidget
@@ -41,6 +42,7 @@ private:
     void updateMemberCountText();
     QString elidedValueText(const QString& text, const QLabel* label) const;
     void saveRemark();
+    void showCategoryMenu();
     void rebuildCategoryMenu();
     void changeCategory(const QString& categoryId, const QString& categoryName);
     void updateExitButtonState();
@@ -54,6 +56,7 @@ private:
     QLabel* m_idLabel;
     InlineEditableText* m_remarkEdit;
     QToolButton* m_categoryButton;
+    StyledActionMenu* m_categoryMenu;
     QLabel* m_introLabel;
     QLabel* m_announcementLabel;
     QLabel* m_memberCountLabel;

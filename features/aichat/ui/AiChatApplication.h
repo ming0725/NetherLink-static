@@ -2,6 +2,7 @@
 #include "AiChatListWidget.h"
 #include "app/frame/DefaultPage.h"
 #include "shared/ui/StatefulPushButton.h"
+#include "shared/theme/ThemeManager.h"
 #include <QSplitter>
 #include <QWidget>
 #include <QLabel>
@@ -31,9 +32,9 @@ private:
             // 设置按钮
             m_newConversationButton->setFixedSize(newButtonWidth, newButtonHeight);
             m_newConversationButton->setRadius(6);
-            m_newConversationButton->setNormalColor(QColor(0x00, 0x78, 0xD7));
-            m_newConversationButton->setHoverColor(QColor(0x10, 0x86, 0xE0));
-            m_newConversationButton->setPressColor(QColor(0x00, 0x6B, 0xC2));
+            m_newConversationButton->setNormalColor(ThemeManager::instance().color(ThemeColor::Accent));
+            m_newConversationButton->setHoverColor(ThemeManager::instance().color(ThemeColor::AccentHover));
+            m_newConversationButton->setPressColor(ThemeManager::instance().color(ThemeColor::AccentPressed));
             m_newConversationButton->setTextColor(Qt::white);
             connect(m_newConversationButton, &StatefulPushButton::clicked,
                     m_aiChatList, &AiChatListWidget::createNewConversation);

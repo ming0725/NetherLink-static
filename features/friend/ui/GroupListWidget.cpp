@@ -20,6 +20,7 @@
 #include "features/friend/ui/GroupListDelegate.h"
 #include "shared/services/ImageService.h"
 #include "shared/ui/StyledActionMenu.h"
+#include "shared/theme/ThemeManager.h"
 
 extern const int kContactGroupArrowYOffset;
 
@@ -76,8 +77,8 @@ GroupListWidget::GroupListWidget(QWidget* parent)
     setAutoFillBackground(true);
     viewport()->setAutoFillBackground(true);
     QPalette palette = this->palette();
-    palette.setColor(QPalette::Base, Qt::white);
-    palette.setColor(QPalette::Window, Qt::white);
+    palette.setColor(QPalette::Base, ThemeManager::instance().color(ThemeColor::PanelBackground));
+    palette.setColor(QPalette::Window, ThemeManager::instance().color(ThemeColor::PanelBackground));
     setPalette(palette);
     viewport()->setPalette(palette);
     setWheelStepPixels(64);
@@ -672,7 +673,7 @@ void GroupListWidget::drawStickyHeader() const
     painter.setClipRect(QRect(0, m_stickyOffsetY, viewport()->width(), kStickyHeaderHeight));
 
     const QRect headerRect(0, m_stickyOffsetY, viewport()->width(), kStickyHeaderHeight);
-    painter.fillRect(headerRect, Qt::white);
+    painter.fillRect(headerRect, ThemeManager::instance().color(ThemeColor::PanelBackground));
 
     drawStickyCategory(&painter, headerRect, m_stickyCategory);
 }
@@ -689,7 +690,7 @@ void GroupListWidget::drawStickyCategory(QPainter* painter,
 
     if (rect.contains(viewport()->mapFromGlobal(QCursor::pos()))) {
         const QRect hoverRect = rect.adjusted(6, 3, -6, -3);
-        painter->setBrush(QColor(0xee, 0xee, 0xee));
+        painter->setBrush(ThemeManager::instance().color(ThemeColor::ListHover));
         painter->setPen(Qt::NoPen);
         painter->drawRoundedRect(hoverRect, 6, 6);
     }
@@ -703,7 +704,11 @@ void GroupListWidget::drawStickyCategory(QPainter* painter,
     painter->save();
     painter->translate(arrowRect.center());
     painter->rotate(category.progress * 90.0);
-    QPen arrowPen(QColor(0x78, 0x86, 0x94), 1.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+    QPen arrowPen(ThemeManager::instance().color(ThemeColor::TertiaryText),
+                  1.5,
+                  Qt::SolidLine,
+                  Qt::RoundCap,
+                  Qt::RoundJoin);
     painter->setPen(arrowPen);
     painter->drawLine(QPointF(-2.5, -4.0), QPointF(2.5, 0.0));
     painter->drawLine(QPointF(2.5, 0.0), QPointF(-2.5, 4.0));
@@ -727,12 +732,12 @@ void GroupListWidget::drawStickyCategory(QPainter* painter,
                           rect.height());
 
     painter->setFont(font);
-    painter->setPen(QColor(0x38, 0x45, 0x52));
+    painter->setPen(ThemeManager::instance().color(ThemeColor::SecondaryText));
     painter->drawText(titleRect,
                       Qt::AlignLeft | Qt::AlignVCenter,
                       metrics.elidedText(category.title, Qt::ElideRight, titleRect.width()));
     painter->setFont(countFont);
-    painter->setPen(QColor(0x99, 0xa3, 0xad));
+    painter->setPen(ThemeManager::instance().color(ThemeColor::TertiaryText));
     painter->drawText(countRect, Qt::AlignRight | Qt::AlignVCenter, countText);
     painter->restore();
 }
