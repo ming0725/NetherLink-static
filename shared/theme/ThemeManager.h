@@ -34,8 +34,19 @@ enum class ThemeColor {
     ListHover,
     ListPinned,
     ListSelected,
+    ChatInfoPanelOverlay,
+    SettingsOverlay,
+    ChatInfoMemberListBackground,
+    ChatInfoMemberListHover,
+    ChatInfoMemberListPrimaryText,
+    ChatInfoMemberListSecondaryText,
+    ChatInfoMemberListHeaderText,
+    DangerText,
+    DangerControlHover,
+    DangerControlPressed,
     AppBarItemBackground,
     AppBarItemSelectedBackground,
+    PostBarItemSelectedBackground,
     ImagePlaceholder,
     ControlHover,
     ControlPressed
@@ -58,7 +69,6 @@ public:
     QColor color(ThemeColor role) const;
 
     QPalette applicationPalette() const;
-    QString applicationStyleSheet() const;
     void applyToApplication(QApplication& application);
 
 signals:

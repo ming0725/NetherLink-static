@@ -1,13 +1,13 @@
 #include "ApplicationBarItem.h"
 #include "ApplicationBar.h"
 #include "shared/services/ImageService.h"
+#include "shared/ui/StyledActionMenu.h"
 #include "shared/theme/ThemeManager.h"
 #include "features/friend/data/UserRepository.h"
 #include "app/state/CurrentUser.h"
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
-#include <utility>
 
 ApplicationBar::ApplicationBar(QWidget* parent)
     : QWidget(parent)
@@ -49,17 +49,9 @@ ApplicationBar::ApplicationBar(QWidget* parent)
     notItem->setDarkModeInversionEnabled(false);
     addItem(notItem);
 
-    auto menuItem = new ApplicationBarItem(":/resources/icon/menu.png");
-    menuItem->setPixmapScale(0.57);
-    addBottomItem(menuItem);
-
-    auto starItem = new ApplicationBarItem(":/resources/icon/bookmark.png");
-    starItem->setPixmapScale(0.57);
-    addBottomItem(starItem);
-
-    auto folderItem = new ApplicationBarItem(":/resources/icon/folder.png");
-    folderItem->setPixmapScale(0.57);
-    addBottomItem(folderItem);
+    moreOptionsItem = new ApplicationBarItem(":/resources/icon/menu.png");
+    moreOptionsItem->setPixmapScale(0.57);
+    addBottomItem(moreOptionsItem);
 
     if (!topItems.empty()) {
         selectedItem = topItems[0];
@@ -110,10 +102,12 @@ void ApplicationBar::paintEvent(QPaintEvent*) {
         painter.restore();
     }
 
-    for (auto* item : std::as_const(topItems)) {
+    for (int i = 0; i < topItems.size(); ++i) {
+        auto* item = topItems.at(i);
         item->paint(painter);
     }
-    for (auto* item : std::as_const(bottomItems)) {
+    for (int i = 0; i < bottomItems.size(); ++i) {
+        auto* item = bottomItems.at(i);
         item->paint(painter);
     }
 }
@@ -162,13 +156,15 @@ void ApplicationBar::layoutItems() {
     int y = topInset + marginTop + spacing + avatarSize + avatarAndItemDist;
     int w = width();
 
-    for (auto* item : std::as_const(topItems)) {
+    for (int i = 0; i < topItems.size(); ++i) {
+        auto* item = topItems.at(i);
         int x = (w - iconSize) / 2;
         item->setRect(QRect(x, y, iconSize, iconSize));
         y += iconSize + spacing;
     }
     int yb = height() - marginBottom - iconSize;
-    for (auto* item : std::as_const(bottomItems)) {
+    for (int i = 0; i < bottomItems.size(); ++i) {
+        auto* item = bottomItems.at(i);
         int x = (w - iconSize) / 2;
         item->setRect(QRect(x, yb, iconSize, iconSize));
         yb -= (iconSize + spacing);
@@ -219,7 +215,12 @@ void ApplicationBar::mouseMoveEvent(QMouseEvent* event)
 void ApplicationBar::mousePressEvent(QMouseEvent* event)
 {
     if (event->button() == Qt::LeftButton) {
-        onItemClicked(itemAtPosition(event->pos()));
+        ApplicationBarItem* item = itemAtPosition(event->pos());
+        if (item == moreOptionsItem) {
+            showMoreOptionsMenu();
+        } else {
+            onItemClicked(item);
+        }
     }
 
     QWidget::mousePressEvent(event);
@@ -233,12 +234,14 @@ void ApplicationBar::leaveEvent(QEvent* event)
 
 ApplicationBarItem* ApplicationBar::itemAtPosition(const QPoint& pos) const
 {
-    for (auto* item : std::as_const(topItems)) {
+    for (int i = 0; i < topItems.size(); ++i) {
+        auto* item = topItems.at(i);
         if (item->contains(pos)) {
             return item;
         }
     }
-    for (auto* item : std::as_const(bottomItems)) {
+    for (int i = 0; i < bottomItems.size(); ++i) {
+        auto* item = bottomItems.at(i);
         if (item->contains(pos)) {
             return item;
         }
@@ -259,4 +262,37 @@ void ApplicationBar::setHoveredItem(ApplicationBarItem* item)
     if (hoveredItem) {
         hoveredItem->setHovered(true);
     }
+}
+
+void ApplicationBar::showMoreOptionsMenu()
+{
+    if (!moreOptionsItem) {
+        return;
+    }
+
+    auto* menu = new StyledActionMenu(this);
+    menu->setItemHoverColor(QColor(238, 238, 238));
+    QAction* settingsAction = menu->addAction(QStringLiteral("设置"));
+    menu->addAction(QStringLiteral("主题颜色"));
+    menu->addAction(QStringLiteral("聊天记录管理"));
+    menu->addSeparator();
+    menu->addAction(QStringLiteral("退出账号"));
+
+    connect(settingsAction, &QAction::triggered, this, &ApplicationBar::settingsRequested);
+
+    connect(menu, &QMenu::aboutToHide, this, [this, menu]() {
+        if (moreOptionsItem) {
+            moreOptionsItem->setSelected(false);
+        }
+        menu->deleteLater();
+    });
+
+    moreOptionsItem->setSelected(true);
+    const QRect itemRect = moreOptionsItem->rect();
+    const int horizontalOffset = menu->isUsingNativeMenu() ? 10 : 6;
+    const int verticalOffset = menu->isUsingNativeMenu() ? -22 : -46;
+    const QPoint popupPos = mapToGlobal(
+            QPoint(itemRect.right() + horizontalOffset,
+                   itemRect.y() - itemRect.height() + verticalOffset));
+    menu->popupWhenMouseReleased(popupPos);
 }

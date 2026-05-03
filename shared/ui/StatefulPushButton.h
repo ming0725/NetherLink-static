@@ -60,6 +60,8 @@ public:
     void setAnimationDuration(int ms);
     int animationDuration() const;
 
+    void setPressedVisual(bool pressed);
+
     void setDefaultStyle();
     void setPrimaryStyle();
     void setSuccessStyle();
@@ -95,5 +97,6 @@ private:
     int m_animationDuration;
     bool m_isHovered;
     bool m_isPressed;
+    bool m_forcedPressedVisual;
     QPropertyAnimation* m_colorAnimation;
 };

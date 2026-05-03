@@ -30,6 +30,11 @@
         <file>resources/icon/magma.png</file>
         <file>resources/icon/maximize.png</file>
         <file>resources/icon/menu.png</file>
+        <file>resources/icon/mc_button.png</file>
+        <file>resources/icon/mc_button_highlighted.png</file>
+        <file>resources/icon/mc_slider.png</file>
+        <file>resources/icon/mc_slider_handle.png</file>
+        <file>resources/icon/mc_slider_handle_highlighted.png</file>
         <file>resources/icon/minimize.png</file>
         <file>resources/icon/more.png</file>
         <file>resources/icon/nether.png</file>
@@ -51,6 +56,7 @@
         <file>resources/icon/unselected_blazer.png</file>
         <file>resources/icon/unselected_message.png</file>
         <file>resources/icon/unselected_nether.png</file>
+        <file>resources/font/MinecraftAE.ttf</file>
         <file>resources/avatar/0.jpg</file>
         <file>resources/avatar/1.jpg</file>
         <file>resources/avatar/2.jpg</file>

@@ -204,10 +204,32 @@ CGFloat titlebarInset(NSWindow* window)
     return MAX(kFallbackTitlebarInset, ceil(inset));
 }
 
-CGFloat leadingInset(NSWindow* window)
+CGFloat leadingInset(NSWindow* window, bool compactTrafficLights)
 {
-    Q_UNUSED(window);
-    return MAX(kFallbackLeadingInset, ceil(trafficLightsClusterWidth()));
+    if (compactTrafficLights) {
+        return MAX(kFallbackLeadingInset, ceil(trafficLightsClusterWidth()));
+    }
+
+    if (!window) {
+        return kFallbackLeadingInset;
+    }
+
+    CGFloat rightEdge = 0.0;
+    const NSWindowButton buttonTypes[] = {
+        NSWindowCloseButton,
+        NSWindowMiniaturizeButton,
+        NSWindowZoomButton
+    };
+    for (NSWindowButton buttonType : buttonTypes) {
+        NSButton* button = [window standardWindowButton:buttonType];
+        if (!button) {
+            continue;
+        }
+        rightEdge = MAX(rightEdge, NSMaxX(button.frame));
+    }
+
+    return rightEdge > 0.0 ? static_cast<CGFloat>(ceil(rightEdge + 12.0))
+                           : kFallbackLeadingInset;
 }
 
 NSToolbar* ensureCompactToolbar(NSWindow* window)
@@ -414,7 +436,7 @@ static void configureStandardButtons(NSWindow* window)
 
 namespace MacWindowBridge {
 
-WindowMetrics configureWindow(QWidget* widget, const QColor& tintColor)
+WindowMetrics configureWindow(QWidget* widget, const QColor& tintColor, bool compactTrafficLights)
 {
     NSView* qtView = nil;
     NSView* hostView = nil;
@@ -442,13 +464,14 @@ WindowMetrics configureWindow(QWidget* widget, const QColor& tintColor)
     [window setMovableByWindowBackground:NO];
     [window setShowsToolbarButton:NO];
 
-    ensureCompactToolbar(window);
-    ensureTrafficLightsObserver(window);
-    if ([window respondsToSelector:@selector(setToolbarStyle:)]) {
-        window.toolbarStyle = NSWindowToolbarStyleUnifiedCompact;
+    if (compactTrafficLights) {
+        ensureCompactToolbar(window);
+        ensureTrafficLightsObserver(window);
+        if ([window respondsToSelector:@selector(setToolbarStyle:)]) {
+            window.toolbarStyle = NSWindowToolbarStyleUnifiedCompact;
+        }
+        configureStandardButtons(window);
     }
-
-    configureStandardButtons(window);
     prepareLayerBackedView(hostView);
     prepareLayerBackedView(qtView);
     applyRoundedCorners(hostView);
@@ -468,7 +491,7 @@ WindowMetrics configureWindow(QWidget* widget, const QColor& tintColor)
 
     return {
         static_cast<int>(titlebarInset(window)),
-        static_cast<int>(leadingInset(window))
+        static_cast<int>(leadingInset(window, compactTrafficLights))
     };
 }
 

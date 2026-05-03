@@ -164,6 +164,11 @@ void StyledActionMenu::popupWhenMouseReleased(const QPoint& pos, QAction* atActi
     });
 }
 
+bool StyledActionMenu::isUsingNativeMenu() const
+{
+    return usesNativeMenu();
+}
+
 void StyledActionMenu::setItemHoverColor(const QColor& color)
 {
     setProperty(MenuHoverColorProperty, color);

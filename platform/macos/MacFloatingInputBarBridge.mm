@@ -348,10 +348,10 @@ void updateInactiveGlassChrome(NSView* hostView);
 
 - (void)dealloc
 {
-    [self.hoverTrackingArea release];
-    [self.normalImage release];
-    [self.hoveredImage release];
-    [self.hoverTipText release];
+    [_hoverTrackingArea release];
+    [_normalImage release];
+    [_hoveredImage release];
+    [_hoverTipText release];
     [super dealloc];
 }
 
@@ -370,10 +370,12 @@ void updateInactiveGlassChrome(NSView* hostView);
     NSTrackingAreaOptions options = NSTrackingMouseEnteredAndExited
             | NSTrackingActiveInKeyWindow
             | NSTrackingInVisibleRect;
-    self.hoverTrackingArea = [[NSTrackingArea alloc] initWithRect:NSZeroRect
-                                                          options:options
-                                                            owner:self
-                                                         userInfo:nil];
+    NSTrackingArea* trackingArea = [[NSTrackingArea alloc] initWithRect:NSZeroRect
+                                                                options:options
+                                                                  owner:self
+                                                               userInfo:nil];
+    self.hoverTrackingArea = trackingArea;
+    [trackingArea release];
     [self addTrackingArea:self.hoverTrackingArea];
     [super updateTrackingAreas];
 }
@@ -1347,7 +1349,6 @@ void ensureButtons(NSView* qtView, NSView* contentView, FloatingInputBar* widget
                                  OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         [contentView addSubview:imageButton];
         [imageButton release];
-        imageButton = imageButtonForView(qtView);
     } else if (imageButton.superview != contentView) {
         [imageButton removeFromSuperview];
         [contentView addSubview:imageButton];
@@ -1408,7 +1409,6 @@ void ensureButtons(NSView* qtView, NSView* contentView, FloatingInputBar* widget
                                  OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         [contentView addSubview:sendButton];
         [sendButton release];
-        sendButton = sendButtonForView(qtView);
     } else if (sendButton.superview != contentView) {
         [sendButton removeFromSuperview];
         [contentView addSubview:sendButton];

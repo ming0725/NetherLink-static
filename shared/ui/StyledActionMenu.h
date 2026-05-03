@@ -18,6 +18,7 @@ public:
     StyledActionMenu* addStyledMenu(const QString& title);
     void popup(const QPoint& pos, QAction* atAction = nullptr);
     void popupWhenMouseReleased(const QPoint& pos, QAction* atAction = nullptr);
+    bool isUsingNativeMenu() const;
 
     void setItemHoverColor(const QColor& color);
     void setSeparatorColor(const QColor& color);

@@ -1,7 +1,7 @@
 #include "PaintedLabel.h"
 
-#include <QPainter>
 #include <QPaintEvent>
+#include <QPalette>
 
 PaintedLabel::PaintedLabel(QWidget* parent)
     : QLabel(parent)
@@ -22,26 +22,25 @@ QColor PaintedLabel::textColor() const
 
 void PaintedLabel::setTextColor(const QColor& color)
 {
-    if (m_textColor == color) {
+    const bool changed = m_textColor != color;
+    m_textColor = color;
+
+    QPalette labelPalette = palette();
+    if (labelPalette.color(QPalette::WindowText) != color ||
+        labelPalette.color(QPalette::Text) != color) {
+        labelPalette.setColor(QPalette::WindowText, color);
+        labelPalette.setColor(QPalette::Text, color);
+        setPalette(labelPalette);
+    }
+
+    if (!changed) {
         return;
     }
 
-    m_textColor = color;
     update();
 }
 
 void PaintedLabel::paintEvent(QPaintEvent* event)
 {
-    Q_UNUSED(event);
-
-    QPainter painter(this);
-    painter.setFont(font());
-    painter.setPen(m_textColor);
-    int flags = alignment();
-    if (wordWrap()) {
-        flags |= Qt::TextWordWrap;
-    } else {
-        flags |= Qt::TextSingleLine;
-    }
-    painter.drawText(rect(), flags, text());
+    QLabel::paintEvent(event);
 }

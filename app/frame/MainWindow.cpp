@@ -3,9 +3,11 @@
 #include "features/friend/ui/FriendApplication.h"
 #include "features/aichat/ui/AiChatApplication.h"
 #include "features/post/ui/PostApplication.h"
+#include "SettingsWindow.h"
 #include "shared/ui/IconLineEdit.h"
 #include "shared/ui/FloatingInputBar.h"
 #include "shared/theme/ThemeManager.h"
+#include <QCloseEvent>
 #include <QHBoxLayout>
 #include <QLineEdit>
 #include <QPushButton>
@@ -82,6 +84,7 @@ MainWindow::MainWindow(QWidget* parent)
     , btnClose(nullptr)
 {
     // 窗口基础设置
+    setCompactTrafficLightsEnabled(true);
     resize(950, 650);
     setMinimumHeight(525);
     setMinimumWidth(kMainWindowMinimumWidth);
@@ -175,6 +178,8 @@ MainWindow::MainWindow(QWidget* parent)
     // 绑定点击信号，切换栈页
     connect(appBar, &ApplicationBar::applicationClicked,
             this, &MainWindow::onBarItemClicked);
+    connect(appBar, &ApplicationBar::settingsRequested,
+            this, &MainWindow::openSettingsWindow);
 
     QScreen* screen = QGuiApplication::primaryScreen();
     QRect   sg     = screen->geometry();
@@ -185,7 +190,18 @@ MainWindow::MainWindow(QWidget* parent)
 
 MainWindow::~MainWindow()
 {
+    if (m_settingsWindow) {
+        m_settingsWindow->close();
+    }
     qApp->removeEventFilter(this);
+}
+
+void MainWindow::closeEvent(QCloseEvent* event)
+{
+    if (m_settingsWindow) {
+        m_settingsWindow->close();
+    }
+    SystemWindow::closeEvent(event);
 }
 
 void MainWindow::showEvent(QShowEvent* event)
@@ -300,6 +316,27 @@ void MainWindow::updateBackdropTheme()
     QColor backdropColor = ThemeManager::instance().color(ThemeColor::WindowBackground);
     backdropColor.setAlpha(92);
     setBackdropColor(backdropColor);
+}
+
+void MainWindow::openSettingsWindow()
+{
+    if (!m_settingsWindow) {
+        m_settingsWindow = new SettingsWindow(this);
+    }
+
+    QScreen* targetScreen = QGuiApplication::screenAt(frameGeometry().center());
+    if (!targetScreen) {
+        targetScreen = QGuiApplication::primaryScreen();
+    }
+
+    const QRect parentGeometry = targetScreen ? targetScreen->availableGeometry() : frameGeometry();
+    const QSize settingsSize = m_settingsWindow->size();
+    const QPoint topLeft(parentGeometry.center().x() - settingsSize.width() / 2,
+                         parentGeometry.center().y() - settingsSize.height() / 2);
+    m_settingsWindow->move(topLeft);
+    m_settingsWindow->show();
+    m_settingsWindow->raise();
+    m_settingsWindow->activateWindow();
 }
 
 void MainWindow::openConversationFromContacts(const QString& conversationId)

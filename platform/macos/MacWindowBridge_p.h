@@ -10,6 +10,6 @@ struct WindowMetrics {
     int leadingInset = 60;
 };
 
-WindowMetrics configureWindow(QWidget* widget, const QColor& tintColor);
+WindowMetrics configureWindow(QWidget* widget, const QColor& tintColor, bool compactTrafficLights);
 bool startWindowDrag(QWidget* widget);
 }

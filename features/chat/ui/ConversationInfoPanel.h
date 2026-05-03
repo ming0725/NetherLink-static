@@ -90,6 +90,7 @@ private:
 
     void rebuildMemberPreview();
     void clearMemberFullList();
+    void applyMemberListTheme();
     void requestNextMemberPage();
     void showMainPage();
     void showMemberListPage();

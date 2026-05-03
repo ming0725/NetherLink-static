@@ -13,12 +13,14 @@ class MessageApplication;
 class FriendApplication;
 class PostApplication;
 class AiChatApplication;
+class SettingsWindow;
 
 class MainWindow : public SystemWindow {
 public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow() override;
 protected:
+    void closeEvent(QCloseEvent* event) override;
     void resizeEvent(QResizeEvent *event) override;
     void moveEvent(QMoveEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
@@ -33,6 +35,7 @@ private:
     void connectFriendConversationRequests();
     void openConversationFromContacts(const QString& conversationId);
     void updateBackdropTheme();
+    void openSettingsWindow();
     void layoutWindow();
 
     ApplicationBar *appBar;
@@ -47,5 +50,6 @@ private:
     PostApplication* m_postApp = nullptr;
     AiChatApplication* m_aiChatApp = nullptr;
     DefaultPage* m_defaultPage = nullptr;
+    QPointer<SettingsWindow> m_settingsWindow;
     QPointer<QWidget> m_pendingFocusClear;
 };

@@ -5,6 +5,7 @@
 #include "shared/types/User.h"
 
 class QLabel;
+class PaintedLabel;
 class InlineEditableText;
 class StatefulPushButton;
 class StyledActionMenu;
@@ -34,8 +35,6 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
 
 private:
-    class AvatarLabel;
-
     void setUser(const User& user);
     void updateAvatar();
     void applyTheme();
@@ -51,17 +50,18 @@ private:
     User m_user;
     bool m_hasUser = false;
 
-    AvatarLabel* m_avatarLabel;
-    QLabel* m_nameLabel;
-    QLabel* m_idLabel;
+    QString m_avatarSource;
+    QWidget* m_contentWidget;
+    PaintedLabel* m_nameLabel;
+    PaintedLabel* m_idLabel;
     QWidget* m_regionRow;
-    QLabel* m_regionLabel;
+    PaintedLabel* m_regionLabel;
     QLabel* m_statusIcon;
-    QLabel* m_statusLabel;
+    PaintedLabel* m_statusLabel;
     InlineEditableText* m_remarkEdit;
     QToolButton* m_groupButton;
     StyledActionMenu* m_groupMenu;
-    QLabel* m_signatureLabel;
+    PaintedLabel* m_signatureLabel;
     StatefulPushButton* m_messageButton;
     StatefulPushButton* m_deleteButton;
 };

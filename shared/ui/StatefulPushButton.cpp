@@ -24,6 +24,7 @@ StatefulPushButton::StatefulPushButton(QWidget* parent)
         , m_animationDuration(0)
         , m_isHovered(false)
         , m_isPressed(false)
+        , m_forcedPressedVisual(false)
         , m_colorAnimation(new QPropertyAnimation(this, "currentColor"))
 {
     initializeButton();
@@ -45,6 +46,7 @@ StatefulPushButton::StatefulPushButton(const QString& text, QWidget* parent)
         , m_animationDuration(0)
         , m_isHovered(false)
         , m_isPressed(false)
+        , m_forcedPressedVisual(false)
         , m_colorAnimation(new QPropertyAnimation(this, "currentColor"))
 {
     initializeButton();
@@ -76,7 +78,7 @@ void StatefulPushButton::applyStateColor()
     QColor target;
     if (!isEnabled()) {
         target = m_disabledColor;
-    } else if (m_isPressed) {
+    } else if (m_isPressed || m_forcedPressedVisual) {
         target = m_pressColor;
     } else if (m_isHovered) {
         target = m_hoverColor;
@@ -160,6 +162,16 @@ void StatefulPushButton::setAnimationDuration(int ms)
 }
 
 int StatefulPushButton::animationDuration() const { return m_animationDuration; }
+
+void StatefulPushButton::setPressedVisual(bool pressed)
+{
+    if (m_forcedPressedVisual == pressed) {
+        return;
+    }
+
+    m_forcedPressedVisual = pressed;
+    applyStateColor();
+}
 
 void StatefulPushButton::setDefaultStyle() {
     setNormalColor(ThemeManager::instance().color(ThemeColor::PanelRaisedBackground));
@@ -278,6 +290,9 @@ bool StatefulPushButton::event(QEvent* e)
         || e->type() == QEvent::WindowDeactivate) {
         m_isHovered = false;
         m_isPressed = false;
+        if (e->type() == QEvent::EnabledChange || e->type() == QEvent::Hide) {
+            m_forcedPressedVisual = false;
+        }
         applyStateColor();
     }
     return QPushButton::event(e);

@@ -65,6 +65,7 @@ public:
 
     void setDragTitleBar(QWidget* titleBar);
     void setBackdropColor(const QColor& color);
+    void setCompactTrafficLightsEnabled(bool enabled);
 
     int topInset() const { return m_topInset; }
     int leadingInset() const { return m_leadingInset; }
@@ -97,6 +98,7 @@ private:
     int m_leadingInset = 0;
     bool m_platformChromeReady = false;
     bool m_isMaximized = false;
+    bool m_compactTrafficLightsEnabled = false;
 
 #ifdef Q_OS_WIN
     PFN_SetWindowCompositionAttribute m_setWindowCompositionAttribute = nullptr;

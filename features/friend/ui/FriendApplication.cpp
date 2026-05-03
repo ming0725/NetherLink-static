@@ -1,4 +1,5 @@
 #include "FriendApplication.h"
+#include "shared/ui/StyledActionMenu.h"
 #include "shared/ui/TransparentSplitter.h"
 #include "shared/theme/ThemeManager.h"
 #include <QPainter>
@@ -88,27 +89,59 @@ private:
     qreal m_thumbProgress = 0.0;
 };
 
-QString modeButtonStyle()
+class ModeSegmentButton final : public QPushButton
 {
-    return QStringLiteral(
-            "QPushButton {"
-            "border: none;"
-            "border-radius: 4px;"
-            "background: transparent;"
-            "color: %1;"
-            "font-size: 12px;"
-            "}"
-            "QPushButton:checked {"
-            "background: transparent;"
-            "color: %2;"
-            "font-weight: 500;"
-            "}"
-            "QPushButton:hover:!checked {"
-            "background: transparent;"
-            "}")
-            .arg(ThemeManager::instance().color(ThemeColor::SecondaryText).name(),
-                 ThemeManager::instance().color(ThemeColor::Accent).name());
-}
+public:
+    explicit ModeSegmentButton(const QString& text, QWidget* parent = nullptr)
+        : QPushButton(text, parent)
+    {
+        setCheckable(true);
+        setAutoExclusive(true);
+        setCursor(Qt::PointingHandCursor);
+        setFocusPolicy(Qt::NoFocus);
+        setAttribute(Qt::WA_Hover);
+        setFlat(true);
+    }
+
+protected:
+    bool event(QEvent* event) override
+    {
+        switch (event->type()) {
+        case QEvent::HoverEnter:
+        case QEvent::HoverLeave:
+        case QEvent::MouseButtonPress:
+        case QEvent::MouseButtonRelease:
+        case QEvent::EnabledChange:
+            update();
+            break;
+        default:
+            break;
+        }
+        return QPushButton::event(event);
+    }
+
+    void paintEvent(QPaintEvent* event) override
+    {
+        Q_UNUSED(event);
+
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+
+        QFont textFont = font();
+        textFont.setPixelSize(12);
+        textFont.setWeight(isChecked() ? QFont::Medium : QFont::Normal);
+        painter.setFont(textFont);
+
+        QColor textColor = ThemeManager::instance().color(ThemeColor::SecondaryText);
+        if (isChecked()) {
+            textColor = ThemeManager::instance().color(ThemeColor::Accent);
+        } else if (underMouse()) {
+            textColor = ThemeManager::instance().color(ThemeColor::PrimaryText);
+        }
+        painter.setPen(textColor);
+        painter.drawText(rect(), Qt::AlignCenter, text());
+    }
+};
 
 } // namespace
 
@@ -117,8 +150,8 @@ FriendApplication::LeftPane::LeftPane(QWidget* parent)
         , m_searchInput(new IconLineEdit(this))
         , m_addButton(new StatefulPushButton("+", this))
         , m_modeBar(new ModeSwitchBar(this))
-        , m_friendModeButton(new QPushButton(QStringLiteral("好友"), m_modeBar))
-        , m_groupModeButton(new QPushButton(QStringLiteral("群聊"), m_modeBar))
+        , m_friendModeButton(new ModeSegmentButton(QStringLiteral("好友"), m_modeBar))
+        , m_groupModeButton(new ModeSegmentButton(QStringLiteral("群聊"), m_modeBar))
         , m_content(new FriendListWidget(this))
         , m_groupList(new GroupListWidget(this))
 {
@@ -132,15 +165,7 @@ FriendApplication::LeftPane::LeftPane(QWidget* parent)
     addFont.setPixelSize(18);
     m_addButton->setFont(addFont);
 
-    m_friendModeButton->setCheckable(true);
     m_friendModeButton->setChecked(true);
-    m_friendModeButton->setAutoExclusive(true);
-    m_friendModeButton->setCursor(Qt::PointingHandCursor);
-    m_friendModeButton->setFocusPolicy(Qt::NoFocus);
-    m_groupModeButton->setCheckable(true);
-    m_groupModeButton->setAutoExclusive(true);
-    m_groupModeButton->setCursor(Qt::PointingHandCursor);
-    m_groupModeButton->setFocusPolicy(Qt::NoFocus);
     static_cast<ModeSwitchBar*>(m_modeBar)->setButtons(m_friendModeButton, m_groupModeButton);
 
     m_groupList->hide();
@@ -148,6 +173,25 @@ FriendApplication::LeftPane::LeftPane(QWidget* parent)
     applyTheme();
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
         applyTheme();
+    });
+
+    connect(m_addButton, &StatefulPushButton::clicked, this, [this]() {
+        auto* menu = new StyledActionMenu(this);
+        menu->setItemHoverColor(QColor(238, 238, 238));
+        menu->addAction(QStringLiteral("添加好友"));
+        menu->addAction(QStringLiteral("添加群聊"));
+        menu->addAction(QStringLiteral("创建群聊"));
+
+        connect(menu, &QMenu::aboutToHide, this, [this, menu]() {
+            m_addButton->setPressedVisual(false);
+            menu->deleteLater();
+        });
+
+        m_addButton->setPressedVisual(true);
+        const int popupGap = menu->isUsingNativeMenu() ? 10 : 0;
+        const QPoint popupPos = m_addButton->mapToGlobal(
+                QPoint(0, m_addButton->height() + popupGap));
+        menu->popup(popupPos);
     });
 
     connect(m_friendModeButton, &QPushButton::clicked, this, [this]() { updateContentMode(true); });
@@ -161,9 +205,8 @@ void FriendApplication::LeftPane::applyTheme()
     m_addButton->setPressColor(ThemeManager::instance().color(ThemeColor::Divider));
     m_addButton->setTextColor(ThemeManager::instance().color(ThemeColor::PrimaryText));
 
-    const QString buttonStyle = modeButtonStyle();
-    m_friendModeButton->setStyleSheet(buttonStyle);
-    m_groupModeButton->setStyleSheet(buttonStyle);
+    m_friendModeButton->update();
+    m_groupModeButton->update();
     m_modeBar->update();
     update();
 }

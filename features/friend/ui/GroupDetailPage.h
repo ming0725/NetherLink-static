@@ -5,6 +5,7 @@
 #include "shared/types/Group.h"
 
 class QLabel;
+class PaintedLabel;
 class InlineEditableText;
 class StatefulPushButton;
 class StyledActionMenu;
@@ -32,8 +33,6 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
 
 private:
-    class AvatarLabel;
-
     void setGroup(const Group& group);
     void updateAvatar();
     void applyTheme();
@@ -53,15 +52,16 @@ private:
     Group m_group;
     bool m_hasGroup = false;
 
-    AvatarLabel* m_avatarLabel;
-    QLabel* m_nameLabel;
-    QLabel* m_idLabel;
+    QString m_avatarSource;
+    QWidget* m_contentWidget;
+    PaintedLabel* m_nameLabel;
+    PaintedLabel* m_idLabel;
     InlineEditableText* m_remarkEdit;
     QToolButton* m_categoryButton;
     StyledActionMenu* m_categoryMenu;
-    QLabel* m_introLabel;
-    QLabel* m_announcementLabel;
-    QLabel* m_memberCountLabel;
+    PaintedLabel* m_introLabel;
+    PaintedLabel* m_announcementLabel;
+    PaintedLabel* m_memberCountLabel;
     StatefulPushButton* m_messageButton;
     StatefulPushButton* m_exitButton;
 };

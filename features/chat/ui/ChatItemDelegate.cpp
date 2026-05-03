@@ -167,15 +167,15 @@ void ChatItemDelegate::drawBubble(QPainter* painter, const QRect& rect,
 
     QColor bubbleColor;
     const bool dark = ThemeManager::instance().isDark();
-    if (dark && isFromMe) {
-        bubbleColor = isSelected ? QColor(0x16, 0x6e, 0xbb)
-                                 : QColor(0x1e, 0x86, 0xdf);
+    if (isFromMe) {
+        const QColor ownBubbleColor = dark
+                ? QColor(0x1e, 0x86, 0xdf)
+                : ThemeManager::instance().color(ThemeColor::Accent);
+        bubbleColor = isSelected ? ownBubbleColor.darker(118)
+                                 : ownBubbleColor;
     } else if (dark) {
         bubbleColor = isSelected ? QColor(0x25, 0x29, 0x30)
                                  : QColor(0x2d, 0x31, 0x38);
-    } else if (isFromMe) {
-        bubbleColor = isSelected ? QColor(0x1b, 0xa6, 0xff)
-                                 : ThemeManager::instance().color(ThemeColor::Accent);
     } else {
         bubbleColor = isSelected ? QColor(0xea, 0xea, 0xea)
                                  : ThemeManager::instance().color(ThemeColor::PanelBackground);

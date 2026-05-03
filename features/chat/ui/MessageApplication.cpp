@@ -1,6 +1,7 @@
 // MessageApplication.cpp
 #include "MessageApplication.h"
 #include "features/chat/data/MessageRepository.h"
+#include "shared/ui/StyledActionMenu.h"
 #include "shared/ui/TransparentSplitter.h"
 #include "shared/theme/ThemeManager.h"
 
@@ -34,6 +35,25 @@ MessageApplication::LeftPane::LeftPane(QWidget* parent)
     applyTheme();
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
         applyTheme();
+    });
+
+    connect(m_addButton, &StatefulPushButton::clicked, this, [this]() {
+        auto* menu = new StyledActionMenu(this);
+        menu->setItemHoverColor(QColor(238, 238, 238));
+        menu->addAction(QStringLiteral("添加好友"));
+        menu->addAction(QStringLiteral("添加群聊"));
+        menu->addAction(QStringLiteral("创建群聊"));
+
+        connect(menu, &QMenu::aboutToHide, this, [this, menu]() {
+            m_addButton->setPressedVisual(false);
+            menu->deleteLater();
+        });
+
+        m_addButton->setPressedVisual(true);
+        const int popupGap = menu->isUsingNativeMenu() ? 10 : 0;
+        const QPoint popupPos = m_addButton->mapToGlobal(
+                QPoint(0, m_addButton->height() + popupGap));
+        menu->popup(popupPos);
     });
 }
 

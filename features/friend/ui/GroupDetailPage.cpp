@@ -3,7 +3,6 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QEvent>
-#include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
@@ -22,6 +21,7 @@
 #include "features/chat/data/MessageRepository.h"
 #include "shared/services/ImageService.h"
 #include "shared/ui/InlineEditableText.h"
+#include "shared/ui/PaintedLabel.h"
 #include "shared/ui/StatefulPushButton.h"
 #include "shared/ui/StyledActionMenu.h"
 #include "shared/theme/ThemeManager.h"
@@ -31,29 +31,19 @@ namespace {
 constexpr int kAvatarSize = 88;
 constexpr int kInfoTitleWidth = 96;
 constexpr int kInfoColumnSpacing = 24;
+constexpr int kHeaderSpacing = 30;
+constexpr int kIdentityTopInset = 6;
+constexpr int kSeparatorTopSpacing = 32;
 
-QLabel* makeTitleLabel(const QString& text)
+PaintedLabel* makeTitleLabel(const QString& text)
 {
-    auto* label = new QLabel(text);
+    auto* label = new PaintedLabel(text);
     QFont font = label->font();
     font.setPixelSize(14);
     label->setFont(font);
     label->setProperty("themeTextRole", static_cast<int>(ThemeColor::PrimaryText));
-    label->setStyleSheet(QStringLiteral("color: %1;")
-                                 .arg(ThemeManager::instance().color(ThemeColor::PrimaryText).name()));
+    label->setTextColor(ThemeManager::instance().color(ThemeColor::PrimaryText));
     return label;
-}
-
-QFrame* makeSeparator()
-{
-    auto* line = new QFrame;
-    line->setFrameShape(QFrame::HLine);
-    line->setFrameShadow(QFrame::Plain);
-    line->setFixedHeight(1);
-    line->setProperty("themeSeparator", true);
-    line->setStyleSheet(QStringLiteral("color: %1; background: %1; border: none;")
-                                .arg(ThemeManager::instance().color(ThemeColor::Divider).name()));
-    return line;
 }
 
 QHBoxLayout* makeInfoRow(const QString& title, QWidget* valueWidget)
@@ -69,15 +59,14 @@ QHBoxLayout* makeInfoRow(const QString& title, QWidget* valueWidget)
     return row;
 }
 
-QLabel* makeValueLabel(QWidget* parent)
+PaintedLabel* makeValueLabel(QWidget* parent)
 {
-    auto* label = new QLabel(parent);
+    auto* label = new PaintedLabel(parent);
     QFont font = label->font();
     font.setPixelSize(14);
     label->setFont(font);
     label->setProperty("themeTextRole", static_cast<int>(ThemeColor::PrimaryText));
-    label->setStyleSheet(QStringLiteral("color: %1;")
-                                 .arg(ThemeManager::instance().color(ThemeColor::PrimaryText).name()));
+    label->setTextColor(ThemeManager::instance().color(ThemeColor::PrimaryText));
     label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     label->setWordWrap(false);
     label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
@@ -100,13 +89,9 @@ void applyDangerOutlineButtonStyle(StatefulPushButton* button)
 {
     button->setRadius(8);
     button->setNormalColor(ThemeManager::instance().color(ThemeColor::PanelBackground));
-    button->setHoverColor(ThemeManager::instance().isDark()
-                          ? QColor(0x45, 0x2b, 0x2f)
-                          : QColor(0xff, 0xf4, 0xf4));
-    button->setPressColor(ThemeManager::instance().isDark()
-                          ? QColor(0x54, 0x30, 0x35)
-                          : QColor(0xff, 0xe8, 0xe8));
-    button->setTextColor(QColor(0xd9, 0x36, 0x36));
+    button->setHoverColor(ThemeManager::instance().color(ThemeColor::DangerControlHover));
+    button->setPressColor(ThemeManager::instance().color(ThemeColor::DangerControlPressed));
+    button->setTextColor(ThemeManager::instance().color(ThemeColor::DangerText));
     button->setBorderColor(ThemeManager::instance().color(ThemeColor::Divider));
     button->setBorderWidth(1);
 }
@@ -123,38 +108,6 @@ const QStringList& editableCategoryOrder()
 }
 
 } // namespace
-
-class GroupDetailPage::AvatarLabel : public QLabel
-{
-public:
-    explicit AvatarLabel(QWidget* parent = nullptr)
-        : QLabel(parent)
-    {
-        setFixedSize(kAvatarSize, kAvatarSize);
-    }
-
-    void setAvatarSource(const QString& source)
-    {
-        m_source = source;
-        updatePixmap();
-    }
-
-protected:
-    void resizeEvent(QResizeEvent* event) override
-    {
-        QLabel::resizeEvent(event);
-        updatePixmap();
-    }
-
-private:
-    void updatePixmap()
-    {
-        const qreal dpr = devicePixelRatioF();
-        setPixmap(ImageService::instance().circularAvatar(m_source, qMin(width(), height()), dpr));
-    }
-
-    QString m_source;
-};
 
 class CategorySelectButton : public QToolButton
 {
@@ -182,8 +135,15 @@ public:
 protected:
     bool event(QEvent* event) override
     {
-        if (event->type() == QEvent::Enter ||
-            event->type() == QEvent::MouseButtonPress) {
+        if (event->type() == QEvent::Enter) {
+            m_hovered = true;
+            setMenuHoverSuppressed(false);
+            update();
+        } else if (event->type() == QEvent::Leave) {
+            m_hovered = false;
+            setMenuHoverSuppressed(false);
+            update();
+        } else if (event->type() == QEvent::MouseButtonPress) {
             setMenuHoverSuppressed(false);
         }
         return QToolButton::event(event);
@@ -199,7 +159,7 @@ protected:
                 ? ThemeManager::instance().color(ThemeColor::Divider)
                 : ThemeManager::instance().color(ThemeColor::ListHover);
         const QColor bgColor = isEnabled()
-                ? ((underMouse() && !m_menuHoverSuppressed)
+                ? ((m_hovered && !m_menuHoverSuppressed)
                    ? ThemeManager::instance().color(ThemeColor::ListHover)
                    : ThemeManager::instance().color(ThemeColor::InputBackground))
                 : ThemeManager::instance().color(ThemeColor::PanelRaisedBackground);
@@ -235,14 +195,15 @@ protected:
     }
 
 private:
+    bool m_hovered = false;
     bool m_menuHoverSuppressed = false;
 };
 
 GroupDetailPage::GroupDetailPage(QWidget* parent)
     : QWidget(parent)
-    , m_avatarLabel(new AvatarLabel(this))
-    , m_nameLabel(new QLabel(this))
-    , m_idLabel(new QLabel(this))
+    , m_contentWidget(new QWidget(this))
+    , m_nameLabel(new PaintedLabel(this))
+    , m_idLabel(new PaintedLabel(this))
     , m_remarkEdit(new InlineEditableText(this))
     , m_categoryButton(new CategorySelectButton(this))
     , m_categoryMenu(new StyledActionMenu(this))
@@ -256,18 +217,17 @@ GroupDetailPage::GroupDetailPage(QWidget* parent)
     root->setContentsMargins(88, 64, 88, 40);
     root->setSpacing(0);
 
-    auto* content = new QWidget(this);
-    content->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    auto* contentLayout = new QVBoxLayout(content);
+    m_contentWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    auto* contentLayout = new QVBoxLayout(m_contentWidget);
     contentLayout->setContentsMargins(0, 0, 0, 0);
     contentLayout->setSpacing(0);
-    root->addWidget(content);
+    root->addWidget(m_contentWidget);
     root->addStretch(1);
 
     auto* header = new QHBoxLayout;
     header->setContentsMargins(0, 0, 0, 0);
-    header->setSpacing(30);
-    header->addWidget(m_avatarLabel, 0, Qt::AlignTop);
+    header->setSpacing(kHeaderSpacing);
+    header->addSpacing(kAvatarSize);
 
     auto* identity = new QVBoxLayout;
     identity->setContentsMargins(0, 6, 0, 0);
@@ -278,16 +238,14 @@ GroupDetailPage::GroupDetailPage(QWidget* parent)
     nameFont.setWeight(QFont::DemiBold);
     m_nameLabel->setFont(nameFont);
     m_nameLabel->setProperty("themeTextRole", static_cast<int>(ThemeColor::PrimaryText));
-    m_nameLabel->setStyleSheet(QStringLiteral("color: %1;")
-                                       .arg(ThemeManager::instance().color(ThemeColor::PrimaryText).name()));
+    m_nameLabel->setTextColor(ThemeManager::instance().color(ThemeColor::PrimaryText));
     m_nameLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
     QFont secondaryFont = m_idLabel->font();
     secondaryFont.setPixelSize(13);
     m_idLabel->setFont(secondaryFont);
     m_idLabel->setProperty("themeTextRole", static_cast<int>(ThemeColor::TertiaryText));
-    m_idLabel->setStyleSheet(QStringLiteral("color: %1;")
-                                     .arg(ThemeManager::instance().color(ThemeColor::TertiaryText).name()));
+    m_idLabel->setTextColor(ThemeManager::instance().color(ThemeColor::TertiaryText));
     m_idLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_idLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     m_idLabel->setFixedHeight(QFontMetrics(secondaryFont).height() + 2);
@@ -301,7 +259,7 @@ GroupDetailPage::GroupDetailPage(QWidget* parent)
     contentLayout->addLayout(header);
 
     contentLayout->addItem(makeCompressibleSpacing(32));
-    contentLayout->addWidget(makeSeparator());
+    contentLayout->addSpacing(1);
     contentLayout->addItem(makeCompressibleSpacing(34));
 
     m_remarkEdit->setPlaceholderText(QStringLiteral("设置群备注"));
@@ -392,7 +350,14 @@ void GroupDetailPage::clear()
 {
     m_group = {};
     m_hasGroup = false;
+    m_avatarSource.clear();
+    m_nameLabel->clear();
+    m_idLabel->clear();
+    m_introLabel->clear();
+    m_announcementLabel->clear();
+    m_memberCountLabel->clear();
     updateExitButtonState();
+    update();
 }
 
 void GroupDetailPage::resizeEvent(QResizeEvent* event)
@@ -406,6 +371,28 @@ void GroupDetailPage::paintEvent(QPaintEvent* event)
 {
     QPainter painter(this);
     painter.fillRect(event->rect(), ThemeManager::instance().color(ThemeColor::PageBackground));
+
+    if (!m_contentWidget) {
+        return;
+    }
+
+    const QPoint nameTopLeft = m_nameLabel->mapTo(this, QPoint(0, 0));
+    const int avatarX = nameTopLeft.x() - kHeaderSpacing - kAvatarSize;
+    const int avatarY = nameTopLeft.y() - kIdentityTopInset;
+    const QRect avatarRect(avatarX, avatarY, kAvatarSize, kAvatarSize);
+
+    if (avatarRect.intersects(event->rect()) && !m_avatarSource.isEmpty()) {
+        const QPixmap avatar = ImageService::instance().circularAvatar(m_avatarSource,
+                                                                       kAvatarSize,
+                                                                       devicePixelRatioF());
+        painter.drawPixmap(avatarRect, avatar);
+    }
+
+    const int separatorY = avatarY + kAvatarSize + kSeparatorTopSpacing;
+    const QRect separatorRect(m_contentWidget->x(), separatorY, m_contentWidget->width(), 1);
+    if (separatorRect.intersects(event->rect())) {
+        painter.fillRect(separatorRect, ThemeManager::instance().color(ThemeColor::Divider));
+    }
 }
 
 bool GroupDetailPage::eventFilter(QObject* watched, QEvent* event)
@@ -446,29 +433,20 @@ void GroupDetailPage::setGroup(const Group& group)
 
 void GroupDetailPage::updateAvatar()
 {
-    m_avatarLabel->setAvatarSource(m_group.groupAvatarPath);
+    m_avatarSource = m_group.groupAvatarPath;
+    update();
 }
 
 void GroupDetailPage::applyTheme()
 {
-    const QList<QLabel*> labels = findChildren<QLabel*>();
-    for (QLabel* label : labels) {
+    const QList<PaintedLabel*> labels = findChildren<PaintedLabel*>();
+    for (PaintedLabel* label : labels) {
         const QVariant roleValue = label->property("themeTextRole");
         if (!roleValue.isValid()) {
             continue;
         }
         const auto role = static_cast<ThemeColor>(roleValue.toInt());
-        label->setStyleSheet(QStringLiteral("color: %1;")
-                                     .arg(ThemeManager::instance().color(role).name()));
-    }
-
-    const QList<QFrame*> separators = findChildren<QFrame*>();
-    for (QFrame* separator : separators) {
-        if (!separator->property("themeSeparator").toBool()) {
-            continue;
-        }
-        const QString divider = ThemeManager::instance().color(ThemeColor::Divider).name();
-        separator->setStyleSheet(QStringLiteral("color: %1; background: %1; border: none;").arg(divider));
+        label->setTextColor(ThemeManager::instance().color(role));
     }
 
     m_remarkEdit->setTextColor(ThemeManager::instance().color(ThemeColor::SecondaryText));

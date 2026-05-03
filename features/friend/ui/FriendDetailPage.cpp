@@ -3,7 +3,6 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QEvent>
-#include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
@@ -22,6 +21,7 @@
 #include "features/chat/data/MessageRepository.h"
 #include "shared/services/ImageService.h"
 #include "shared/ui/InlineEditableText.h"
+#include "shared/ui/PaintedLabel.h"
 #include "shared/ui/StatefulPushButton.h"
 #include "shared/ui/StyledActionMenu.h"
 #include "shared/theme/ThemeManager.h"
@@ -30,29 +30,19 @@ namespace {
 
 constexpr int kAvatarSize = 88;
 constexpr int kContentMaxWidth = 660;
+constexpr int kHeaderSpacing = 32;
+constexpr int kIdentityTopInset = 6;
+constexpr int kSeparatorTopSpacing = 54;
 
-QLabel* makeTitleLabel(const QString& text)
+PaintedLabel* makeTitleLabel(const QString& text)
 {
-    auto* label = new QLabel(text);
+    auto* label = new PaintedLabel(text);
     QFont font = label->font();
     font.setPixelSize(14);
     label->setFont(font);
     label->setProperty("themeTextRole", static_cast<int>(ThemeColor::PrimaryText));
-    label->setStyleSheet(QStringLiteral("color: %1;")
-                                 .arg(ThemeManager::instance().color(ThemeColor::PrimaryText).name()));
+    label->setTextColor(ThemeManager::instance().color(ThemeColor::PrimaryText));
     return label;
-}
-
-QFrame* makeSeparator()
-{
-    auto* line = new QFrame;
-    line->setFrameShape(QFrame::HLine);
-    line->setFrameShadow(QFrame::Plain);
-    line->setFixedHeight(1);
-    line->setProperty("themeSeparator", true);
-    line->setStyleSheet(QStringLiteral("color: %1; background: %1; border: none;")
-                                .arg(ThemeManager::instance().color(ThemeColor::Divider).name()));
-    return line;
 }
 
 QHBoxLayout* makeInfoRow(const QString& title, QWidget* valueWidget)
@@ -78,50 +68,14 @@ void applyDangerOutlineButtonStyle(StatefulPushButton* button)
 {
     button->setRadius(8);
     button->setNormalColor(ThemeManager::instance().color(ThemeColor::PanelBackground));
-    button->setHoverColor(ThemeManager::instance().isDark()
-                          ? QColor(0x45, 0x2b, 0x2f)
-                          : QColor(0xff, 0xf4, 0xf4));
-    button->setPressColor(ThemeManager::instance().isDark()
-                          ? QColor(0x54, 0x30, 0x35)
-                          : QColor(0xff, 0xe8, 0xe8));
-    button->setTextColor(QColor(0xd9, 0x36, 0x36));
+    button->setHoverColor(ThemeManager::instance().color(ThemeColor::DangerControlHover));
+    button->setPressColor(ThemeManager::instance().color(ThemeColor::DangerControlPressed));
+    button->setTextColor(ThemeManager::instance().color(ThemeColor::DangerText));
     button->setBorderColor(ThemeManager::instance().color(ThemeColor::Divider));
     button->setBorderWidth(1);
 }
 
 } // namespace
-
-class FriendDetailPage::AvatarLabel : public QLabel
-{
-public:
-    explicit AvatarLabel(QWidget* parent = nullptr)
-        : QLabel(parent)
-    {
-        setFixedSize(kAvatarSize, kAvatarSize);
-    }
-
-    void setAvatarSource(const QString& source)
-    {
-        m_source = source;
-        updatePixmap();
-    }
-
-protected:
-    void resizeEvent(QResizeEvent* event) override
-    {
-        QLabel::resizeEvent(event);
-        updatePixmap();
-    }
-
-private:
-    void updatePixmap()
-    {
-        const qreal dpr = devicePixelRatioF();
-        setPixmap(ImageService::instance().circularAvatar(m_source, qMin(width(), height()), dpr));
-    }
-
-    QString m_source;
-};
 
 class GroupSelectButton : public QToolButton
 {
@@ -149,8 +103,15 @@ public:
 protected:
     bool event(QEvent* event) override
     {
-        if (event->type() == QEvent::Enter ||
-            event->type() == QEvent::MouseButtonPress) {
+        if (event->type() == QEvent::Enter) {
+            m_hovered = true;
+            setMenuHoverSuppressed(false);
+            update();
+        } else if (event->type() == QEvent::Leave) {
+            m_hovered = false;
+            setMenuHoverSuppressed(false);
+            update();
+        } else if (event->type() == QEvent::MouseButtonPress) {
             setMenuHoverSuppressed(false);
         }
         return QToolButton::event(event);
@@ -163,7 +124,7 @@ protected:
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
         painter.setPen(QPen(ThemeManager::instance().color(ThemeColor::Divider), 1));
-        painter.setBrush((underMouse() && !m_menuHoverSuppressed)
+        painter.setBrush((m_hovered && !m_menuHoverSuppressed)
                                  ? ThemeManager::instance().color(ThemeColor::ListHover)
                                  : ThemeManager::instance().color(ThemeColor::InputBackground));
         painter.drawRoundedRect(rect().adjusted(0, 0, -1, -1), 5, 5);
@@ -190,22 +151,23 @@ protected:
     }
 
 private:
+    bool m_hovered = false;
     bool m_menuHoverSuppressed = false;
 };
 
 FriendDetailPage::FriendDetailPage(QWidget* parent)
     : QWidget(parent)
-    , m_avatarLabel(new AvatarLabel(this))
-    , m_nameLabel(new QLabel(this))
-    , m_idLabel(new QLabel(this))
+    , m_contentWidget(new QWidget(this))
+    , m_nameLabel(new PaintedLabel(this))
+    , m_idLabel(new PaintedLabel(this))
     , m_regionRow(new QWidget(this))
-    , m_regionLabel(new QLabel(this))
+    , m_regionLabel(new PaintedLabel(this))
     , m_statusIcon(new QLabel(this))
-    , m_statusLabel(new QLabel(this))
+    , m_statusLabel(new PaintedLabel(this))
     , m_remarkEdit(new InlineEditableText(this))
     , m_groupButton(new GroupSelectButton(this))
     , m_groupMenu(new StyledActionMenu(this))
-    , m_signatureLabel(new QLabel(this))
+    , m_signatureLabel(new PaintedLabel(this))
     , m_messageButton(new StatefulPushButton(QStringLiteral("发消息"), this))
     , m_deleteButton(new StatefulPushButton(QStringLiteral("删除好友"), this))
 {
@@ -213,18 +175,17 @@ FriendDetailPage::FriendDetailPage(QWidget* parent)
     root->setContentsMargins(48, 80, 48, 44);
     root->setSpacing(0);
 
-    auto* content = new QWidget(this);
-    content->setMaximumWidth(kContentMaxWidth);
-    auto* contentLayout = new QVBoxLayout(content);
+    m_contentWidget->setMaximumWidth(kContentMaxWidth);
+    auto* contentLayout = new QVBoxLayout(m_contentWidget);
     contentLayout->setContentsMargins(0, 0, 0, 0);
     contentLayout->setSpacing(0);
-    root->addWidget(content, 0, Qt::AlignHCenter);
+    root->addWidget(m_contentWidget, 0, Qt::AlignHCenter);
     root->addStretch(1);
 
     auto* header = new QHBoxLayout;
     header->setContentsMargins(0, 0, 0, 0);
-    header->setSpacing(32);
-    header->addWidget(m_avatarLabel, 0, Qt::AlignTop);
+    header->setSpacing(kHeaderSpacing);
+    header->addSpacing(kAvatarSize);
 
     auto* identity = new QVBoxLayout;
     identity->setContentsMargins(0, 6, 0, 0);
@@ -235,8 +196,7 @@ FriendDetailPage::FriendDetailPage(QWidget* parent)
     nameFont.setWeight(QFont::DemiBold);
     m_nameLabel->setFont(nameFont);
     m_nameLabel->setProperty("themeTextRole", static_cast<int>(ThemeColor::PrimaryText));
-    m_nameLabel->setStyleSheet(QStringLiteral("color: %1;")
-                                       .arg(ThemeManager::instance().color(ThemeColor::PrimaryText).name()));
+    m_nameLabel->setTextColor(ThemeManager::instance().color(ThemeColor::PrimaryText));
     m_nameLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
     QFont secondaryFont = m_idLabel->font();
@@ -247,14 +207,11 @@ FriendDetailPage::FriendDetailPage(QWidget* parent)
     m_idLabel->setProperty("themeTextRole", static_cast<int>(ThemeColor::TertiaryText));
     m_regionLabel->setProperty("themeTextRole", static_cast<int>(ThemeColor::TertiaryText));
     m_statusLabel->setProperty("themeTextRole", static_cast<int>(ThemeColor::PrimaryText));
-    m_idLabel->setStyleSheet(QStringLiteral("color: %1;")
-                                     .arg(ThemeManager::instance().color(ThemeColor::TertiaryText).name()));
+    m_idLabel->setTextColor(ThemeManager::instance().color(ThemeColor::TertiaryText));
     m_idLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    m_regionLabel->setStyleSheet(QStringLiteral("color: %1;")
-                                         .arg(ThemeManager::instance().color(ThemeColor::TertiaryText).name()));
+    m_regionLabel->setTextColor(ThemeManager::instance().color(ThemeColor::TertiaryText));
     m_regionLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_statusLabel->setStyleSheet(QStringLiteral("color: %1;")
-                                         .arg(ThemeManager::instance().color(ThemeColor::PrimaryText).name()));
+    m_statusLabel->setTextColor(ThemeManager::instance().color(ThemeColor::PrimaryText));
 
     auto* statusRow = new QHBoxLayout;
     statusRow->setContentsMargins(0, 0, 0, 0);
@@ -272,7 +229,7 @@ FriendDetailPage::FriendDetailPage(QWidget* parent)
     contentLayout->addLayout(header);
 
     contentLayout->addSpacing(54);
-    contentLayout->addWidget(makeSeparator());
+    contentLayout->addSpacing(1);
     contentLayout->addSpacing(34);
 
     auto* regionHost = new QWidget(this);
@@ -311,8 +268,7 @@ FriendDetailPage::FriendDetailPage(QWidget* parent)
     contentLayout->addSpacing(28);
 
     m_signatureLabel->setProperty("themeTextRole", static_cast<int>(ThemeColor::PrimaryText));
-    m_signatureLabel->setStyleSheet(QStringLiteral("color: %1;")
-                                            .arg(ThemeManager::instance().color(ThemeColor::PrimaryText).name()));
+    m_signatureLabel->setTextColor(ThemeManager::instance().color(ThemeColor::PrimaryText));
     QFont signatureFont = m_signatureLabel->font();
     signatureFont.setPixelSize(14);
     m_signatureLabel->setFont(signatureFont);
@@ -374,11 +330,14 @@ void FriendDetailPage::clear()
 {
     m_user = {};
     m_hasUser = false;
+    m_avatarSource.clear();
     m_nameLabel->clear();
     m_idLabel->clear();
     m_regionLabel->clear();
     m_regionRow->hide();
     m_statusLabel->clear();
+    m_statusIcon->clear();
+    update();
 }
 
 void FriendDetailPage::resizeEvent(QResizeEvent* event)
@@ -391,6 +350,28 @@ void FriendDetailPage::paintEvent(QPaintEvent* event)
 {
     QPainter painter(this);
     painter.fillRect(event->rect(), ThemeManager::instance().color(ThemeColor::PageBackground));
+
+    if (!m_contentWidget) {
+        return;
+    }
+
+    const QPoint nameTopLeft = m_nameLabel->mapTo(this, QPoint(0, 0));
+    const int avatarX = nameTopLeft.x() - kHeaderSpacing - kAvatarSize;
+    const int avatarY = nameTopLeft.y() - kIdentityTopInset;
+    const QRect avatarRect(avatarX, avatarY, kAvatarSize, kAvatarSize);
+
+    if (avatarRect.intersects(event->rect()) && !m_avatarSource.isEmpty()) {
+        const QPixmap avatar = ImageService::instance().circularAvatar(m_avatarSource,
+                                                                       kAvatarSize,
+                                                                       devicePixelRatioF());
+        painter.drawPixmap(avatarRect, avatar);
+    }
+
+    const int separatorY = avatarY + kAvatarSize + kSeparatorTopSpacing;
+    const QRect separatorRect(m_contentWidget->x(), separatorY, m_contentWidget->width(), 1);
+    if (separatorRect.intersects(event->rect())) {
+        painter.fillRect(separatorRect, ThemeManager::instance().color(ThemeColor::Divider));
+    }
 }
 
 bool FriendDetailPage::eventFilter(QObject* watched, QEvent* event)
@@ -430,34 +411,25 @@ void FriendDetailPage::setUser(const User& user)
 
 void FriendDetailPage::updateAvatar()
 {
-    m_avatarLabel->setAvatarSource(m_user.avatarPath);
+    m_avatarSource = m_user.avatarPath;
     const QPixmap statusPixmap = ImageService::instance().scaled(statusIconPath(m_user.status),
                                                                  QSize(14, 14),
                                                                  Qt::KeepAspectRatio,
                                                                  devicePixelRatioF());
     m_statusIcon->setPixmap(statusPixmap);
+    update();
 }
 
 void FriendDetailPage::applyTheme()
 {
-    const QList<QLabel*> labels = findChildren<QLabel*>();
-    for (QLabel* label : labels) {
+    const QList<PaintedLabel*> labels = findChildren<PaintedLabel*>();
+    for (PaintedLabel* label : labels) {
         const QVariant roleValue = label->property("themeTextRole");
         if (!roleValue.isValid()) {
             continue;
         }
         const auto role = static_cast<ThemeColor>(roleValue.toInt());
-        label->setStyleSheet(QStringLiteral("color: %1;")
-                                     .arg(ThemeManager::instance().color(role).name()));
-    }
-
-    const QList<QFrame*> separators = findChildren<QFrame*>();
-    for (QFrame* separator : separators) {
-        if (!separator->property("themeSeparator").toBool()) {
-            continue;
-        }
-        const QString divider = ThemeManager::instance().color(ThemeColor::Divider).name();
-        separator->setStyleSheet(QStringLiteral("color: %1; background: %1; border: none;").arg(divider));
+        label->setTextColor(ThemeManager::instance().color(role));
     }
 
     m_remarkEdit->setTextColor(ThemeManager::instance().color(ThemeColor::SecondaryText));

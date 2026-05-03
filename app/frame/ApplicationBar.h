@@ -30,13 +30,16 @@ private slots:
     void onItemClicked(ApplicationBarItem*);
 signals:
     void applicationClicked(ApplicationBarItem*);
+    void settingsRequested();
 private:
     void layoutItems();
     ApplicationBarItem* itemAtPosition(const QPoint& pos) const;
     void setHoveredItem(ApplicationBarItem* item);
+    void showMoreOptionsMenu();
 
     ApplicationBarItem* selectedItem = nullptr;
     ApplicationBarItem* hoveredItem = nullptr;
+    ApplicationBarItem* moreOptionsItem = nullptr;
     QString avatarSource;
     QVector<ApplicationBarItem*> topItems;
     QVector<ApplicationBarItem*> bottomItems;

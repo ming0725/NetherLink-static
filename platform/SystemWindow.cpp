@@ -91,6 +91,20 @@ void SystemWindow::setBackdropColor(const QColor& color)
 #endif
 }
 
+void SystemWindow::setCompactTrafficLightsEnabled(bool enabled)
+{
+    if (m_compactTrafficLightsEnabled == enabled) {
+        return;
+    }
+
+    m_compactTrafficLightsEnabled = enabled;
+#ifdef Q_OS_MACOS
+    if (m_platformChromeReady) {
+        refreshPlatformMetrics();
+    }
+#endif
+}
+
 bool SystemWindow::usesSystemTitleButtons() const
 {
 #ifdef Q_OS_MACOS
@@ -253,7 +267,9 @@ void SystemWindow::ensurePlatformChrome()
 void SystemWindow::refreshPlatformMetrics()
 {
 #ifdef Q_OS_MACOS
-    const auto metrics = MacWindowBridge::configureWindow(this, m_backdropColor);
+    const auto metrics = MacWindowBridge::configureWindow(this,
+                                                          m_backdropColor,
+                                                          m_compactTrafficLightsEnabled);
     m_topInset = metrics.topInset;
     m_leadingInset = metrics.leadingInset;
 #endif

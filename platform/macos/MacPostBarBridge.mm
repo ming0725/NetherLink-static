@@ -555,8 +555,7 @@ NSView* ensureSelectionView(NSView* qtView, NSView* contentView)
     }
 
     applyAppThemeAppearance(selectionView);
-    selectionView.layer.backgroundColor = nsColorForTheme(ThemeColor::AppBarItemSelectedBackground,
-                                                          ThemeManager::instance().isDark() ? 0.74 : 0.26).CGColor;
+    selectionView.layer.backgroundColor = nsColorForTheme(ThemeColor::PostBarItemSelectedBackground).CGColor;
     return selectionView;
 }
 

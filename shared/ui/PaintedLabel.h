@@ -5,6 +5,8 @@
 
 class PaintedLabel : public QLabel
 {
+    Q_OBJECT
+
 public:
     explicit PaintedLabel(QWidget* parent = nullptr);
     explicit PaintedLabel(const QString& text, QWidget* parent = nullptr);

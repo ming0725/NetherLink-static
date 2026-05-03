@@ -11,15 +11,6 @@
 #include <QWidget>
 #include <QtGlobal>
 
-namespace {
-
-QString cssColor(const QColor& color)
-{
-    return color.name(QColor::HexRgb);
-}
-
-} // namespace
-
 ThemeManager& ThemeManager::instance()
 {
     static ThemeManager manager;
@@ -92,11 +83,33 @@ QColor ThemeManager::color(ThemeColor role) const
         case ThemeColor::ListHover:
             return QColor(0xf0, 0xf0, 0xf0);
         case ThemeColor::ListPinned:
-            return QColor(0xf3, 0xf3, 0xf3);
+            return QColor(0xec, 0xec, 0xec);
+        case ThemeColor::ChatInfoPanelOverlay:
+            return QColor(0, 0, 0, 88);
+        case ThemeColor::SettingsOverlay:
+            return QColor(0, 0, 0, 168);
+        case ThemeColor::ChatInfoMemberListBackground:
+            return QColor(0xff, 0xff, 0xff);
+        case ThemeColor::ChatInfoMemberListHover:
+            return QColor(0xe8, 0xe8, 0xe8);
+        case ThemeColor::ChatInfoMemberListPrimaryText:
+            return QColor(0x12, 0x12, 0x12);
+        case ThemeColor::ChatInfoMemberListSecondaryText:
+            return QColor(0x88, 0x88, 0x88);
+        case ThemeColor::ChatInfoMemberListHeaderText:
+            return QColor(0xff, 0xff, 0xff);
+        case ThemeColor::DangerText:
+            return QColor(0xd9, 0x36, 0x36);
+        case ThemeColor::DangerControlHover:
+            return QColor(0xff, 0xf4, 0xf4);
+        case ThemeColor::DangerControlPressed:
+            return QColor(0xff, 0xe8, 0xe8);
         case ThemeColor::AppBarItemBackground:
             return QColor(0xd8, 0xd8, 0xd8, 224);
         case ThemeColor::AppBarItemSelectedBackground:
             return QColor(0xd8, 0xd8, 0xd8);
+        case ThemeColor::PostBarItemSelectedBackground:
+            return QColor(0, 0, 0, 32);
         case ThemeColor::ImagePlaceholder:
             return QColor(0xf2, 0xf2, 0xf2);
         case ThemeColor::ControlHover:
@@ -141,11 +154,33 @@ QColor ThemeManager::color(ThemeColor role) const
     case ThemeColor::ListHover:
         return QColor(0x2c, 0x2f, 0x36);
     case ThemeColor::ListPinned:
-        return QColor(0x26, 0x28, 0x2e);
+        return QColor(0x30, 0x33, 0x3a);
+    case ThemeColor::ChatInfoPanelOverlay:
+        return QColor(0, 0, 0, 132);
+    case ThemeColor::SettingsOverlay:
+        return QColor(0, 0, 0, 168);
+    case ThemeColor::ChatInfoMemberListBackground:
+        return QColor(0x20, 0x21, 0x26);
+    case ThemeColor::ChatInfoMemberListHover:
+        return QColor(0x2c, 0x2f, 0x36);
+    case ThemeColor::ChatInfoMemberListPrimaryText:
+        return QColor(0xf1, 0xf3, 0xf5);
+    case ThemeColor::ChatInfoMemberListSecondaryText:
+        return QColor(0xc3, 0xc7, 0xce);
+    case ThemeColor::ChatInfoMemberListHeaderText:
+        return QColor(0xf1, 0xf3, 0xf5);
+    case ThemeColor::DangerText:
+        return QColor(0xd9, 0x36, 0x36);
+    case ThemeColor::DangerControlHover:
+        return QColor(0x45, 0x2b, 0x2f);
+    case ThemeColor::DangerControlPressed:
+        return QColor(0x54, 0x30, 0x35);
     case ThemeColor::AppBarItemBackground:
         return QColor(0x3a, 0x3d, 0x44, 224);
     case ThemeColor::AppBarItemSelectedBackground:
         return QColor(0x3a, 0x3d, 0x44);
+    case ThemeColor::PostBarItemSelectedBackground:
+        return QColor(0x5a, 0x5d, 0x64, 200);
     case ThemeColor::ImagePlaceholder:
         return QColor(0x2b, 0x2d, 0x33);
     case ThemeColor::ControlHover:
@@ -174,23 +209,6 @@ QPalette ThemeManager::applicationPalette() const
     palette.setColor(QPalette::ToolTipBase, color(ThemeColor::PanelRaisedBackground));
     palette.setColor(QPalette::ToolTipText, color(ThemeColor::PrimaryText));
     return palette;
-}
-
-QString ThemeManager::applicationStyleSheet() const
-{
-    return QStringLiteral(
-        "QWidget { color: %1; }"
-        "QLineEdit, QTextEdit {"
-        " color: %1;"
-        " selection-background-color: %2;"
-        " selection-color: #ffffff;"
-        "}"
-        "QLineEdit { background: transparent; }"
-        "QTextEdit { background: %3; border: none; }"
-        "QLineEdit[placeholderText], QTextEdit[placeholderText] { color: %1; }")
-            .arg(cssColor(color(ThemeColor::PrimaryText)),
-                 cssColor(color(ThemeColor::Accent)),
-                 cssColor(color(ThemeColor::InputBackground)));
 }
 
 void ThemeManager::applyToApplication(QApplication& application)
@@ -247,7 +265,6 @@ void ThemeManager::refreshApplicationTheme()
     QScopedValueRollback<bool> guard(m_refreshing, true);
 
     m_application->setPalette(applicationPalette());
-    m_application->setStyleSheet(applicationStyleSheet());
 
     emit themeChanged();
 
