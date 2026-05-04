@@ -13,6 +13,7 @@ public:
 
     void setNormalImage(const QString& source);
     void setHoverImage(const QString& source);
+    void setDisabledImage(const QString& source);
     void setSourceMargins(const QMargins& margins);
 
     QSize sizeHint() const override;
@@ -30,6 +31,7 @@ private:
 
     QString m_normalImage;
     QString m_hoverImage;
+    QString m_disabledImage;
     QMargins m_sourceMargins;
     bool m_hovered = false;
 };

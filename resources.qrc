@@ -32,6 +32,7 @@
         <file>resources/icon/menu.png</file>
         <file>resources/icon/mc_button.png</file>
         <file>resources/icon/mc_button_highlighted.png</file>
+        <file>resources/icon/mc_button_disabled.png</file>
         <file>resources/icon/mc_slider.png</file>
         <file>resources/icon/mc_slider_handle.png</file>
         <file>resources/icon/mc_slider_handle_highlighted.png</file>

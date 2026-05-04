@@ -90,6 +90,16 @@ void MinecraftButton::setHoverImage(const QString& source)
     update();
 }
 
+void MinecraftButton::setDisabledImage(const QString& source)
+{
+    if (m_disabledImage == source) {
+        return;
+    }
+
+    m_disabledImage = source;
+    update();
+}
+
 void MinecraftButton::setSourceMargins(const QMargins& margins)
 {
     if (m_sourceMargins == margins) {
@@ -151,6 +161,9 @@ void MinecraftButton::setHovered(bool hovered)
 
 QString MinecraftButton::currentImage() const
 {
+    if (!isEnabled() && !m_disabledImage.isEmpty()) {
+        return m_disabledImage;
+    }
     return (isEnabled() && m_hovered) ? m_hoverImage : m_normalImage;
 }
 
@@ -168,7 +181,7 @@ void MinecraftButton::paintEvent(QPaintEvent* event)
         drawNinePatch(painter, pixmap, rect());
     }
 
-    if (!isEnabled()) {
+    if (!isEnabled() && m_disabledImage.isEmpty()) {
         painter.fillRect(rect(), QColor(0, 0, 0, 90));
     }
 

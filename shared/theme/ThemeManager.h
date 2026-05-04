@@ -9,13 +9,6 @@
 class QApplication;
 class QEvent;
 
-namespace ThemeConfig {
-
-// 1 = light, 2 = dark, 3 = follow system. Keep this constant for local testing.
-constexpr int mode = 3;
-
-}
-
 enum class ThemeColor {
     Accent,
     AccentHover,
@@ -65,6 +58,7 @@ public:
     static ThemeManager& instance();
 
     Mode configuredMode() const;
+    void setMode(Mode mode);
     bool isDark() const;
     QColor color(ThemeColor role) const;
 
@@ -84,5 +78,6 @@ private:
     bool systemIsDark() const;
 
     QPointer<QApplication> m_application;
+    Mode m_configuredMode = Mode::FollowSystem;
     bool m_refreshing = false;
 };

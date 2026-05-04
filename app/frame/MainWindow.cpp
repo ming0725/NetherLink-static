@@ -190,17 +190,13 @@ MainWindow::MainWindow(QWidget* parent)
 
 MainWindow::~MainWindow()
 {
-    if (m_settingsWindow) {
-        m_settingsWindow->close();
-    }
+    delete m_settingsWindow;
     qApp->removeEventFilter(this);
 }
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
-    if (m_settingsWindow) {
-        m_settingsWindow->close();
-    }
+    delete m_settingsWindow;
     SystemWindow::closeEvent(event);
 }
 
@@ -215,6 +211,11 @@ void MainWindow::resizeEvent(QResizeEvent* event)
 {
     SystemWindow::resizeEvent(event);
     layoutWindow();
+
+    if (m_settingsWindow) {
+        m_settingsWindow->setGeometry(0, 0, event->size().width(), event->size().height());
+        m_settingsWindow->raise();
+    }
 }
 
 void MainWindow::moveEvent(QMoveEvent* event)
@@ -320,23 +321,28 @@ void MainWindow::updateBackdropTheme()
 
 void MainWindow::openSettingsWindow()
 {
+    if (m_settingsWindow) {
+        m_settingsWindow->raise();
+        m_settingsWindow->setFocus();
+        return;
+    }
+
+    auto* settings = new SettingsWindow(this);
+    connect(settings, &SettingsWindow::closeRequested, this, &MainWindow::closeSettingsWindow);
+    m_settingsWindow = settings;
+    settings->showAnimated();
+}
+
+void MainWindow::closeSettingsWindow()
+{
     if (!m_settingsWindow) {
-        m_settingsWindow = new SettingsWindow(this);
+        return;
     }
 
-    QScreen* targetScreen = QGuiApplication::screenAt(frameGeometry().center());
-    if (!targetScreen) {
-        targetScreen = QGuiApplication::primaryScreen();
-    }
-
-    const QRect parentGeometry = targetScreen ? targetScreen->availableGeometry() : frameGeometry();
-    const QSize settingsSize = m_settingsWindow->size();
-    const QPoint topLeft(parentGeometry.center().x() - settingsSize.width() / 2,
-                         parentGeometry.center().y() - settingsSize.height() / 2);
-    m_settingsWindow->move(topLeft);
-    m_settingsWindow->show();
-    m_settingsWindow->raise();
-    m_settingsWindow->activateWindow();
+    SettingsWindow* settings = m_settingsWindow;
+    m_settingsWindow = nullptr;
+    settings->disconnect(this);
+    settings->hideAnimated();
 }
 
 void MainWindow::openConversationFromContacts(const QString& conversationId)

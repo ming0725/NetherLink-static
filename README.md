@@ -47,12 +47,6 @@ NetherLink‑static 是一个基于 Qt 的聊天社交客户端静态演示，**
 
 > 以下为示例截图，展示主要页面风格。
 
-1. **聊天界面**
-2. **好友列表**
-3. **帖子中心**
-4. **帖子详情页**
-5. **macOS 原生液态玻璃和高斯模糊**
-
 <img src="https://github.com/ming0725/NetherLink-static/blob/master/doc/images/1_chat.jpg?raw=true" alt="聊天界面" width="600"/>
 
 <img src="https://github.com/ming0725/NetherLink-static/blob/master/doc/images/2_friends.png?raw=true" alt="联系人界面" width="600"/>
@@ -74,22 +68,6 @@ NetherLink‑static 是一个基于 Qt 的聊天社交客户端静态演示，**
 - Qt 6.x
 - CMake ≥ 3.10
 - 支持平台：Windows 11，macOS 26
-
-### 快速运行
-
-```bash
-# 克隆仓库
-git clone https://github.com/ming0725/NetherLink-static.git
-cd NetherLink-static
-
-# 创建构建目录并编译
-mkdir build && cd build
-cmake ..
-cmake --build . --config Release
-
-# 运行可执行文件
-./NetherLink-static
-```
 
 ## 📌 后续展望
 

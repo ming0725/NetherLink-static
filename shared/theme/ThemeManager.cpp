@@ -24,16 +24,16 @@ ThemeManager::ThemeManager(QObject* parent)
 
 ThemeManager::Mode ThemeManager::configuredMode() const
 {
-    switch (ThemeConfig::mode) {
-    case 1:
-        return Mode::Light;
-    case 2:
-        return Mode::Dark;
-    case 3:
-        return Mode::FollowSystem;
-    default:
-        return Mode::Light;
+    return m_configuredMode;
+}
+
+void ThemeManager::setMode(Mode mode)
+{
+    if (m_configuredMode == mode) {
+        return;
     }
+    m_configuredMode = mode;
+    refreshApplicationTheme();
 }
 
 bool ThemeManager::isDark() const

@@ -36,6 +36,7 @@ private:
     void openConversationFromContacts(const QString& conversationId);
     void updateBackdropTheme();
     void openSettingsWindow();
+    void closeSettingsWindow();
     void layoutWindow();
 
     ApplicationBar *appBar;
