@@ -47,6 +47,10 @@ QVariant FriendListModel::data(const QModelIndex& index, int role) const
             return true;
         case IsGroupRole:
             return false;
+        case NoticeSelectedRole:
+            return m_noticeSelected;
+        case NoticeUnreadCountRole:
+            return m_noticeUnreadCount;
         case Qt::SizeHintRole:
             return QSize(0, kGroupHeaderHeight);
         default:
@@ -427,6 +431,39 @@ void FriendListModel::setGroupProgress(const QString& groupId, qreal progress)
                          index(lastRow, 0),
                          {GroupProgressRole, Qt::SizeHintRole});
     }
+}
+
+void FriendListModel::setNoticeSelected(bool selected)
+{
+    if (m_noticeSelected == selected) {
+        return;
+    }
+    m_noticeSelected = selected;
+    // The notice row is always at row 0
+    if (!m_rows.isEmpty() && m_rows.first().type == RowEntry::Notice) {
+        emit dataChanged(index(0, 0), index(0, 0), {NoticeSelectedRole});
+    }
+}
+
+bool FriendListModel::isNoticeSelected() const
+{
+    return m_noticeSelected;
+}
+
+void FriendListModel::setNoticeUnreadCount(int count)
+{
+    if (m_noticeUnreadCount == count) {
+        return;
+    }
+    m_noticeUnreadCount = count;
+    if (!m_rows.isEmpty() && m_rows.first().type == RowEntry::Notice) {
+        emit dataChanged(index(0, 0), index(0, 0), {NoticeUnreadCountRole});
+    }
+}
+
+int FriendListModel::noticeUnreadCount() const
+{
+    return m_noticeUnreadCount;
 }
 
 void FriendListModel::setContextMenuFriend(const QString& userId)

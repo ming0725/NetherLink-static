@@ -26,10 +26,13 @@ public:
 
     QString selectedFriendId() const;
     FriendSummary selectedFriend() const;
+    void setNoticeSelected(bool selected);
+    void setNoticeUnreadCount(int count);
 
 signals:
     void selectedFriendChanged(const QString& userId);
     void requestMessage(const QString& userId);
+    void noticeClicked();
 
 protected:
     void leaveEvent(QEvent* event) override;
@@ -95,5 +98,6 @@ private:
     StickyGroupData m_stickyGroup;
     bool m_stickyVisible = false;
     bool m_preservingSelection = false;
+    bool m_suppressFriendChangeSignal = false;
     int m_stickyOffsetY = 0;
 };

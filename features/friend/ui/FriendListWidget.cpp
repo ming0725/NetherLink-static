@@ -132,6 +132,23 @@ FriendSummary FriendListWidget::selectedFriend() const
     return m_model->friendAt(currentIndex());
 }
 
+void FriendListWidget::setNoticeSelected(bool selected)
+{
+    m_model->setNoticeSelected(selected);
+    if (selected) {
+        m_suppressFriendChangeSignal = true;
+        clearCurrentSelection();
+        m_suppressFriendChangeSignal = false;
+    }
+    viewport()->update();
+}
+
+void FriendListWidget::setNoticeUnreadCount(int count)
+{
+    m_model->setNoticeUnreadCount(count);
+    viewport()->update();
+}
+
 void FriendListWidget::showEvent(QShowEvent* event)
 {
     OverlayScrollListView::showEvent(event);
@@ -190,6 +207,7 @@ void FriendListWidget::mousePressEvent(QMouseEvent* event)
     }
 
     if (m_model->isNoticeRow(index)) {
+        emit noticeClicked();
         event->accept();
         return;
     }
@@ -484,7 +502,9 @@ void FriendListWidget::clearCurrentSelection()
     setCurrentIndex(QModelIndex());
     m_preservingSelection = wasPreservingSelection;
     m_state.selectedFriendId.clear();
-    emit selectedFriendChanged(QString());
+    if (!m_suppressFriendChangeSignal) {
+        emit selectedFriendChanged(QString());
+    }
 }
 
 void FriendListWidget::showFriendMenu(const QPoint& globalPos, const QModelIndex& index)

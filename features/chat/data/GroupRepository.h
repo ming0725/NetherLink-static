@@ -24,6 +24,10 @@ public:
     bool contains(const QString& groupId) const;
 
     void saveGroup(const Group& group);
+    void addMember(const QString& groupId, const QString& userId);
+    void removeMember(const QString& groupId, const QString& userId);
+    void setAdmin(const QString& groupId, const QString& userId, bool enabled);
+    void transferOwner(const QString& groupId, const QString& userId);
     void removeGroup(const QString& groupID);
 
 signals:

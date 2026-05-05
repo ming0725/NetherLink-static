@@ -28,10 +28,13 @@ public:
 
     QString selectedGroupId() const;
     Group selectedGroup() const;
+    void setNoticeSelected(bool selected);
+    void setNoticeUnreadCount(int count);
 
 signals:
     void selectedGroupChanged(const QString& groupId);
     void requestMessage(const QString& groupId);
+    void noticeClicked();
 
 protected:
     void leaveEvent(QEvent* event) override;
@@ -98,5 +101,6 @@ private:
     StickyCategoryData m_stickyCategory;
     bool m_stickyVisible = false;
     bool m_preservingSelection = false;
+    bool m_suppressGroupChangeSignal = false;
     int m_stickyOffsetY = 0;
 };

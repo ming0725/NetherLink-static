@@ -5,6 +5,7 @@
 
 #include "features/friend/model/GroupListModel.h"
 #include "shared/services/ImageService.h"
+#include "shared/ui/BadgeRenderer.h"
 #include "shared/theme/ThemeManager.h"
 
 extern const int kContactGroupArrowYOffset;
@@ -139,27 +140,54 @@ void GroupListDelegate::paint(QPainter* painter,
 
     const bool isNotice = index.data(GroupListModel::IsNoticeRole).toBool();
     if (isNotice) {
+        const bool noticeSelected = index.data(GroupListModel::NoticeSelectedRole).toBool();
         painter->fillRect(option.rect, ThemeManager::instance().color(ThemeColor::PanelBackground));
 
         const bool hovered = option.state & QStyle::State_MouseOver;
-        if (hovered) {
-            const QRect hoverRect = option.rect.adjusted(6, 3, -6, -3);
+        const QRect overlayRect = option.rect.adjusted(6, 3, -6, -3);
+        if (noticeSelected) {
+            QColor hoverColor = ThemeManager::instance().color(ThemeColor::ListHover);
+            const int delta = ThemeManager::instance().isDark() ? 8 : 12;
+            QColor selColor(qMax(0, hoverColor.red() - delta),
+                            qMax(0, hoverColor.green() - delta),
+                            qMax(0, hoverColor.blue() - delta));
+            painter->setRenderHint(QPainter::Antialiasing, true);
+            painter->setBrush(selColor);
+            painter->setPen(Qt::NoPen);
+            painter->drawRoundedRect(overlayRect, 6, 6);
+        } else if (hovered) {
             painter->setRenderHint(QPainter::Antialiasing, true);
             painter->setBrush(ThemeManager::instance().color(ThemeColor::ListHover));
             painter->setPen(Qt::NoPen);
-            painter->drawRoundedRect(hoverRect, 6, 6);
+            painter->drawRoundedRect(overlayRect, 6, 6);
+        }
+
+        const int centerX = option.rect.right() - kCategoryCountRightPadding;
+        const int centerY = option.rect.center().y() + kNoticeArrowYOffset;
+        const int unreadCount = index.data(GroupListModel::NoticeUnreadCountRole).toInt();
+        const BadgeLayout badgeLayout = BadgeRenderer::layoutForUnreadCount(
+            unreadCount, false, noticeSelected, ThemeManager::instance().isDark());
+        int rightLimit = centerX - 12;
+        if (badgeLayout.size.isValid()) {
+            const int badgeX = rightLimit - badgeLayout.size.width();
+            const QRect badgeRect(badgeX,
+                                  centerY - badgeLayout.size.height() / 2,
+                                  badgeLayout.size.width(),
+                                  badgeLayout.size.height());
+            BadgeRenderer::drawBadge(painter, badgeRect, badgeLayout, noticeSelected);
+            rightLimit = badgeX - 6;
         }
 
         painter->setFont(categoryFont());
         painter->setPen(ThemeManager::instance().color(ThemeColor::PrimaryText));
-        painter->drawText(option.rect.adjusted(20, 0, -28, 0),
+        const QRect textRect(20, option.rect.top(),
+                             qMax(0, rightLimit - 20), option.rect.height());
+        painter->drawText(textRect,
                           Qt::AlignLeft | Qt::AlignVCenter,
                           categoryMetrics().elidedText(index.data(GroupListModel::DisplayNameRole).toString(),
                                                        Qt::ElideRight,
-                                                       option.rect.width() - 48));
+                                                       textRect.width()));
 
-        const int centerX = option.rect.right() - kCategoryCountRightPadding;
-        const int centerY = option.rect.center().y() + kNoticeArrowYOffset;
         QPen arrowPen(ThemeManager::instance().color(ThemeColor::SecondaryText),
                       1.3,
                       Qt::SolidLine,

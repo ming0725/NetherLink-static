@@ -16,20 +16,6 @@ public:
                    const QModelIndex& index) const override;
 
 private:
-    struct BadgeLayout {
-        QSize size;
-        QString text;
-        bool drawIcon = false;
-        QColor backgroundColor;
-        QColor textColor;
-    };
-
-    BadgeLayout badgeLayoutForItem(const QModelIndex& index, bool selected) const;
-    void drawBadge(QPainter* painter,
-                   const QRect& rect,
-                   const BadgeLayout& badgeLayout,
-                   bool selected) const;
-
     static constexpr int kItemHeight = 72;
     static constexpr int kAvatarSize = 48;
     static constexpr int kLeftPadding = 12;

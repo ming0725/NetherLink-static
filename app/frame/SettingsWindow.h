@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QWidget>
+#include <QPointer>
 #include <QStringList>
 #include <QVector>
 
@@ -45,21 +46,23 @@ private:
     };
 
     struct PageLayout {
-        QVector<QWidget*> leftItems;
-        QVector<QWidget*> rightItems;
-        QWidget* doneWidget = nullptr;
+        QVector<QPointer<QWidget>> leftItems;
+        QVector<QPointer<QWidget>> rightItems;
+        QPointer<QWidget> doneWidget;
         int firstRowGap = 12;
         int bodyRowGap = 12;
     };
 
-    void buildAllPages();
+    void buildInitialPages();
+    void ensurePageCreated(int page);
+    void installPage(int page, QWidget* widget);
     void navigateTo(int page);
     void goBack();
     void layoutCurrentPage();
 
     // Unified layout — all pages use this
-    void layoutPageItems(const QVector<QWidget*>& leftItems,
-                         const QVector<QWidget*>& rightItems,
+    void layoutPageItems(const QVector<QPointer<QWidget>>& leftItems,
+                         const QVector<QPointer<QWidget>>& rightItems,
                          QWidget* doneWidget,
                          int firstRowGap,
                          int bodyRowGap);
@@ -89,6 +92,7 @@ private:
     QStackedWidget* m_stack = nullptr;
     QString m_currentTitle;
     QVector<PageLayout> m_layouts;
+    QVector<bool> m_pageCreated;
 
     // Cached pointers
     MinecraftButton* m_appearanceModeToggle = nullptr;

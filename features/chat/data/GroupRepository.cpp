@@ -349,7 +349,7 @@ GroupRepository::GroupRepository(QObject* parent)
 {
     const QVector<Group> groups = {
             makeGroup("g001", "相亲相爱一家人", 55, "u007", ":/resources/avatar/10.jpg",
-                      kJoinedCategoryId, kJoinedCategoryName, "家庭群"),
+                      kJoinedCategoryId, kJoinedCategoryName, "家庭群", false, {"u001"}),
             makeGroup("g002", "考研交流群", 11, "u001", ":/resources/avatar/10.jpg",
                       kCollegeCategoryId, kCollegeCategoryName),
             makeGroup("g003", "暗广接单群", 91, "u002", ":/resources/avatar/10.jpg",
@@ -367,7 +367,7 @@ GroupRepository::GroupRepository(QObject* parent)
             makeGroup("g009", "A346宿舍", 4, "u007", ":/resources/avatar/10.jpg",
                       kJoinedCategoryId, kJoinedCategoryName, "宿舍群"),
             makeGroup("g010", "服务器维护群", 18, "u007", ":/resources/avatar/10.jpg",
-                      kWorkCategoryId, kWorkCategoryName),
+                      kWorkCategoryId, kWorkCategoryName, QString(), false, {"u002"}),
             makeGroup("g011", "下界探险队", 24, "u008", ":/resources/avatar/10.jpg",
                       kJoinedCategoryId, kJoinedCategoryName, "探险队"),
             makeGroup("g012", "像素美术互助", 39, "u005", ":/resources/avatar/10.jpg",
@@ -511,6 +511,119 @@ void GroupRepository::saveGroup(const Group& group)
     groupMap[group.groupId] = group;
     locker.unlock();
     emit groupListChanged();
+}
+
+void GroupRepository::addMember(const QString& groupId, const QString& userId)
+{
+    if (groupId.isEmpty() || userId.isEmpty()) {
+        return;
+    }
+
+    bool changed = false;
+    {
+        QMutexLocker locker(&mutex);
+        auto it = groupMap.find(groupId);
+        if (it == groupMap.end()) {
+            return;
+        }
+        Group& group = it.value();
+        if (!group.membersID.contains(userId)) {
+            group.membersID.push_back(userId);
+            group.memberNum = group.membersID.size();
+            changed = true;
+        }
+    }
+    if (changed) {
+        emit groupListChanged();
+    }
+}
+
+void GroupRepository::removeMember(const QString& groupId, const QString& userId)
+{
+    if (groupId.isEmpty() || userId.isEmpty()) {
+        return;
+    }
+
+    bool changed = false;
+    {
+        QMutexLocker locker(&mutex);
+        auto it = groupMap.find(groupId);
+        if (it == groupMap.end()) {
+            return;
+        }
+        Group& group = it.value();
+        changed = group.membersID.removeAll(userId) > 0;
+        group.adminsID.removeAll(userId);
+        if (changed) {
+            group.memberNum = group.membersID.size();
+        }
+    }
+    if (changed) {
+        emit groupListChanged();
+    }
+}
+
+void GroupRepository::setAdmin(const QString& groupId, const QString& userId, bool enabled)
+{
+    if (groupId.isEmpty() || userId.isEmpty()) {
+        return;
+    }
+
+    bool changed = false;
+    {
+        QMutexLocker locker(&mutex);
+        auto it = groupMap.find(groupId);
+        if (it == groupMap.end()) {
+            return;
+        }
+        Group& group = it.value();
+        const bool isAdmin = group.adminsID.contains(userId);
+        if (enabled && !isAdmin) {
+            group.adminsID.push_back(userId);
+            changed = true;
+        } else if (!enabled && isAdmin) {
+            group.adminsID.removeAll(userId);
+            changed = true;
+        }
+        if (!group.membersID.contains(userId)) {
+            group.membersID.push_back(userId);
+            group.memberNum = group.membersID.size();
+            changed = true;
+        }
+    }
+    if (changed) {
+        emit groupListChanged();
+    }
+}
+
+void GroupRepository::transferOwner(const QString& groupId, const QString& userId)
+{
+    if (groupId.isEmpty() || userId.isEmpty()) {
+        return;
+    }
+
+    bool changed = false;
+    {
+        QMutexLocker locker(&mutex);
+        auto it = groupMap.find(groupId);
+        if (it == groupMap.end() || it->ownerId == userId) {
+            return;
+        }
+        Group& group = it.value();
+        group.adminsID.removeAll(userId);
+        if (!group.ownerId.isEmpty() && !group.adminsID.contains(group.ownerId)) {
+            group.adminsID.push_back(group.ownerId);
+        }
+        group.ownerId = userId;
+        if (!group.membersID.contains(userId)) {
+            group.membersID.push_back(userId);
+            group.memberNum = group.membersID.size();
+        }
+        changed = true;
+    }
+    if (changed) {
+        emit groupListChanged();
+    }
 }
 
 void GroupRepository::removeGroup(const QString& groupID)

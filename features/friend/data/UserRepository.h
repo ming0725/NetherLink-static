@@ -19,8 +19,12 @@ public:
     QMap<QString, QString> requestFriendGroups() const;
     QString requestUserName(const QString& userId) const;
     QString requestUserAvatarPath(const QString& userId) const;
+    bool isFriend(const QString& userId) const;
 
     void saveUser(const User& user);
+    void addFriend(const QString& userId,
+                   const QString& groupId = QStringLiteral("default"),
+                   const QString& groupName = QStringLiteral("默认分组"));
     void removeUser(const QString& userID);
 
 signals:

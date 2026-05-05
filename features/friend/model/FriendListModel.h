@@ -28,7 +28,9 @@ public:
         GroupFriendCountRole,
         GroupExpandedRole,
         GroupProgressRole,
-        ContextMenuActiveRole
+        ContextMenuActiveRole,
+        NoticeSelectedRole,
+        NoticeUnreadCountRole
     };
 
     explicit FriendListModel(QObject* parent = nullptr);
@@ -60,6 +62,10 @@ public:
     void setGroupExpanded(const QString& groupId, bool expanded);
     void setGroupProgress(const QString& groupId, qreal progress);
     void setContextMenuFriend(const QString& userId);
+    void setNoticeSelected(bool selected);
+    bool isNoticeSelected() const;
+    void setNoticeUnreadCount(int count);
+    int noticeUnreadCount() const;
 
 private:
     struct FriendGroup {
@@ -94,4 +100,6 @@ private:
     QVector<FriendGroup> m_groups;
     QVector<RowEntry> m_rows;
     QString m_contextMenuFriendId;
+    bool m_noticeSelected = false;
+    int m_noticeUnreadCount = 0;
 };

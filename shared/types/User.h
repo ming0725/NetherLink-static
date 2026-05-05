@@ -16,6 +16,7 @@ struct User {
     UserStatus status;
     QString signature;
     bool isDnd = false;
+    bool isFriend = true;
     QString friendGroupId = "default";
     QString friendGroupName = "默认分组";
     QString region;

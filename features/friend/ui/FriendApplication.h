@@ -10,6 +10,8 @@
 #include "features/friend/ui/GroupListWidget.h"
 #include "features/friend/ui/FriendDetailPage.h"
 #include "features/friend/ui/GroupDetailPage.h"
+#include "features/friend/ui/FriendNotificationPage.h"
+#include "features/friend/ui/GroupNotificationPage.h"
 #include "app/frame/DefaultPage.h"
 
 class QPushButton;
@@ -53,6 +55,15 @@ private:
     DefaultPage* m_defaultPage;  // 右侧默认页
     FriendDetailPage* m_detailPage;
     GroupDetailPage* m_groupDetailPage;
+    FriendNotificationPage* m_notificationPage;
+    GroupNotificationPage* m_groupNotificationPage;
     QStackedWidget* m_rightStack;
     QSplitter*   m_splitter;     // 中间分隔器
+
+    void showNotificationPage();
+    void hideNotificationPage();
+    void populateNotificationData();
+    void showGroupNotificationPage();
+    void hideGroupNotificationPage();
+    void populateGroupNotificationData();
 };

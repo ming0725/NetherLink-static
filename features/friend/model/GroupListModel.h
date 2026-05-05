@@ -27,7 +27,9 @@ public:
         CategoryGroupCountRole,
         CategoryExpandedRole,
         CategoryProgressRole,
-        HoverSuppressedRole
+        HoverSuppressedRole,
+        NoticeSelectedRole,
+        NoticeUnreadCountRole
     };
 
     explicit GroupListModel(QObject* parent = nullptr);
@@ -57,6 +59,8 @@ public:
     void setCategoryExpanded(const QString& categoryId, bool expanded);
     void setCategoryProgress(const QString& categoryId, qreal progress);
     void setHoverSuppressedGroup(const QString& groupId);
+    void setNoticeSelected(bool selected);
+    void setNoticeUnreadCount(int count);
 
 private:
     struct GroupCategory {
@@ -90,4 +94,6 @@ private:
     QVector<GroupCategory> m_categories;
     QVector<RowEntry> m_rows;
     QString m_hoverSuppressedGroupId;
+    bool m_noticeSelected = false;
+    int m_noticeUnreadCount = 0;
 };

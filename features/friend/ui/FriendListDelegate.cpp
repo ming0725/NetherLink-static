@@ -4,6 +4,7 @@
 #include <QPainter>
 
 #include "shared/services/ImageService.h"
+#include "shared/ui/BadgeRenderer.h"
 #include "features/friend/model/FriendListModel.h"
 #include "shared/types/User.h"
 #include "shared/theme/ThemeManager.h"
@@ -140,35 +141,71 @@ void FriendListDelegate::paint(QPainter* painter,
 
     const bool isNotice = index.data(FriendListModel::IsNoticeRole).toBool();
     if (isNotice) {
+        const bool noticeSelected = index.data(FriendListModel::NoticeSelectedRole).toBool();
+
+        // Background: panel by default
         painter->fillRect(option.rect, ThemeManager::instance().color(ThemeColor::PanelBackground));
 
+        // Selected or hovered overlay: rounded rect (6px radius, margins 6/3/6/3)
         const bool hovered = option.state & QStyle::State_MouseOver;
-        if (hovered) {
-            const QRect hoverRect = option.rect.adjusted(6, 3, -6, -3);
+        const QRect overlayRect = option.rect.adjusted(6, 3, -6, -3);
+
+        if (noticeSelected) {
+            // Darker than hover: darken ListHover by a fixed delta
+            QColor hoverColor = ThemeManager::instance().color(ThemeColor::ListHover);
+            const int delta = ThemeManager::instance().isDark() ? 8 : 12;
+            QColor selColor(qMax(0, hoverColor.red() - delta),
+                            qMax(0, hoverColor.green() - delta),
+                            qMax(0, hoverColor.blue() - delta));
+            painter->setRenderHint(QPainter::Antialiasing, true);
+            painter->setBrush(selColor);
+            painter->setPen(Qt::NoPen);
+            painter->drawRoundedRect(overlayRect, 6, 6);
+        } else if (hovered) {
             painter->setRenderHint(QPainter::Antialiasing, true);
             painter->setBrush(ThemeManager::instance().color(ThemeColor::ListHover));
             painter->setPen(Qt::NoPen);
-            painter->drawRoundedRect(hoverRect, 6, 6);
+            painter->drawRoundedRect(overlayRect, 6, 6);
+        }
+
+        const QColor textColor = ThemeManager::instance().color(ThemeColor::PrimaryText);
+
+        // Unread badge (left of arrow)
+        const int unreadCount = index.data(FriendListModel::NoticeUnreadCountRole).toInt();
+        const BadgeLayout badgeLayout = BadgeRenderer::layoutForUnreadCount(
+            unreadCount, false, noticeSelected, ThemeManager::instance().isDark());
+
+        const int arrowCenterX = option.rect.right() - kGroupCountRightPadding;
+        const int arrowCenterY = option.rect.center().y() + kNoticeArrowYOffset;
+
+        // Reserve space for badge + gap + arrow
+        int rightLimit = arrowCenterX - 12; // gap before arrow
+        if (badgeLayout.size.isValid()) {
+            const int badgeX = rightLimit - badgeLayout.size.width();
+            const int badgeY = arrowCenterY - badgeLayout.size.height() / 2;
+            const QRect badgeR(badgeX, badgeY,
+                               badgeLayout.size.width(), badgeLayout.size.height());
+            BadgeRenderer::drawBadge(painter, badgeR, badgeLayout, noticeSelected);
+            rightLimit = badgeX - 6;
         }
 
         painter->setFont(groupFont());
-        painter->setPen(ThemeManager::instance().color(ThemeColor::PrimaryText));
-        painter->drawText(option.rect.adjusted(20, 0, -28, 0),
+        painter->setPen(textColor);
+        const QRect textRect(20, option.rect.top(),
+                             qMax(0, rightLimit - 20), option.rect.height());
+        painter->drawText(textRect,
                           Qt::AlignLeft | Qt::AlignVCenter,
                           groupMetrics().elidedText(index.data(FriendListModel::DisplayNameRole).toString(),
                                                      Qt::ElideRight,
-                                                     option.rect.width() - 48));
+                                                     textRect.width()));
 
-        const int centerX = option.rect.right() - kGroupCountRightPadding;
-        const int centerY = option.rect.center().y() + kNoticeArrowYOffset;
-        QPen arrowPen(ThemeManager::instance().color(ThemeColor::SecondaryText),
-                      1.3,
-                      Qt::SolidLine,
-                      Qt::RoundCap,
-                      Qt::RoundJoin);
+        const QColor arrowColor = ThemeManager::instance().color(ThemeColor::SecondaryText);
+        QPen arrowPen(arrowColor, 1.3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
         painter->setPen(arrowPen);
-        painter->drawLine(QPointF(centerX - 2.0, centerY - 4.0), QPointF(centerX + 2.0, centerY));
-        painter->drawLine(QPointF(centerX + 2.0, centerY), QPointF(centerX - 2.0, centerY + 4.0));
+        painter->drawLine(QPointF(arrowCenterX - 2.0, arrowCenterY - 4.0),
+                          QPointF(arrowCenterX + 2.0, arrowCenterY));
+        painter->drawLine(QPointF(arrowCenterX + 2.0, arrowCenterY),
+                          QPointF(arrowCenterX - 2.0, arrowCenterY + 4.0));
         painter->restore();
         return;
     }

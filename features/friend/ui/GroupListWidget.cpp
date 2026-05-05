@@ -142,6 +142,23 @@ Group GroupListWidget::selectedGroup() const
     return m_model->groupAt(currentIndex());
 }
 
+void GroupListWidget::setNoticeSelected(bool selected)
+{
+    m_model->setNoticeSelected(selected);
+    if (selected) {
+        m_suppressGroupChangeSignal = true;
+        clearCurrentSelection();
+        m_suppressGroupChangeSignal = false;
+    }
+    viewport()->update();
+}
+
+void GroupListWidget::setNoticeUnreadCount(int count)
+{
+    m_model->setNoticeUnreadCount(count);
+    viewport()->update();
+}
+
 void GroupListWidget::showEvent(QShowEvent* event)
 {
     OverlayScrollListView::showEvent(event);
@@ -200,6 +217,7 @@ void GroupListWidget::mousePressEvent(QMouseEvent* event)
     }
 
     if (m_model->isNoticeRow(index)) {
+        emit noticeClicked();
         event->accept();
         return;
     }
@@ -470,7 +488,9 @@ void GroupListWidget::clearCurrentSelection()
     setCurrentIndex(QModelIndex());
     m_preservingSelection = wasPreservingSelection;
     m_state.selectedGroupId.clear();
-    emit selectedGroupChanged(QString());
+    if (!m_suppressGroupChangeSignal) {
+        emit selectedGroupChanged(QString());
+    }
 }
 
 void GroupListWidget::showGroupMenu(const QPoint& globalPos, const QModelIndex& index)

@@ -50,6 +50,10 @@ QVariant GroupListModel::data(const QModelIndex& index, int role) const
             return true;
         case IsCategoryRole:
             return false;
+        case NoticeSelectedRole:
+            return m_noticeSelected;
+        case NoticeUnreadCountRole:
+            return m_noticeUnreadCount;
         case Qt::SizeHintRole:
             return QSize(0, kCategoryHeaderHeight);
         default:
@@ -409,6 +413,28 @@ void GroupListModel::setCategoryProgress(const QString& categoryId, qreal progre
 void GroupListModel::setHoverSuppressedGroup(const QString& groupId)
 {
     m_hoverSuppressedGroupId = groupId;
+}
+
+void GroupListModel::setNoticeSelected(bool selected)
+{
+    if (m_noticeSelected == selected) {
+        return;
+    }
+    m_noticeSelected = selected;
+    if (!m_rows.isEmpty() && m_rows.first().type == RowEntry::Notice) {
+        emit dataChanged(index(0, 0), index(0, 0), {NoticeSelectedRole});
+    }
+}
+
+void GroupListModel::setNoticeUnreadCount(int count)
+{
+    if (m_noticeUnreadCount == count) {
+        return;
+    }
+    m_noticeUnreadCount = count;
+    if (!m_rows.isEmpty() && m_rows.first().type == RowEntry::Notice) {
+        emit dataChanged(index(0, 0), index(0, 0), {NoticeUnreadCountRole});
+    }
 }
 
 const GroupListModel::GroupCategory* GroupListModel::categoryForId(const QString& categoryId) const

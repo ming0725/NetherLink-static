@@ -94,6 +94,7 @@ SettingsWindow::SettingsWindow(QWidget* parent)
     : QWidget(parent)
     , m_stack(new QStackedWidget(this))
     , m_layouts(PageCount)
+    , m_pageCreated(PageCount, false)
 {
     setAutoFillBackground(false);
     setFont(settingsFont(font()));
@@ -101,7 +102,7 @@ SettingsWindow::SettingsWindow(QWidget* parent)
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
             this, QOverload<>::of(&SettingsWindow::update));
 
-    buildAllPages();
+    buildInitialPages();
     m_currentTitle = QStringLiteral("设置");
     m_stack->setCurrentIndex(PageMain);
 }
@@ -203,6 +204,8 @@ void SettingsWindow::resizeEvent(QResizeEvent* event)
 
 void SettingsWindow::navigateTo(int page)
 {
+    ensurePageCreated(page);
+
     if (page == PageAppearance) {
         const int idx = modeToIndex(ThemeManager::instance().configuredMode());
         setToggleIndex(m_appearanceModeToggle, idx);
@@ -233,8 +236,8 @@ void SettingsWindow::layoutCurrentPage()
                     pl.firstRowGap, pl.bodyRowGap);
 }
 
-void SettingsWindow::layoutPageItems(const QVector<QWidget*>& leftItems,
-                                     const QVector<QWidget*>& rightItems,
+void SettingsWindow::layoutPageItems(const QVector<QPointer<QWidget>>& leftItems,
+                                     const QVector<QPointer<QWidget>>& rightItems,
                                      QWidget* doneWidget,
                                      int firstRowGap,
                                      int bodyRowGap)
@@ -324,21 +327,77 @@ void SettingsWindow::updateFontSizeText(int value)
 }
 
 // ============================================================
-// Build all pages
+// Build pages
 // ============================================================
 
-void SettingsWindow::buildAllPages()
+void SettingsWindow::buildInitialPages()
 {
-    createMainPage();
-    createNetworkPage();
-    createAppearancePage();
-    createSoundPage();
-    createAiPage();
-    createNotificationPage();
-    createStoragePage();
-    createKeyBindingPage();
-    createLoginPage();
-    createAboutPage();
+    for (int page = 0; page < PageCount; ++page) {
+        auto* placeholder = new QWidget;
+        placeholder->setAutoFillBackground(false);
+        m_stack->addWidget(placeholder);
+    }
+
+    ensurePageCreated(PageMain);
+}
+
+void SettingsWindow::ensurePageCreated(int page)
+{
+    if (page < 0 || page >= PageCount || m_pageCreated.at(page)) {
+        return;
+    }
+
+    switch (page) {
+    case PageMain:
+        createMainPage();
+        break;
+    case PageNetwork:
+        createNetworkPage();
+        break;
+    case PageAppearance:
+        createAppearancePage();
+        break;
+    case PageSound:
+        createSoundPage();
+        break;
+    case PageAi:
+        createAiPage();
+        break;
+    case PageNotification:
+        createNotificationPage();
+        break;
+    case PageStorage:
+        createStoragePage();
+        break;
+    case PageKeyBinding:
+        createKeyBindingPage();
+        break;
+    case PageLogin:
+        createLoginPage();
+        break;
+    case PageAbout:
+        createAboutPage();
+        break;
+    default:
+        return;
+    }
+}
+
+void SettingsWindow::installPage(int page, QWidget* widget)
+{
+    if (page < 0 || page >= PageCount || !widget) {
+        delete widget;
+        return;
+    }
+
+    QWidget* oldWidget = m_stack->widget(page);
+    if (oldWidget) {
+        m_stack->removeWidget(oldWidget);
+        oldWidget->deleteLater();
+    }
+
+    m_stack->insertWidget(page, widget);
+    m_pageCreated[page] = true;
 }
 
 // ============================================================
@@ -431,7 +490,7 @@ void SettingsWindow::createMainPage()
     pl.bodyRowGap  = kSettingsBodyRowGap;
     m_layouts[PageMain] = pl;
 
-    m_stack->addWidget(page);
+    installPage(PageMain, page);
 }
 
 // ============================================================
@@ -458,7 +517,7 @@ void SettingsWindow::createNetworkPage()
     pl.bodyRowGap  = kSubPageRowGap;
     m_layouts[PageNetwork] = pl;
 
-    m_stack->addWidget(page);
+    installPage(PageNetwork, page);
 }
 
 void SettingsWindow::createAppearancePage()
@@ -485,7 +544,7 @@ void SettingsWindow::createAppearancePage()
     pl.bodyRowGap  = kSubPageRowGap;
     m_layouts[PageAppearance] = pl;
 
-    m_stack->addWidget(page);
+    installPage(PageAppearance, page);
 }
 
 void SettingsWindow::createSoundPage()
@@ -522,7 +581,7 @@ void SettingsWindow::createSoundPage()
     pl.bodyRowGap  = kSubPageRowGap;
     m_layouts[PageSound] = pl;
 
-    m_stack->addWidget(page);
+    installPage(PageSound, page);
 }
 
 void SettingsWindow::createAiPage()
@@ -545,7 +604,7 @@ void SettingsWindow::createAiPage()
     pl.bodyRowGap  = kSubPageRowGap;
     m_layouts[PageAi] = pl;
 
-    m_stack->addWidget(page);
+    installPage(PageAi, page);
 }
 
 void SettingsWindow::createNotificationPage()
@@ -568,7 +627,7 @@ void SettingsWindow::createNotificationPage()
     pl.bodyRowGap  = kSubPageRowGap;
     m_layouts[PageNotification] = pl;
 
-    m_stack->addWidget(page);
+    installPage(PageNotification, page);
 }
 
 void SettingsWindow::createStoragePage()
@@ -591,7 +650,7 @@ void SettingsWindow::createStoragePage()
     pl.bodyRowGap  = kSubPageRowGap;
     m_layouts[PageStorage] = pl;
 
-    m_stack->addWidget(page);
+    installPage(PageStorage, page);
 }
 
 void SettingsWindow::createKeyBindingPage()
@@ -614,7 +673,7 @@ void SettingsWindow::createKeyBindingPage()
     pl.bodyRowGap  = kSubPageRowGap;
     m_layouts[PageKeyBinding] = pl;
 
-    m_stack->addWidget(page);
+    installPage(PageKeyBinding, page);
 }
 
 void SettingsWindow::createLoginPage()
@@ -637,7 +696,7 @@ void SettingsWindow::createLoginPage()
     pl.bodyRowGap  = kSubPageRowGap;
     m_layouts[PageLogin] = pl;
 
-    m_stack->addWidget(page);
+    installPage(PageLogin, page);
 }
 
 void SettingsWindow::createAboutPage()
@@ -664,7 +723,7 @@ void SettingsWindow::createAboutPage()
     pl.bodyRowGap  = kSubPageRowGap;
     m_layouts[PageAbout] = pl;
 
-    m_stack->addWidget(page);
+    installPage(PageAbout, page);
 }
 
 // ============================================================
