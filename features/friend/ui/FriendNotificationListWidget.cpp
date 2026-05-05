@@ -63,7 +63,7 @@ void FriendNotificationListWidget::updateButtonHover(const QPoint& pos)
     const QModelIndex index = indexAt(pos);
     if (!index.isValid()) {
         if (m_hoveredIndex.isValid()) {
-            m_model->setHoveredButton(m_hoveredIndex, -1);
+            m_model->setHoveredButton(m_hoveredIndex, FriendNotificationListModel::kNoHoveredButton);
             m_hoveredIndex = QPersistentModelIndex();
         }
         return;
@@ -74,10 +74,12 @@ void FriendNotificationListWidget::updateButtonHover(const QPoint& pos)
     const int btn = m_delegate->buttonAt(option, index, pos);
 
     if (m_hoveredIndex.isValid() && m_hoveredIndex != index) {
-        m_model->setHoveredButton(m_hoveredIndex, -1);
+        m_model->setHoveredButton(m_hoveredIndex, FriendNotificationListModel::kNoHoveredButton);
     }
     m_hoveredIndex = index;
-    m_model->setHoveredButton(index, btn);
+    m_model->setHoveredButton(index, btn < 0
+                              ? FriendNotificationListModel::kHoveredItemNoButton
+                              : btn);
 }
 
 void FriendNotificationListWidget::mouseMoveEvent(QMouseEvent* event)
@@ -117,7 +119,7 @@ void FriendNotificationListWidget::mousePressEvent(QMouseEvent* event)
         } else {
             emit rejectRequest(notificationId);
         }
-        m_model->setHoveredButton(index, -1);
+        m_model->setHoveredButton(index, FriendNotificationListModel::kNoHoveredButton);
         m_hoveredIndex = QPersistentModelIndex();
         event->accept();
         return;
@@ -129,7 +131,7 @@ void FriendNotificationListWidget::mousePressEvent(QMouseEvent* event)
 void FriendNotificationListWidget::leaveEvent(QEvent* event)
 {
     if (m_hoveredIndex.isValid()) {
-        m_model->setHoveredButton(m_hoveredIndex, -1);
+        m_model->setHoveredButton(m_hoveredIndex, FriendNotificationListModel::kNoHoveredButton);
         m_hoveredIndex = QPersistentModelIndex();
     }
     OverlayScrollListView::leaveEvent(event);

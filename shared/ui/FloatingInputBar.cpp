@@ -183,6 +183,68 @@ void FloatingInputBar::initQtFallbackUi()
     applyTheme();
 }
 
+void FloatingInputBar::clearQtFallbackUi()
+{
+    hideTooltip();
+
+    setFocusProxy(nullptr);
+    if (QLayout* existingLayout = layout()) {
+        delete existingLayout;
+    }
+
+    delete m_inputEdit;
+    delete m_emojiLabel;
+    delete m_imageLabel;
+    delete m_screenshotLabel;
+    delete m_historyLabel;
+    delete m_sendLabel;
+    delete m_tooltip;
+
+    m_inputEdit = nullptr;
+    m_emojiLabel = nullptr;
+    m_imageLabel = nullptr;
+    m_screenshotLabel = nullptr;
+    m_historyLabel = nullptr;
+    m_sendLabel = nullptr;
+    m_tooltip = nullptr;
+}
+
+void FloatingInputBar::refreshPlatformAppearance()
+{
+#ifdef Q_OS_MACOS
+    const bool shouldUseNative = MacFloatingInputBarBridge::appearance()
+            != MacFloatingInputBarBridge::Appearance::Unsupported;
+
+    if (m_usesNativeGlass && !shouldUseNative) {
+        MacFloatingInputBarBridge::clearInputBar(this);
+        m_usesNativeGlass = false;
+        m_usesNativeInput = false;
+        if (!m_inputEdit) {
+            initQtFallbackUi();
+        }
+        updateGeometry();
+        update();
+        return;
+    }
+
+    if (!m_usesNativeGlass && shouldUseNative) {
+        clearQtFallbackUi();
+        m_usesNativeGlass = true;
+        m_usesNativeInput = true;
+        syncPlatformInput();
+        updateGeometry();
+        update();
+        return;
+    }
+
+    if (m_usesNativeGlass) {
+        syncPlatformInput();
+    }
+#endif
+
+    update();
+}
+
 void FloatingInputBar::applyTheme()
 {
 #ifdef Q_OS_MACOS

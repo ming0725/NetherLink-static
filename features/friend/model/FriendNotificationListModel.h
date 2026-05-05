@@ -23,6 +23,8 @@ public:
     };
 
     static constexpr int kBottomSpaceHeight = 48;
+    static constexpr int kNoHoveredButton = -1;
+    static constexpr int kHoveredItemNoButton = -2;
 
     explicit FriendNotificationListModel(QObject* parent = nullptr);
 
@@ -31,12 +33,12 @@ public:
 
     void setNotifications(QVector<FriendNotification> notifications);
     void appendNotifications(QVector<FriendNotification> notifications);
-    void setHoveredButton(const QModelIndex& index, int buttonIndex); // -1 = none, 0 = accept, 1 = reject
+    void setHoveredButton(const QModelIndex& index, int buttonIndex); // -1 = none, -2 = item, 0 = accept, 1 = reject
     FriendNotification notificationAt(const QModelIndex& index) const;
     int notificationCount() const;
     bool isBottomSpace(const QModelIndex& index) const;
 
 private:
     QVector<FriendNotification> m_notifications;
-    QHash<QString, int> m_hoveredButtons; // notification id -> button index
+    QHash<QString, int> m_hoveredButtons; // notification id -> hover state
 };

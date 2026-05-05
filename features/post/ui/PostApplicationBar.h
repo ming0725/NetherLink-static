@@ -13,6 +13,7 @@ public:
     QSize sizeHint() const override;
     void setCurrentIndex(int index);
     void setVisualOpacity(qreal opacity);
+    void refreshPlatformAppearance();
     qreal visualOpacity() const { return m_visualOpacity; }
     bool usesNativeBar() const { return m_usesNativeBar; }
 

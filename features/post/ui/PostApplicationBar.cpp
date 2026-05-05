@@ -129,6 +129,46 @@ void PostApplicationBar::setVisualOpacity(qreal opacity)
     syncPlatformBar();
 }
 
+void PostApplicationBar::refreshPlatformAppearance()
+{
+#ifdef Q_OS_MACOS
+    const bool shouldUseNative = MacPostBarBridge::appearance()
+            != MacPostBarBridge::Appearance::Unsupported;
+
+    if (m_usesNativeBar && !shouldUseNative) {
+        MacPostBarBridge::clearBar(this);
+        m_usesNativeBar = false;
+        if (!graphicsEffect()) {
+            auto* shadow = new QGraphicsDropShadowEffect(this);
+            shadow->setBlurRadius(30);
+            shadow->setOffset(0, 0);
+            shadow->setColor(QColor(150, 150, 150, 220));
+            setGraphicsEffect(shadow);
+        }
+        layoutItems();
+        update();
+        return;
+    }
+
+    if (!m_usesNativeBar && shouldUseNative) {
+        if (QGraphicsEffect* effect = graphicsEffect()) {
+            setGraphicsEffect(nullptr);
+            delete effect;
+        }
+        m_usesNativeBar = true;
+        syncPlatformBar();
+        update();
+        return;
+    }
+
+    if (m_usesNativeBar) {
+        syncPlatformBar();
+    }
+#endif
+
+    update();
+}
+
 QSize PostApplicationBar::sizeHint() const
 {
     int totalWidth = margin * 2;

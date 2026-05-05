@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QString>
+#include <QVector>
 
 class QWidget;
 
@@ -17,6 +18,15 @@ enum class Appearance {
     LiquidGlass
 };
 
+enum class Mode {
+    LiquidGlass = 1,
+    NativeBlur = 2,
+    QtFallback = 3
+};
+
+Mode mode();
+void setMode(Mode mode);
+QVector<Mode> supportedModes();
 Appearance appearance();
 bool isSupported();
 void syncGlass(QWidget* widget, double opacity = 1.0);

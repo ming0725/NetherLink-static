@@ -2,6 +2,7 @@
 
 #include <QPoint>
 #include <QtGlobal>
+#include <QVector>
 
 #include <functional>
 
@@ -19,6 +20,14 @@ enum class Appearance {
     NativeMenu
 };
 
+enum class Mode {
+    NativeMenu = 1,
+    QtFallback = 3
+};
+
+Mode mode();
+void setMode(Mode mode);
+QVector<Mode> supportedModes();
 Appearance appearance();
 bool isSupported();
 bool popupMenu(QWidget* anchorWidget,

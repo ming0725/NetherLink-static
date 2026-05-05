@@ -25,6 +25,8 @@ public:
     };
 
     static constexpr int kBottomSpaceHeight = 48;
+    static constexpr int kNoHoveredButton = -1;
+    static constexpr int kHoveredItemNoButton = -2;
 
     explicit GroupNotificationListModel(QObject* parent = nullptr);
 

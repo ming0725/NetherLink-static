@@ -65,6 +65,24 @@ constexpr int kNativeMenuMode = 1;
 constexpr int kNativeMenuAliasMode = 2;
 constexpr int kQtFallbackMode = 3;
 
+int defaultConfiguredMode()
+{
+    switch (MacStyledActionMenuBridge::kStyledActionMenuTestMode) {
+    case kNativeMenuMode:
+    case kNativeMenuAliasMode:
+    case kQtFallbackMode:
+        return MacStyledActionMenuBridge::kStyledActionMenuTestMode;
+    default:
+        return kNativeMenuMode;
+    }
+}
+
+int& configuredModeStorage()
+{
+    static int mode = defaultConfiguredMode();
+    return mode;
+}
+
 NSString* nsStringFromQString(const QString& value)
 {
     return [NSString stringWithUTF8String:value.toUtf8().constData()];
@@ -112,11 +130,11 @@ void applyNativeMenuAppearance(NSMenu* menu, MacStyledActionMenuBridge::Appearan
 
 int normalizedTestMode()
 {
-    switch (MacStyledActionMenuBridge::kStyledActionMenuTestMode) {
+    switch (configuredModeStorage()) {
     case kNativeMenuMode:
     case kNativeMenuAliasMode:
     case kQtFallbackMode:
-        return MacStyledActionMenuBridge::kStyledActionMenuTestMode;
+        return configuredModeStorage();
     default:
         return kNativeMenuMode;
     }
@@ -139,6 +157,15 @@ MacStyledActionMenuBridge::Appearance resolvedAppearanceForMode(int mode)
 MacStyledActionMenuBridge::Appearance currentAppearance()
 {
     return resolvedAppearanceForMode(normalizedTestMode());
+}
+
+MacStyledActionMenuBridge::Mode effectiveModeForMode(int mode)
+{
+    if ((mode == kNativeMenuMode || mode == kNativeMenuAliasMode) && supportsNativeMenu()) {
+        return MacStyledActionMenuBridge::Mode::NativeMenu;
+    }
+
+    return MacStyledActionMenuBridge::Mode::QtFallback;
 }
 
 QWidget* anchorForWidget(QWidget* widget)
@@ -205,7 +232,9 @@ NSMenu* buildNativeMenu(QMenu* sourceMenu,
                         NSMutableArray* retainedTargets,
                         MacStyledActionMenuBridge::Appearance appearance)
 {
-    NSMenu* nativeMenu = [[[NSMenu alloc] initWithTitle:nsStringFromQString(sourceMenu ? sourceMenu->title() : QString())] autorelease];
+    NSMenu* nativeMenu = [[[NSMenu alloc]
+        initWithTitle:nsStringFromQString(sourceMenu ? sourceMenu->title() : QString()) ?: @""]
+        autorelease];
     nativeMenu.autoenablesItems = NO;
     if (sourceMenu && sourceMenu->minimumWidth() > 0) {
         nativeMenu.minimumWidth = static_cast<CGFloat>(sourceMenu->minimumWidth());
@@ -258,6 +287,31 @@ NSMenu* buildNativeMenu(QMenu* sourceMenu,
 } // namespace
 
 namespace MacStyledActionMenuBridge {
+
+Mode mode()
+{
+    return effectiveModeForMode(normalizedTestMode());
+}
+
+void setMode(Mode mode)
+{
+    switch (mode) {
+    case Mode::NativeMenu:
+    case Mode::QtFallback:
+        configuredModeStorage() = static_cast<int>(mode);
+        break;
+    }
+}
+
+QVector<Mode> supportedModes()
+{
+    QVector<Mode> modes;
+    if (supportsNativeMenu()) {
+        modes.push_back(Mode::NativeMenu);
+    }
+    modes.push_back(Mode::QtFallback);
+    return modes;
+}
 
 Appearance appearance()
 {

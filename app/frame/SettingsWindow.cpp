@@ -5,6 +5,15 @@
 #include "shared/ui/MinecraftButton.h"
 #include "shared/ui/MinecraftSlider.h"
 
+#ifdef Q_OS_MACOS
+#include "features/post/ui/PostApplicationBar.h"
+#include "platform/macos/MacFloatingInputBarBridge_p.h"
+#include "platform/macos/MacPostBarBridge_p.h"
+#include "platform/macos/MacStyledActionMenuBridge_p.h"
+#include "shared/ui/FloatingInputBar.h"
+#endif
+
+#include <QApplication>
 #include <QFontDatabase>
 #include <QKeyEvent>
 #include <QPainter>
@@ -84,6 +93,119 @@ QStringList historyChoices()   { return {QStringLiteral("保留全部"), QString
 QStringList sendKeyChoices()   { return {QStringLiteral("Enter"), QStringLiteral("Ctrl+Enter")}; }
 QStringList verifyChoices()    { return {QStringLiteral("关闭"), QStringLiteral("开启")}; }
 
+#ifdef Q_OS_MACOS
+QVariantList floatingInputBarModeValues(const QVector<MacFloatingInputBarBridge::Mode>& modes)
+{
+    QVariantList values;
+    values.reserve(modes.size());
+    for (MacFloatingInputBarBridge::Mode mode : modes) {
+        values.push_back(static_cast<int>(mode));
+    }
+    return values;
+}
+
+QStringList floatingInputBarModeChoices(const QVector<MacFloatingInputBarBridge::Mode>& modes)
+{
+    QStringList choices;
+    choices.reserve(modes.size());
+    for (MacFloatingInputBarBridge::Mode mode : modes) {
+        switch (mode) {
+        case MacFloatingInputBarBridge::Mode::LiquidGlass:
+            choices.push_back(QStringLiteral("液态玻璃"));
+            break;
+        case MacFloatingInputBarBridge::Mode::NativeBlur:
+            choices.push_back(QStringLiteral("高斯模糊"));
+            break;
+        case MacFloatingInputBarBridge::Mode::QtFallback:
+            choices.push_back(QStringLiteral("默认"));
+            break;
+        }
+    }
+    return choices;
+}
+
+QVariantList postBarModeValues(const QVector<MacPostBarBridge::Mode>& modes)
+{
+    QVariantList values;
+    values.reserve(modes.size());
+    for (MacPostBarBridge::Mode mode : modes) {
+        values.push_back(static_cast<int>(mode));
+    }
+    return values;
+}
+
+QStringList postBarModeChoices(const QVector<MacPostBarBridge::Mode>& modes)
+{
+    QStringList choices;
+    choices.reserve(modes.size());
+    for (MacPostBarBridge::Mode mode : modes) {
+        switch (mode) {
+        case MacPostBarBridge::Mode::LiquidGlass:
+            choices.push_back(QStringLiteral("液态玻璃"));
+            break;
+        case MacPostBarBridge::Mode::NativeBlur:
+            choices.push_back(QStringLiteral("高斯模糊"));
+            break;
+        case MacPostBarBridge::Mode::QtFallback:
+            choices.push_back(QStringLiteral("默认"));
+            break;
+        }
+    }
+    return choices;
+}
+
+QVariantList styledActionMenuModeValues(const QVector<MacStyledActionMenuBridge::Mode>& modes)
+{
+    QVariantList values;
+    values.reserve(modes.size());
+    for (MacStyledActionMenuBridge::Mode mode : modes) {
+        values.push_back(static_cast<int>(mode));
+    }
+    return values;
+}
+
+QStringList styledActionMenuModeChoices(const QVector<MacStyledActionMenuBridge::Mode>& modes)
+{
+    QStringList choices;
+    choices.reserve(modes.size());
+    for (MacStyledActionMenuBridge::Mode mode : modes) {
+        switch (mode) {
+        case MacStyledActionMenuBridge::Mode::NativeMenu:
+            choices.push_back(QStringLiteral("macOS"));
+            break;
+        case MacStyledActionMenuBridge::Mode::QtFallback:
+            choices.push_back(QStringLiteral("默认"));
+            break;
+        }
+    }
+    return choices;
+}
+
+int indexForModeValue(const QVariantList& values, int modeValue)
+{
+    for (int i = 0; i < values.size(); ++i) {
+        if (values.at(i).toInt() == modeValue) {
+            return i;
+        }
+    }
+    return values.isEmpty() ? -1 : 0;
+}
+
+int modeValueForToggle(const MinecraftButton* button)
+{
+    if (!button) {
+        return 0;
+    }
+
+    const QVariantList values = button->property("modeValues").toList();
+    const int index = button->property("toggleIndex").toInt();
+    if (index < 0 || index >= values.size()) {
+        return 0;
+    }
+    return values.at(index).toInt();
+}
+#endif
+
 } // namespace
 
 // ============================================================
@@ -134,7 +256,11 @@ void SettingsWindow::showAnimated()
 void SettingsWindow::hideAnimated()
 {
     QWidget* p = parentWidget();
-    if (!p) { deleteLater(); return; }
+    if (!p) {
+        emit hideAnimationFinished();
+        deleteLater();
+        return;
+    }
 
     const int h = p->height();
     auto* anim = new QPropertyAnimation(this, "pos", this);
@@ -142,7 +268,10 @@ void SettingsWindow::hideAnimated()
     anim->setStartValue(pos());
     anim->setEndValue(QPoint(0, h));
     anim->setEasingCurve(QEasingCurve::InCubic);
-    connect(anim, &QPropertyAnimation::finished, this, &QWidget::deleteLater);
+    connect(anim, &QPropertyAnimation::finished, this, [this]() {
+        emit hideAnimationFinished();
+        deleteLater();
+    });
     anim->start();
 }
 
@@ -207,8 +336,7 @@ void SettingsWindow::navigateTo(int page)
     ensurePageCreated(page);
 
     if (page == PageAppearance) {
-        const int idx = modeToIndex(ThemeManager::instance().configuredMode());
-        setToggleIndex(m_appearanceModeToggle, idx);
+        resetAppearanceControls();
     }
     m_stack->setCurrentIndex(page);
     layoutCurrentPage();
@@ -530,6 +658,43 @@ void SettingsWindow::createAppearancePage()
 
     auto* transpToggle = createToggleButton(QStringLiteral("窗口透明度"), transparencyChoices(), 1, page);
 
+#ifdef Q_OS_MACOS
+    const QVector<MacFloatingInputBarBridge::Mode> inputBarModes =
+            MacFloatingInputBarBridge::supportedModes();
+    if (inputBarModes.size() >= 2) {
+        const QVariantList values = floatingInputBarModeValues(inputBarModes);
+        m_inputBarStyleToggle = createToggleButton(
+                QStringLiteral("聊天输入栏样式"),
+                floatingInputBarModeChoices(inputBarModes),
+                indexForModeValue(values, static_cast<int>(MacFloatingInputBarBridge::mode())),
+                page);
+        m_inputBarStyleToggle->setProperty("modeValues", values);
+    }
+
+    const QVector<MacPostBarBridge::Mode> postBarModes = MacPostBarBridge::supportedModes();
+    if (postBarModes.size() >= 2) {
+        const QVariantList values = postBarModeValues(postBarModes);
+        m_postBarStyleToggle = createToggleButton(
+                QStringLiteral("帖子导航栏"),
+                postBarModeChoices(postBarModes),
+                indexForModeValue(values, static_cast<int>(MacPostBarBridge::mode())),
+                page);
+        m_postBarStyleToggle->setProperty("modeValues", values);
+    }
+
+    const QVector<MacStyledActionMenuBridge::Mode> actionMenuModes =
+            MacStyledActionMenuBridge::supportedModes();
+    if (actionMenuModes.size() >= 2) {
+        const QVariantList values = styledActionMenuModeValues(actionMenuModes);
+        m_actionMenuStyleToggle = createToggleButton(
+                QStringLiteral("右键菜单"),
+                styledActionMenuModeChoices(actionMenuModes),
+                indexForModeValue(values, static_cast<int>(MacStyledActionMenuBridge::mode())),
+                page);
+        m_actionMenuStyleToggle->setProperty("modeValues", values);
+    }
+#endif
+
     auto* doneBtn = createMenuButton(QStringLiteral("完成"), page);
     connect(doneBtn, &QPushButton::clicked, this, [this]() {
         applyAppearance();
@@ -537,8 +702,19 @@ void SettingsWindow::createAppearancePage()
     });
 
     PageLayout pl;
-    pl.leftItems  = {m_appearanceModeToggle};
+    pl.leftItems = {m_appearanceModeToggle};
     pl.rightItems = {transpToggle};
+#ifdef Q_OS_MACOS
+    if (m_inputBarStyleToggle) {
+        pl.leftItems.push_back(m_inputBarStyleToggle);
+    }
+    if (m_actionMenuStyleToggle) {
+        pl.leftItems.push_back(m_actionMenuStyleToggle);
+    }
+    if (m_postBarStyleToggle) {
+        pl.rightItems.push_back(m_postBarStyleToggle);
+    }
+#endif
     pl.doneWidget = doneBtn;
     pl.firstRowGap = kSubPageRowGap;
     pl.bodyRowGap  = kSubPageRowGap;
@@ -730,10 +906,61 @@ void SettingsWindow::createAboutPage()
 // Appearance — real ThemeManager integration
 // ============================================================
 
+void SettingsWindow::resetAppearanceControls()
+{
+    const int idx = modeToIndex(ThemeManager::instance().configuredMode());
+    setToggleIndex(m_appearanceModeToggle, idx);
+
+#ifdef Q_OS_MACOS
+    if (m_inputBarStyleToggle) {
+        setToggleIndex(
+                m_inputBarStyleToggle,
+                indexForModeValue(m_inputBarStyleToggle->property("modeValues").toList(),
+                                  static_cast<int>(MacFloatingInputBarBridge::mode())));
+    }
+    if (m_postBarStyleToggle) {
+        setToggleIndex(
+                m_postBarStyleToggle,
+                indexForModeValue(m_postBarStyleToggle->property("modeValues").toList(),
+                                  static_cast<int>(MacPostBarBridge::mode())));
+    }
+    if (m_actionMenuStyleToggle) {
+        setToggleIndex(
+                m_actionMenuStyleToggle,
+                indexForModeValue(m_actionMenuStyleToggle->property("modeValues").toList(),
+                                  static_cast<int>(MacStyledActionMenuBridge::mode())));
+    }
+#endif
+}
+
 void SettingsWindow::applyAppearance()
 {
     if (!m_appearanceModeToggle) return;
 
     const int idx = toggleCurrentIndex(m_appearanceModeToggle);
     ThemeManager::instance().setMode(indexToMode(idx));
+
+#ifdef Q_OS_MACOS
+    if (m_inputBarStyleToggle) {
+        MacFloatingInputBarBridge::setMode(static_cast<MacFloatingInputBarBridge::Mode>(
+                modeValueForToggle(m_inputBarStyleToggle)));
+    }
+    if (m_postBarStyleToggle) {
+        MacPostBarBridge::setMode(static_cast<MacPostBarBridge::Mode>(
+                modeValueForToggle(m_postBarStyleToggle)));
+    }
+    if (m_actionMenuStyleToggle) {
+        MacStyledActionMenuBridge::setMode(static_cast<MacStyledActionMenuBridge::Mode>(
+                modeValueForToggle(m_actionMenuStyleToggle)));
+    }
+
+    const QWidgetList widgets = QApplication::allWidgets();
+    for (QWidget* widget : widgets) {
+        if (auto* inputBar = qobject_cast<FloatingInputBar*>(widget)) {
+            inputBar->refreshPlatformAppearance();
+        } else if (auto* postBar = qobject_cast<PostApplicationBar*>(widget)) {
+            postBar->refreshPlatformAppearance();
+        }
+    }
+#endif
 }

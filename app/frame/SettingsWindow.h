@@ -24,6 +24,7 @@ public:
 
 signals:
     void closeRequested();
+    void hideAnimationFinished();
 
 protected:
     void keyPressEvent(QKeyEvent* event) override;
@@ -87,6 +88,7 @@ private:
     void updateFontSizeText(int value);
 
     // Appearance — real ThemeManager integration
+    void resetAppearanceControls();
     void applyAppearance();
 
     QStackedWidget* m_stack = nullptr;
@@ -96,6 +98,9 @@ private:
 
     // Cached pointers
     MinecraftButton* m_appearanceModeToggle = nullptr;
+    MinecraftButton* m_inputBarStyleToggle = nullptr;
+    MinecraftButton* m_postBarStyleToggle = nullptr;
+    MinecraftButton* m_actionMenuStyleToggle = nullptr;
     MinecraftSlider* m_fontSizeSlider = nullptr;
 
     static inline const QStringList kAppearanceChoices = {

@@ -129,6 +129,14 @@ void MessageApplication::handleGlobalMousePress(const QPoint& globalPos)
     }
 }
 
+void MessageApplication::setSystemFloatingBarsSuppressed(bool suppressed)
+{
+    m_systemFloatingBarsSuppressed = suppressed;
+    if (m_chatArea) {
+        m_chatArea->setSystemFloatingBarsSuppressed(suppressed);
+    }
+}
+
 void MessageApplication::resizeEvent(QResizeEvent*)
 {
     m_splitter->setGeometry(rect());
@@ -187,4 +195,5 @@ void MessageApplication::ensureChatArea()
     m_rightStack->addWidget(m_chatArea);
     connect(m_chatArea, &ChatArea::currentConversationRemoved,
             this, &MessageApplication::onCurrentConversationDeleted);
+    m_chatArea->setSystemFloatingBarsSuppressed(m_systemFloatingBarsSuppressed);
 }

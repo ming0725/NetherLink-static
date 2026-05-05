@@ -37,6 +37,7 @@ private:
     void updateBackdropTheme();
     void openSettingsWindow();
     void closeSettingsWindow();
+    void setSystemFloatingBarsSuppressed(bool suppressed);
     void layoutWindow();
 
     ApplicationBar *appBar;
@@ -53,4 +54,5 @@ private:
     DefaultPage* m_defaultPage = nullptr;
     QPointer<SettingsWindow> m_settingsWindow;
     QPointer<QWidget> m_pendingFocusClear;
+    bool m_systemFloatingBarsSuppressed = false;
 };

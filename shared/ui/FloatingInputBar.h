@@ -17,6 +17,8 @@ public:
     bool submitNativeText(const QString& text);
     void triggerNativeHelloShortcut();
     void triggerNativeImageShortcut();
+    void refreshPlatformAppearance();
+    bool usesNativeGlass() const { return m_usesNativeGlass; }
 signals:
     void sendImage(const QString &path);
     void sendText(const QString &text);
@@ -44,6 +46,7 @@ private:
     void sendCurrentMessage(SendMode mode = SendMode::Self);
     void sendHelloWorld();
     void chooseAndSendImage();
+    void clearQtFallbackUi();
     void syncPlatformInput();
     void applyTheme();
 private:

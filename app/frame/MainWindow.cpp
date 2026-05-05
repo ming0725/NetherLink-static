@@ -288,6 +288,7 @@ void MainWindow::ensureApplicationLoaded(int index)
         if (!m_postApp) {
             m_postApp = new PostApplication(this);
             replaceStackPage(index, m_postApp);
+            m_postApp->setSystemFloatingBarsSuppressed(m_systemFloatingBarsSuppressed);
         }
         break;
     case 3:
@@ -322,13 +323,27 @@ void MainWindow::updateBackdropTheme()
 void MainWindow::openSettingsWindow()
 {
     if (m_settingsWindow) {
+        setSystemFloatingBarsSuppressed(true);
         m_settingsWindow->raise();
         m_settingsWindow->setFocus();
         return;
     }
 
+    setSystemFloatingBarsSuppressed(true);
     auto* settings = new SettingsWindow(this);
     connect(settings, &SettingsWindow::closeRequested, this, &MainWindow::closeSettingsWindow);
+    connect(settings, &SettingsWindow::hideAnimationFinished, this, [this, settings]() {
+        if (m_settingsWindow == settings) {
+            m_settingsWindow = nullptr;
+        }
+        setSystemFloatingBarsSuppressed(false);
+    });
+    connect(settings, &QObject::destroyed, this, [this, settings]() {
+        if (m_settingsWindow == settings) {
+            m_settingsWindow = nullptr;
+            setSystemFloatingBarsSuppressed(false);
+        }
+    });
     m_settingsWindow = settings;
     settings->showAnimated();
 }
@@ -340,9 +355,28 @@ void MainWindow::closeSettingsWindow()
     }
 
     SettingsWindow* settings = m_settingsWindow;
-    m_settingsWindow = nullptr;
-    settings->disconnect(this);
+    disconnect(settings, &SettingsWindow::closeRequested, this, &MainWindow::closeSettingsWindow);
     settings->hideAnimated();
+}
+
+void MainWindow::setSystemFloatingBarsSuppressed(bool suppressed)
+{
+#ifndef Q_OS_MACOS
+    Q_UNUSED(suppressed);
+    return;
+#else
+    if (m_systemFloatingBarsSuppressed == suppressed) {
+        return;
+    }
+
+    m_systemFloatingBarsSuppressed = suppressed;
+    if (m_messageApp) {
+        m_messageApp->setSystemFloatingBarsSuppressed(suppressed);
+    }
+    if (m_postApp) {
+        m_postApp->setSystemFloatingBarsSuppressed(suppressed);
+    }
+#endif
 }
 
 void MainWindow::openConversationFromContacts(const QString& conversationId)

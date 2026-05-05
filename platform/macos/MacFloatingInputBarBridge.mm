@@ -573,13 +573,31 @@ constexpr int kLiquidGlassMode = 1;
 constexpr int kNativeBlurMode = 2;
 constexpr int kQtFallbackMode = 3;
 
-int normalizedTestMode()
+int defaultConfiguredMode()
 {
     switch (MacFloatingInputBarBridge::kFloatingInputBarTestMode) {
     case kLiquidGlassMode:
     case kNativeBlurMode:
     case kQtFallbackMode:
         return MacFloatingInputBarBridge::kFloatingInputBarTestMode;
+    default:
+        return kNativeBlurMode;
+    }
+}
+
+int& configuredModeStorage()
+{
+    static int mode = defaultConfiguredMode();
+    return mode;
+}
+
+int normalizedTestMode()
+{
+    switch (configuredModeStorage()) {
+    case kLiquidGlassMode:
+    case kNativeBlurMode:
+    case kQtFallbackMode:
+        return configuredModeStorage();
     default:
         return kNativeBlurMode;
     }
@@ -629,6 +647,19 @@ Appearance resolvedAppearanceForMode(int mode)
 Appearance currentAppearance()
 {
     return resolvedAppearanceForMode(normalizedTestMode());
+}
+
+MacFloatingInputBarBridge::Mode effectiveModeForMode(int mode)
+{
+    if (mode == kLiquidGlassMode && supportsLiquidGlass()) {
+        return MacFloatingInputBarBridge::Mode::LiquidGlass;
+    }
+
+    if ((mode == kLiquidGlassMode || mode == kNativeBlurMode) && supportsNativeBlur()) {
+        return MacFloatingInputBarBridge::Mode::NativeBlur;
+    }
+
+    return MacFloatingInputBarBridge::Mode::QtFallback;
 }
 
 NSView* topLevelQtViewForWidget(QWidget* widget, bool createIfNeeded)
@@ -1562,6 +1593,35 @@ void layoutButtons(NSView* contentView,
 } // namespace
 
 namespace MacFloatingInputBarBridge {
+
+Mode mode()
+{
+    return effectiveModeForMode(normalizedTestMode());
+}
+
+void setMode(Mode mode)
+{
+    switch (mode) {
+    case Mode::LiquidGlass:
+    case Mode::NativeBlur:
+    case Mode::QtFallback:
+        configuredModeStorage() = static_cast<int>(mode);
+        break;
+    }
+}
+
+QVector<Mode> supportedModes()
+{
+    QVector<Mode> modes;
+    if (supportsLiquidGlass()) {
+        modes.push_back(Mode::LiquidGlass);
+    }
+    if (supportsNativeBlur()) {
+        modes.push_back(Mode::NativeBlur);
+    }
+    modes.push_back(Mode::QtFallback);
+    return modes;
+}
 
 Appearance appearance()
 {

@@ -11,6 +11,7 @@ namespace {
 
 constexpr int kLineSpacing = 1;
 constexpr int kUnifiedFontSize = 12;
+constexpr qreal kButtonBorderWidth = 1.5;
 
 const QFont& nickFont()
 {
@@ -220,11 +221,14 @@ void FriendNotificationDelegate::paint(QPainter* painter,
     const QString src    = index.data(FriendNotificationListModel::SourceTextRole).toString();
     const auto status    = static_cast<NotificationStatus>(
                                index.data(FriendNotificationListModel::StatusRole).toInt());
+    const int hovered = index.data(FriendNotificationListModel::HoveredButtonRole).toInt();
+    const bool pendingActionsVisible = status == NotificationStatus::Pending
+            && hovered != FriendNotificationListModel::kNoHoveredButton;
 
     // 4. Line 1:  nick(Accent) + " 请求添加为好友 " + date   — all inline, same font size
     {
         const QRect l1 = line1Rect(c);
-        const int textRight = textRightBeforeAction(l1, card, c);
+        const int textRight = pendingActionsVisible ? textRightBeforeAction(l1, card, c) : l1.right();
         const int textWidth = qMax(0, textRight - l1.left() + 1);
         const QString action = QStringLiteral(" 请求添加为好友 ");
         int x = l1.left();
@@ -271,7 +275,7 @@ void FriendNotificationDelegate::paint(QPainter* painter,
                           Qt::AlignLeft | Qt::AlignVCenter, label);
 
         painter->setPen(ThemeManager::instance().color(ThemeColor::SecondaryText));
-        const int msgRight = textRightBeforeAction(l2, card, c);
+        const int msgRight = pendingActionsVisible ? textRightBeforeAction(l2, card, c) : l2.right();
         const int msgW = qMax(0, msgRight - (l2.left() + labelW) + 1);
         painter->drawText(QRect(l2.left() + labelW, l2.top(), msgW, l2.height()),
                           Qt::AlignLeft | Qt::AlignVCenter,
@@ -289,7 +293,7 @@ void FriendNotificationDelegate::paint(QPainter* painter,
         painter->drawText(QRect(l3.left(), l3.top(), labelW, l3.height()),
                           Qt::AlignLeft | Qt::AlignVCenter, label);
 
-        const int srcRight = textRightBeforeAction(l3, card, c);
+        const int srcRight = pendingActionsVisible ? textRightBeforeAction(l3, card, c) : l3.right();
         const int srcW = qMax(0, srcRight - (l3.left() + labelW) + 1);
         painter->setPen(ThemeManager::instance().color(ThemeColor::SecondaryText));
         painter->drawText(QRect(l3.left() + labelW, l3.top(), srcW, l3.height()),
@@ -298,10 +302,9 @@ void FriendNotificationDelegate::paint(QPainter* painter,
     }
 
     // 7. Buttons or status text
-    if (status == NotificationStatus::Pending) {
+    if (status == NotificationStatus::Pending && pendingActionsVisible) {
         const QRect accR = acceptBtnRect(card, c);
         const QRect rejR = rejectBtnRect(card, c);
-        const int hovered = index.data(FriendNotificationListModel::HoveredButtonRole).toInt();
 
         painter->setFont(buttonFont());
 
@@ -309,8 +312,8 @@ void FriendNotificationDelegate::paint(QPainter* painter,
         {
             QColor bg = ThemeManager::instance().color(ThemeColor::Accent);
             if (hovered == 0) bg = ThemeManager::instance().color(ThemeColor::AccentHover);
-            painter->setPen(Qt::NoPen);
             painter->setBrush(bg);
+            painter->setPen(QPen(bg, kButtonBorderWidth));
             painter->drawRoundedRect(accR, kButtonRadius, kButtonRadius);
             painter->setPen(Qt::white);
             painter->drawText(accR, Qt::AlignCenter, QStringLiteral("同意"));
@@ -322,7 +325,7 @@ void FriendNotificationDelegate::paint(QPainter* painter,
             QColor bg = Qt::transparent;
             if (hovered == 1) bg = ThemeManager::instance().color(ThemeColor::DangerControlHover);
             painter->setBrush(bg);
-            painter->setPen(QPen(border, 1.5));
+            painter->setPen(QPen(border, kButtonBorderWidth));
             painter->drawRoundedRect(rejR, kButtonRadius, kButtonRadius);
             painter->setPen(border);
             painter->drawText(rejR, Qt::AlignCenter, QStringLiteral("拒绝"));

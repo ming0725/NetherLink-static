@@ -174,13 +174,31 @@ constexpr int kLiquidGlassMode = 1;
 constexpr int kNativeBlurMode = 2;
 constexpr int kQtFallbackMode = 3;
 
-int normalizedTestMode()
+int defaultConfiguredMode()
 {
     switch (MacPostBarBridge::kPostBarTestMode) {
     case kLiquidGlassMode:
     case kNativeBlurMode:
     case kQtFallbackMode:
         return MacPostBarBridge::kPostBarTestMode;
+    default:
+        return kLiquidGlassMode;
+    }
+}
+
+int& configuredModeStorage()
+{
+    static int mode = defaultConfiguredMode();
+    return mode;
+}
+
+int normalizedTestMode()
+{
+    switch (configuredModeStorage()) {
+    case kLiquidGlassMode:
+    case kNativeBlurMode:
+    case kQtFallbackMode:
+        return configuredModeStorage();
     default:
         return kLiquidGlassMode;
     }
@@ -230,6 +248,19 @@ MacPostBarBridge::Appearance resolvedAppearanceForMode(int mode)
 MacPostBarBridge::Appearance currentAppearance()
 {
     return resolvedAppearanceForMode(normalizedTestMode());
+}
+
+MacPostBarBridge::Mode effectiveModeForMode(int mode)
+{
+    if (mode == kLiquidGlassMode && supportsLiquidGlass()) {
+        return MacPostBarBridge::Mode::LiquidGlass;
+    }
+
+    if ((mode == kLiquidGlassMode || mode == kNativeBlurMode) && supportsNativeBlur()) {
+        return MacPostBarBridge::Mode::NativeBlur;
+    }
+
+    return MacPostBarBridge::Mode::QtFallback;
 }
 
 NSView* topLevelQtViewForWidget(QWidget* widget, bool createIfNeeded)
@@ -743,6 +774,35 @@ void layoutButtons(NSMutableArray<NSButton*>* buttons,
 } // namespace
 
 namespace MacPostBarBridge {
+
+Mode mode()
+{
+    return effectiveModeForMode(normalizedTestMode());
+}
+
+void setMode(Mode mode)
+{
+    switch (mode) {
+    case Mode::LiquidGlass:
+    case Mode::NativeBlur:
+    case Mode::QtFallback:
+        configuredModeStorage() = static_cast<int>(mode);
+        break;
+    }
+}
+
+QVector<Mode> supportedModes()
+{
+    QVector<Mode> modes;
+    if (supportsLiquidGlass()) {
+        modes.push_back(Mode::LiquidGlass);
+    }
+    if (supportsNativeBlur()) {
+        modes.push_back(Mode::NativeBlur);
+    }
+    modes.push_back(Mode::QtFallback);
+    return modes;
+}
 
 Appearance appearance()
 {

@@ -35,6 +35,7 @@ public:
     void closeConversation();
     void clearMessageSelection();
     void handleGlobalMousePress(const QPoint& globalPos);
+    void setSystemFloatingBarsSuppressed(bool suppressed);
 
 signals:
     void currentConversationRemoved();
@@ -78,6 +79,8 @@ private:
     ChatSessionController* sessionController;
     QPropertyAnimation* infoPanelAnimation;
     bool infoPanelOpen = false;
+    bool m_systemFloatingBarsSuppressed = false;
+    bool m_inputBarVisibleBeforeSystemSuppression = false;
     ConversationState m_state;
     
     void updateNewMessageNotifier();

@@ -113,7 +113,7 @@ QVector<GroupNotification> buildInitialNotifications()
     };
 
     QVector<GroupNotification> notifications;
-    notifications.reserve(28);
+    notifications.reserve(34);
     int serial = 1;
     for (int i = 0; i < requestUsers.size() && !manageableGroups.isEmpty(); ++i) {
         const Group& group = manageableGroups.at(i % manageableGroups.size());
@@ -126,6 +126,62 @@ QVector<GroupNotification> buildInitialNotifications()
             messages.at(i % messages.size()),
             GroupNotificationStatus::Pending));
     }
+
+    auto addAcceptedJoinRequest = [&](const QString& groupId,
+                                      const QString& actorUserId,
+                                      const QString& operatorUserId,
+                                      int daysAgo,
+                                      const QString& message) {
+        const auto it = std::find_if(manageableGroups.cbegin(),
+                                     manageableGroups.cend(),
+                                     [&](const Group& group) {
+                                         return group.groupId == groupId;
+                                     });
+        if (it == manageableGroups.cend()) {
+            return;
+        }
+
+        notifications.push_back(makeNotification(
+            QStringLiteral("gn_%1").arg(serial++, 3, 10, QChar('0')),
+            GroupNotificationType::JoinRequest,
+            groupId,
+            actorUserId,
+            daysAgo,
+            message,
+            GroupNotificationStatus::Accepted,
+            operatorUserId));
+    };
+
+    addAcceptedJoinRequest(QStringLiteral("g001"),
+                           QStringLiteral("u119"),
+                           QStringLiteral("u001"),
+                           0,
+                           QStringLiteral("我是亲戚介绍来的，麻烦通过一下。"));
+    addAcceptedJoinRequest(QStringLiteral("g010"),
+                           QStringLiteral("u120"),
+                           QStringLiteral("u002"),
+                           1,
+                           QStringLiteral("参与服务器维护值班，申请加入。"));
+    addAcceptedJoinRequest(QStringLiteral("g004"),
+                           QStringLiteral("u121"),
+                           QStringLiteral("u002"),
+                           1,
+                           QStringLiteral("想加入 Qt 学习讨论。"));
+    addAcceptedJoinRequest(QStringLiteral("g005"),
+                           QStringLiteral("u122"),
+                           QStringLiteral("u007"),
+                           2,
+                           QStringLiteral("希望加入技术交流。"));
+    addAcceptedJoinRequest(QStringLiteral("g012"),
+                           QStringLiteral("u123"),
+                           QStringLiteral("u005"),
+                           2,
+                           QStringLiteral("想一起交流像素美术。"));
+    addAcceptedJoinRequest(QStringLiteral("g014"),
+                           QStringLiteral("u124"),
+                           QStringLiteral("u007"),
+                           3,
+                           QStringLiteral("朋友邀请我周末一起开黑。"));
 
     for (int i = 0; i < manageableGroups.size(); ++i) {
         const Group& group = manageableGroups.at(i);

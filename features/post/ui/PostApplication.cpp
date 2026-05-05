@@ -254,6 +254,29 @@ void PostApplication::showEvent(QShowEvent* event)
     QWidget::showEvent(event);
 }
 
+void PostApplication::setSystemFloatingBarsSuppressed(bool suppressed)
+{
+    if (!m_bar || !m_bar->usesNativeBar() || m_systemFloatingBarsSuppressed == suppressed) {
+        return;
+    }
+
+    m_systemFloatingBarsSuppressed = suppressed;
+    if (suppressed) {
+        m_barVisibleBeforeSystemSuppression = !m_bar->isHidden();
+        m_barOpacityBeforeSystemSuppression = m_bar->visualOpacity();
+        m_bar->hide();
+        return;
+    }
+
+    if (m_barVisibleBeforeSystemSuppression && !hasModalLayerActive()) {
+        m_bar->setVisualOpacity(m_barOpacityBeforeSystemSuppression);
+        m_bar->show();
+    }
+    m_barVisibleBeforeSystemSuppression = false;
+    m_barOpacityBeforeSystemSuppression = 1.0;
+    updateLayerOrder();
+}
+
 void PostApplication::resizeEvent(QResizeEvent* ev)
 {
     QWidget::resizeEvent(ev);
@@ -523,6 +546,11 @@ void PostApplication::fadeBar(qreal startOpacity, qreal endOpacity, bool hideAft
         return;
     }
 
+    if (m_systemFloatingBarsSuppressed) {
+        m_bar->hide();
+        return;
+    }
+
     m_barFadeAnimation->stop();
     if (m_barFadeFinishedConnection) {
         disconnect(m_barFadeFinishedConnection);
@@ -572,8 +600,7 @@ void PostApplication::updateLayerOrder()
         return;
     }
 
-    const bool modalActive = (m_overlay && m_overlay->isVisible()) || m_detailView || m_transitionImage
-            || m_transitionPhase != TransitionPhase::Idle;
+    const bool modalActive = hasModalLayerActive();
 
     if (!modalActive) {
         m_stack->lower();
@@ -599,6 +626,12 @@ void PostApplication::updateLayerOrder()
     if (m_transitionImage) {
         m_transitionImage->raise();
     }
+}
+
+bool PostApplication::hasModalLayerActive() const
+{
+    return (m_overlay && m_overlay->isVisible()) || m_detailView || m_transitionImage
+            || m_transitionPhase != TransitionPhase::Idle;
 }
 
 void PostApplication::removeTransitionImage()

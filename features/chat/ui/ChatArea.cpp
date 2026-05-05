@@ -874,6 +874,14 @@ void ChatArea::onSessionConversationRemoved()
 
 void ChatArea::updateInputBarPosition() {
     if (inputBar) {
+        if (m_systemFloatingBarsSuppressed) {
+            inputBar->hide();
+            if (bottomGapGradientOverlay) {
+                bottomGapGradientOverlay->hide();
+            }
+            return;
+        }
+
         const int infoPanelWidth = visibleInfoPanelWidth();
         const QRect inputBarRect(
                 kInputBarSideMargin,
@@ -1130,4 +1138,28 @@ void ChatArea::handleGlobalMousePress(const QPoint& globalPos)
     if (!chatDelegate || !chatDelegate->bubbleHitTest(option, index, viewportPos)) {
         clearMessageSelection();
     }
+}
+
+void ChatArea::setSystemFloatingBarsSuppressed(bool suppressed)
+{
+    if (!inputBar || !inputBar->usesNativeGlass() || m_systemFloatingBarsSuppressed == suppressed) {
+        return;
+    }
+
+    m_systemFloatingBarsSuppressed = suppressed;
+    if (suppressed) {
+        m_inputBarVisibleBeforeSystemSuppression = !inputBar->isHidden();
+        inputBar->hide();
+        if (bottomGapGradientOverlay) {
+            bottomGapGradientOverlay->hide();
+        }
+        return;
+    }
+
+    if (m_inputBarVisibleBeforeSystemSuppression) {
+        updateInputBarPosition();
+        inputBar->show();
+        inputBar->raise();
+    }
+    m_inputBarVisibleBeforeSystemSuppression = false;
 }

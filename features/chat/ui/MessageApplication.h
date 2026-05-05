@@ -13,6 +13,7 @@ class MessageApplication : public QWidget {
 public:
     explicit MessageApplication(QWidget* parent = nullptr);
     void handleGlobalMousePress(const QPoint& globalPos);
+    void setSystemFloatingBarsSuppressed(bool suppressed);
 
 public slots:
     void openConversationFromContact(const QString& conversationId);
@@ -47,4 +48,5 @@ private:
     QStackedWidget*     m_rightStack;
     DefaultPage*        m_defaultPage;
     ChatArea*           m_chatArea = nullptr;
+    bool m_systemFloatingBarsSuppressed = false;
 };

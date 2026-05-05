@@ -49,7 +49,7 @@ QVariant GroupNotificationListModel::data(const QModelIndex& index, int role) co
     case ActorRoleRole:
         return static_cast<int>(notification.actorRole);
     case HoveredButtonRole:
-        return m_hoveredButtons.value(notification.id, -1);
+        return m_hoveredButtons.value(notification.id, kNoHoveredButton);
     case BottomSpaceRole:
         return false;
     default:

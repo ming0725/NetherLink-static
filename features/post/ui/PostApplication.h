@@ -19,6 +19,7 @@ class PostApplication : public QWidget {
 Q_OBJECT
 public:
     explicit PostApplication(QWidget* parent = nullptr);
+    void setSystemFloatingBarsSuppressed(bool suppressed);
 private slots:
     void onPostClickedWithGeometry(const PostSummary& summary, const QRect& sourceGeometry);
     void onPostDetailReady(const QString& requestId, const PostDetailData& detail);
@@ -47,6 +48,7 @@ private:
     };
 
     void onPostUpdated(const PostSummary& summary);
+    bool hasModalLayerActive() const;
     void fadeOverlay(qreal startOpacity, qreal endOpacity, bool hideAfter);
     void fadeBar(qreal startOpacity, qreal endOpacity, bool hideAfter);
     QRect detailRectForCurrentPost() const;
@@ -79,6 +81,9 @@ private:
     std::optional<PostDetailData> m_pendingPostDetail;
     TransitionPhase m_transitionPhase = TransitionPhase::Idle;
     bool m_initialPageLoadScheduled = false;
+    bool m_systemFloatingBarsSuppressed = false;
+    bool m_barVisibleBeforeSystemSuppression = false;
+    qreal m_barOpacityBeforeSystemSuppression = 1.0;
 #ifdef Q_OS_MACOS
     static constexpr int kContentTopInset = 20;
 #else

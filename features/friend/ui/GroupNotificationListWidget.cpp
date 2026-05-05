@@ -61,7 +61,7 @@ void GroupNotificationListWidget::updateButtonHover(const QPoint& pos)
     const QModelIndex index = indexAt(pos);
     if (!index.isValid()) {
         if (m_hoveredIndex.isValid()) {
-            m_model->setHoveredButton(m_hoveredIndex, -1);
+            m_model->setHoveredButton(m_hoveredIndex, GroupNotificationListModel::kNoHoveredButton);
             m_hoveredIndex = QPersistentModelIndex();
         }
         return;
@@ -71,10 +71,12 @@ void GroupNotificationListWidget::updateButtonHover(const QPoint& pos)
     option.rect = visualRect(index);
     const int btn = m_delegate->buttonAt(option, index, pos);
     if (m_hoveredIndex.isValid() && m_hoveredIndex != index) {
-        m_model->setHoveredButton(m_hoveredIndex, -1);
+        m_model->setHoveredButton(m_hoveredIndex, GroupNotificationListModel::kNoHoveredButton);
     }
     m_hoveredIndex = index;
-    m_model->setHoveredButton(index, btn);
+    m_model->setHoveredButton(index, btn < 0
+                              ? GroupNotificationListModel::kHoveredItemNoButton
+                              : btn);
 }
 
 void GroupNotificationListWidget::mouseMoveEvent(QMouseEvent* event)
@@ -106,7 +108,7 @@ void GroupNotificationListWidget::mousePressEvent(QMouseEvent* event)
         } else {
             emit rejectRequest(notificationId);
         }
-        m_model->setHoveredButton(index, -1);
+        m_model->setHoveredButton(index, GroupNotificationListModel::kNoHoveredButton);
         m_hoveredIndex = QPersistentModelIndex();
         event->accept();
         return;
@@ -118,7 +120,7 @@ void GroupNotificationListWidget::mousePressEvent(QMouseEvent* event)
 void GroupNotificationListWidget::leaveEvent(QEvent* event)
 {
     if (m_hoveredIndex.isValid()) {
-        m_model->setHoveredButton(m_hoveredIndex, -1);
+        m_model->setHoveredButton(m_hoveredIndex, GroupNotificationListModel::kNoHoveredButton);
         m_hoveredIndex = QPersistentModelIndex();
     }
     OverlayScrollListView::leaveEvent(event);

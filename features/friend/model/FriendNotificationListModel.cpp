@@ -54,7 +54,7 @@ QVariant FriendNotificationListModel::data(const QModelIndex& index, int role) c
     case StatusRole:
         return static_cast<int>(n.status);
     case HoveredButtonRole:
-        return m_hoveredButtons.value(n.id, -1);
+        return m_hoveredButtons.value(n.id, kNoHoveredButton);
     case BottomSpaceRole:
         return false;
     default:
