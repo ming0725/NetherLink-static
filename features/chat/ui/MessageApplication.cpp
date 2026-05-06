@@ -120,6 +120,7 @@ MessageApplication::MessageApplication(QWidget* parent)
     setWindowFlag(Qt::FramelessWindowHint);
     m_leftPane->messageList()->clearCurrentConversationSelection();
     m_rightStack->setCurrentWidget(m_defaultPage);
+    ensureChatArea();
 }
 
 void MessageApplication::handleGlobalMousePress(const QPoint& globalPos)

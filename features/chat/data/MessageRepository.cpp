@@ -208,19 +208,20 @@ QVector<FriendSummary> sampledFriendsForMessages()
 class ConversationMessagesRequestOperation final
     : public RepositoryTemplate<ConversationMessagesRequest, ChatMessageList> {
 public:
-    explicit ConversationMessagesRequestOperation(QMap<QString, ChatMessageList> store)
-        : m_store(std::move(store))
+    explicit ConversationMessagesRequestOperation(const QMap<QString, ChatMessageList>& store)
+        : m_store(store)
     {
     }
 
 private:
     ChatMessageList doRequest(const ConversationMessagesRequest& query) const override
     {
-        const ChatMessageList messages = m_store.value(query.conversationId);
-        if (messages.isEmpty()) {
+        const auto it = m_store.constFind(query.conversationId);
+        if (it == m_store.constEnd() || it.value().isEmpty()) {
             return {};
         }
 
+        const ChatMessageList& messages = it.value();
         const int total = messages.size();
         const int offset = qBound(0, query.offsetFromLatest, total);
         const int end = total - offset;
@@ -234,14 +235,14 @@ private:
         return messages.mid(start, end - start);
     }
 
-    QMap<QString, ChatMessageList> m_store;
+    const QMap<QString, ChatMessageList>& m_store;
 };
 
 class ConversationMetaRequestOperation final
     : public RepositoryTemplate<ConversationMetaRequest, ConversationMeta> {
 public:
-    explicit ConversationMetaRequestOperation(QMap<QString, ConversationSyncState> conversationStates)
-        : m_conversationStates(std::move(conversationStates))
+    explicit ConversationMetaRequestOperation(const QMap<QString, ConversationSyncState>& conversationStates)
+        : m_conversationStates(conversationStates)
     {
     }
 
@@ -289,16 +290,16 @@ private:
         };
     }
 
-    QMap<QString, ConversationSyncState> m_conversationStates;
+    const QMap<QString, ConversationSyncState>& m_conversationStates;
 };
 
 class ConversationListRequestOperation final
     : public RepositoryTemplate<ConversationListRequest, QVector<ConversationSummary>> {
 public:
-    ConversationListRequestOperation(QMap<QString, ChatMessageList> store,
-                                     QMap<QString, ConversationSyncState> conversationStates)
-        : m_store(std::move(store))
-        , m_conversationStates(std::move(conversationStates))
+    ConversationListRequestOperation(const QMap<QString, ChatMessageList>& store,
+                                     const QMap<QString, ConversationSyncState>& conversationStates)
+        : m_store(store)
+        , m_conversationStates(conversationStates)
     {
     }
 
@@ -338,8 +339,11 @@ private:
             }
 
             seenConversationIds.insert(group.groupId);
-            const ChatMessageList messages = m_store.value(group.groupId);
-            const QSharedPointer<ChatMessage> lastMessage = messages.isEmpty() ? QSharedPointer<ChatMessage>() : messages.last();
+            const auto messagesIt = m_store.constFind(group.groupId);
+            const ChatMessageList* messages = messagesIt == m_store.constEnd() ? nullptr : &messagesIt.value();
+            const QSharedPointer<ChatMessage> lastMessage = (!messages || messages->isEmpty())
+                    ? QSharedPointer<ChatMessage>()
+                    : messages->last();
             const ConversationSyncState state = stateFor(group.groupId);
             result.push_back(ConversationSummary{
                     group.groupId,
@@ -371,8 +375,11 @@ private:
             }
 
             seenConversationIds.insert(friendSummary.userId);
-            const ChatMessageList messages = m_store.value(friendSummary.userId);
-            const QSharedPointer<ChatMessage> lastMessage = messages.isEmpty() ? QSharedPointer<ChatMessage>() : messages.last();
+            const auto messagesIt = m_store.constFind(friendSummary.userId);
+            const ChatMessageList* messages = messagesIt == m_store.constEnd() ? nullptr : &messagesIt.value();
+            const QSharedPointer<ChatMessage> lastMessage = (!messages || messages->isEmpty())
+                    ? QSharedPointer<ChatMessage>()
+                    : messages->last();
             const ConversationSyncState state = stateFor(friendSummary.userId);
             result.push_back(ConversationSummary{
                     friendSummary.userId,
@@ -402,8 +409,8 @@ private:
         });
     }
 
-    QMap<QString, ChatMessageList> m_store;
-    QMap<QString, ConversationSyncState> m_conversationStates;
+    const QMap<QString, ChatMessageList>& m_store;
+    const QMap<QString, ConversationSyncState>& m_conversationStates;
 };
 
 } // namespace
