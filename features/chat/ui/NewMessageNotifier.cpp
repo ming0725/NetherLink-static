@@ -1,28 +1,47 @@
 #include "NewMessageNotifier.h"
+
+#include "shared/services/AudioService.h"
+#include "shared/services/ImageService.h"
+#include "shared/theme/ThemeManager.h"
+
+#include <QEvent>
+#include <QFontMetrics>
+#include <QGraphicsDropShadowEffect>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
-#include <QHBoxLayout>
-#include <QResizeEvent>
-#include <QPalette>
+
+namespace {
+
+constexpr int kHeight = 34;
+constexpr int kMinWidth = 62;
+constexpr int kHorizontalPadding = 10;
+constexpr int kIconSize = 20;
+constexpr int kIconTextGap = 6;
+constexpr int kCornerRadius = 15;
+
+} // namespace
 
 NewMessageNotifier::NewMessageNotifier(QWidget *parent) : QWidget(parent)
 {
-    setFixedHeight(32);
+    setFixedHeight(kHeight);
     setAttribute(Qt::WA_TranslucentBackground);
-    
-    QHBoxLayout *layout = new QHBoxLayout(this);
-    layout->setContentsMargins(10, 0, 10, 0);
-    
-    label = new QLabel(this);
-    QFont labelFont = label->font();
-    labelFont.setPixelSize(13);
-    label->setFont(labelFont);
-    QPalette labelPalette = label->palette();
-    labelPalette.setColor(QPalette::WindowText, Qt::white);
-    label->setPalette(labelPalette);
-    layout->addWidget(label);
-    
-    // 初始状态为隐藏
+    setAttribute(Qt::WA_Hover);
+    setCursor(Qt::PointingHandCursor);
+    setFocusPolicy(Qt::NoFocus);
+
+    auto* shadow = new QGraphicsDropShadowEffect(this);
+    shadow->setBlurRadius(10);
+    shadow->setOffset(0, 2);
+    shadow->setColor(QColor(0, 0, 0, 54));
+    setGraphicsEffect(shadow);
+
+    m_icon = ImageService::instance().pixmap(QStringLiteral(":/resources/icon/ender_pearl.png"));
+
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
+        update();
+    });
+
     QWidget::hide();
 }
 
@@ -31,51 +50,132 @@ void NewMessageNotifier::paintEvent(QPaintEvent *event)
     Q_UNUSED(event);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-    
-    // 绘制半透明背景
+
     QPainterPath path;
-    path.addRoundedRect(rect(), 16, 16);
-    
-    // 设置阴影
+    const QRectF pillRect = rect().adjusted(1, 1, -1, -1);
+    path.addRoundedRect(pillRect, kCornerRadius, kCornerRadius);
+
     painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(0, 0, 0, 20));
-    painter.drawRoundedRect(rect().adjusted(1, 1, 1, 1), 16, 16);
-    
-    // 绘制主体
-    painter.setBrush(QColor(0, 0, 0, 127));
+    QColor background;
+    QColor foreground;
+    if (ThemeManager::instance().isDark()) {
+        background = m_pressed ? QColor(0x22, 0x24, 0x29)
+                               : (m_hovered ? QColor(0x1b, 0x1d, 0x22) : QColor(0x0f, 0x10, 0x13));
+        foreground = Qt::white;
+    } else {
+        background = m_pressed ? QColor(0xee, 0xee, 0xee)
+                               : (m_hovered ? QColor(0xf8, 0xf8, 0xf8) : Qt::white);
+        foreground = QColor(0x12, 0x12, 0x12);
+    }
+    painter.setBrush(background);
     painter.drawPath(path);
+
+    const QRect contentRect = rect().adjusted(kHorizontalPadding, 0, -kHorizontalPadding, 0);
+    const QRect iconRect(contentRect.left(),
+                         (height() - kIconSize) / 2,
+                         kIconSize,
+                         kIconSize);
+    if (!m_icon.isNull()) {
+        painter.drawPixmap(iconRect,
+                           m_icon.scaled(iconRect.size(),
+                                         Qt::KeepAspectRatio,
+                                         Qt::SmoothTransformation));
+    }
+
+    QFont countFont = font();
+    countFont.setPixelSize(14);
+    countFont.setWeight(QFont::DemiBold);
+    painter.setFont(countFont);
+    painter.setPen(foreground);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    const QRect textRect(iconRect.right() + 1 + kIconTextGap,
+                         0,
+                         qMax(0, contentRect.right() - iconRect.right() - kIconTextGap),
+                         height());
+    painter.drawText(textRect, Qt::AlignVCenter | Qt::AlignRight, displayText());
 }
 
 void NewMessageNotifier::mousePressEvent(QMouseEvent *event)
 {
-    Q_UNUSED(event);
-    emit clicked();
+    if (event->button() != Qt::LeftButton) {
+        QWidget::mousePressEvent(event);
+        return;
+    }
+
+    m_pressed = true;
+    update();
+    playClickSound();
+    event->accept();
 }
 
-void NewMessageNotifier::resizeEvent(QResizeEvent *event)
+void NewMessageNotifier::mouseReleaseEvent(QMouseEvent *event)
 {
-    QWidget::resizeEvent(event);
-    updateLayout();
+    if (event->button() != Qt::LeftButton) {
+        QWidget::mouseReleaseEvent(event);
+        return;
+    }
+
+    const bool wasPressed = m_pressed;
+    m_pressed = false;
+    update();
+    if (wasPressed && rect().contains(event->pos())) {
+        emit clicked();
+    }
+    event->accept();
+}
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+void NewMessageNotifier::enterEvent(QEnterEvent *event)
+#else
+void NewMessageNotifier::enterEvent(QEvent *event)
+#endif
+{
+    QWidget::enterEvent(event);
+    m_hovered = true;
+    update();
+}
+
+void NewMessageNotifier::leaveEvent(QEvent *event)
+{
+    QWidget::leaveEvent(event);
+    m_hovered = false;
+    m_pressed = false;
+    update();
 }
 
 void NewMessageNotifier::setMessageCount(int count)
 {
-    updateText(count);
-    updateLayout();
+    m_count = qMax(0, count);
+    updateSize();
+    update();
 }
 
-void NewMessageNotifier::updateText(int count)
+QSize NewMessageNotifier::sizeHint() const
 {
-    label->setText(QString("有 %1 条新消息，点击查看").arg(count));
-    adjustSize();
+    QFont countFont = font();
+    countFont.setPixelSize(14);
+    countFont.setWeight(QFont::DemiBold);
+    const QFontMetrics metrics(countFont);
+    const int textWidth = metrics.horizontalAdvance(displayText());
+    const int width = qMax(kMinWidth,
+                           kHorizontalPadding * 2 + kIconSize + kIconTextGap + textWidth);
+    return QSize(width, kHeight);
 }
 
-void NewMessageNotifier::updateLayout()
+QString NewMessageNotifier::displayText() const
 {
-    if (parentWidget()) {
-        // 调整位置，更靠近底部
-        int x = (parentWidget()->width() - width()) / 2;
-        int y = parentWidget()->height() - height() - 10;
-        move(x, y);
+    if (m_count >= 100) {
+        return QStringLiteral("99+");
     }
-} 
+    return QString::number(qMax(1, m_count));
+}
+
+void NewMessageNotifier::updateSize()
+{
+    setFixedSize(sizeHint());
+}
+
+void NewMessageNotifier::playClickSound()
+{
+    AudioService::instance().playPortalClick();
+}

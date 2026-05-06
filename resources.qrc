@@ -79,5 +79,6 @@
         <file>resources/post/7.jpg</file>
         <file>resources/post/8.jpg</file>
         <file>resources/post/9.jpg</file>
+        <file>resources/audio/portal.wav</file>
     </qresource>
 </RCC>
