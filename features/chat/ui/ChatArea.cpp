@@ -33,7 +33,7 @@ static constexpr int kInputBarSideMargin = 20;
 static constexpr int kInputBarBottomMargin = 18;
 static constexpr int kInputBarHeight = 195;
 static constexpr int kChatListBottomSpacePadding = 10;
-static constexpr int kNewMessageNotifierBottomMargin = 26;
+static constexpr int kNewMessageNotifierInputGap = 10;
 static constexpr int kInputBarBottomGradientFadeHeight = 32;
 static constexpr int kInputBarBottomGradientSolidAlpha = 192;
 static constexpr int kOlderMessagePageSize = 24;
@@ -412,12 +412,11 @@ void ChatArea::updateNewMessageNotifier()
 void ChatArea::updateNewMessageNotifierPosition()
 {
     if (newMessageNotifier->isVisible() && inputBar) {
-        // 计算新消息提示器的位置
-        int x = (width() - newMessageNotifier->width()) / 2;
-        // 将提示器放在输入栏上方
-        int y = height() - inputBar->height() - newMessageNotifier->height() - kNewMessageNotifierBottomMargin;
+        const QRect inputBarRect = inputBar->geometry();
+        const int x = inputBarRect.x() + inputBarRect.width() - newMessageNotifier->width();
+        const int y = inputBarRect.y() - newMessageNotifier->height() - kNewMessageNotifierInputGap;
         newMessageNotifier->move(x, y);
-        newMessageNotifier->raise();  // 确保显示在最上层
+        newMessageNotifier->raise();
     }
 }
 
@@ -920,6 +919,7 @@ void ChatArea::updateInputBarPosition() {
         if (QWidget* panel = activeInfoPanel(); panel && panel->isVisible()) {
             panel->raise();
         }
+        updateNewMessageNotifierPosition();
     }
 }
 
@@ -1145,16 +1145,20 @@ void ChatArea::handleGlobalMousePress(const QPoint& globalPos)
 
 void ChatArea::setSystemFloatingBarsSuppressed(bool suppressed)
 {
-    if (!inputBar || !inputBar->usesNativeGlass() || m_systemFloatingBarsSuppressed == suppressed) {
+    if (!inputBar || m_systemFloatingBarsSuppressed == suppressed) {
         return;
     }
 
     m_systemFloatingBarsSuppressed = suppressed;
     if (suppressed) {
-        m_inputBarVisibleBeforeSystemSuppression = !inputBar->isHidden();
-        inputBar->hide();
-        if (bottomGapGradientOverlay) {
-            bottomGapGradientOverlay->hide();
+        if (inputBar->usesNativeGlass()) {
+            m_inputBarVisibleBeforeSystemSuppression = !inputBar->isHidden();
+            inputBar->hide();
+            if (bottomGapGradientOverlay) {
+                bottomGapGradientOverlay->hide();
+            }
+        } else {
+            m_inputBarVisibleBeforeSystemSuppression = false;
         }
         return;
     }
@@ -1163,6 +1167,7 @@ void ChatArea::setSystemFloatingBarsSuppressed(bool suppressed)
         updateInputBarPosition();
         inputBar->show();
         inputBar->raise();
+        updateNewMessageNotifierPosition();
     }
     m_inputBarVisibleBeforeSystemSuppression = false;
 }

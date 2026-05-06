@@ -49,6 +49,8 @@ private:
     void clearQtFallbackUi();
     void syncPlatformInput();
     void applyTheme();
+    void updateQtFallbackGeometry();
+    void updateSendButtonPosition();
 private:
     QTextEdit *m_inputEdit = nullptr;
     QLabel *m_emojiLabel = nullptr;
@@ -61,19 +63,19 @@ private:
     bool m_usesNativeGlass = false;
     bool m_usesNativeInput = false;
 
-    static const int CORNER_RADIUS = 20;
-    static const int BUTTON_SIZE = 24;
-    static const int SEND_BUTTON_SIZE = 32;
-    static const int BUTTON_SPACING = 10;
-    static const int VERTICAL_MARGIN = 10;
-    static const int ICON_SIZE = 24;
-    static const int TOOLBAR_LEFT_MARGIN = 24;
-    static const int INPUT_LEFT_MARGIN = 10;
-    static const int RIGHT_MARGIN = 20;
-    static const int TOOLBAR_INPUT_SPACING = 0;
-    static const int HORIZONTAL_MARGIN = 22;
-    static const int TOP_MARGIN = 18;
-    static const int BOTTOM_MARGIN = 16;
+    static constexpr int CORNER_RADIUS = 20;
+    static constexpr int BUTTON_SIZE = 24;
+    static constexpr int SEND_BUTTON_SIZE = 32;
+    static constexpr int BUTTON_SPACING = 10;
+    static constexpr int VERTICAL_MARGIN = 10;
+    static constexpr int ICON_SIZE = 24;
+    static constexpr int TOOLBAR_LEFT_MARGIN = 24;
+    static constexpr int INPUT_LEFT_MARGIN = 10;
+    static constexpr int RIGHT_MARGIN = 20;
+    static constexpr int TOOLBAR_INPUT_SPACING = 0;
+    static constexpr int HORIZONTAL_MARGIN = 22;
+    static constexpr int TOP_MARGIN = 18;
+    static constexpr int BOTTOM_MARGIN = 16;
 };
 
 #endif // FLOATINGINPUTBAR_H 

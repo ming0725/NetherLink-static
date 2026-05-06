@@ -10,12 +10,11 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPalette>
-#include <QHBoxLayout>
 #include <QScrollBar>
 #include <QStandardPaths>
 #include <QTextCursor>
+#include <QTextDocument>
 #include <QTextOption>
-#include <QVBoxLayout>
 
 #ifdef Q_OS_MACOS
 #include "platform/macos/MacFloatingInputBarBridge_p.h"
@@ -23,7 +22,14 @@
 
 namespace {
 
-constexpr int kQtMode3ToolbarInputOverlap = -4;
+constexpr int kQtMode3ToolbarY = 12;
+constexpr int kQtMode3ToolbarInputGap = 6;
+constexpr int kQtMode3InputTextTopPadding = 1;
+constexpr int kQtMode3InputTextHorizontalPadding = 5;
+constexpr int kQtMode3InputTextBottomPadding = 5;
+constexpr int kQtMode3InputRightPadding = 5;
+constexpr int kQtMode3InputBottomMargin = 10;
+constexpr int kQtMode3InputMaxHeight = 120;
 constexpr auto kNormalIconProperty = "normalIcon";
 constexpr auto kHoveredIconProperty = "hoveredIcon";
 
@@ -81,14 +87,6 @@ void FloatingInputBar::focusInput()
 
 void FloatingInputBar::initQtFallbackUi()
 {
-    QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(0, VERTICAL_MARGIN, 0, VERTICAL_MARGIN);
-    mainLayout->setSpacing(TOOLBAR_INPUT_SPACING);
-
-    QHBoxLayout *toolbarLayout = new QHBoxLayout();
-    toolbarLayout->setContentsMargins(TOOLBAR_LEFT_MARGIN, 0, RIGHT_MARGIN + 4, 0);
-    toolbarLayout->setSpacing(BUTTON_SPACING);
-
     m_emojiLabel = new QLabel(this);
     m_imageLabel = new QLabel(this);
     m_screenshotLabel = new QLabel(this);
@@ -128,31 +126,24 @@ void FloatingInputBar::initQtFallbackUi()
         label->installEventFilter(this);
     }
 
-    toolbarLayout->addWidget(m_emojiLabel);
-    toolbarLayout->addWidget(m_imageLabel);
-    toolbarLayout->addWidget(m_screenshotLabel);
-    toolbarLayout->addStretch();
-    toolbarLayout->addWidget(m_historyLabel);
-
-    QHBoxLayout *inputLayout = new QHBoxLayout();
-    inputLayout->setContentsMargins(INPUT_LEFT_MARGIN, kQtMode3ToolbarInputOverlap, 5, 0);
-    inputLayout->setSpacing(0);
-
     m_inputEdit = new QTextEdit(this);
     m_inputEdit->setAcceptRichText(false);
     m_inputEdit->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_inputEdit->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_inputEdit->setMinimumHeight(60);
     m_inputEdit->setMaximumHeight(120);
+    m_inputEdit->document()->setDocumentMargin(0);
     m_inputEdit->setStyleSheet(QStringLiteral(
             "QTextEdit {"
             "   border: none;"
-            "   padding: 5px;"
+            "   padding: %1px %2px %3px %2px;"
             "}"
             "QScrollBar:vertical {"
             "   border: none;"
             "}"
-    ));
+    ).arg(kQtMode3InputTextTopPadding)
+     .arg(kQtMode3InputTextHorizontalPadding)
+     .arg(kQtMode3InputTextBottomPadding));
     m_inputEdit->installEventFilter(this);
     setFocusProxy(m_inputEdit);
 
@@ -160,12 +151,6 @@ void FloatingInputBar::initQtFallbackUi()
     font.setHintingPreference(QFont::PreferFullHinting);
     font.setStyleStrategy(QFont::PreferAntialias);
     m_inputEdit->setFont(font);
-
-    inputLayout->addWidget(m_inputEdit);
-
-    mainLayout->addLayout(toolbarLayout);
-    mainLayout->addLayout(inputLayout);
-    setLayout(mainLayout);
 
     m_sendLabel = new QLabel(this);
     m_sendLabel->setFixedSize(SEND_BUTTON_SIZE, SEND_BUTTON_SIZE);
@@ -177,6 +162,7 @@ void FloatingInputBar::initQtFallbackUi()
                     QSize(SEND_BUTTON_SIZE, SEND_BUTTON_SIZE));
     m_sendLabel->installEventFilter(this);
     m_sendLabel->raise();
+    updateQtFallbackGeometry();
 
     m_tooltip = new CustomTooltip(this);
     m_tooltip->hide();
@@ -188,9 +174,6 @@ void FloatingInputBar::clearQtFallbackUi()
     hideTooltip();
 
     setFocusProxy(nullptr);
-    if (QLayout* existingLayout = layout()) {
-        delete existingLayout;
-    }
 
     delete m_inputEdit;
     delete m_emojiLabel;
@@ -222,6 +205,7 @@ void FloatingInputBar::refreshPlatformAppearance()
         if (!m_inputEdit) {
             initQtFallbackUi();
         }
+        updateQtFallbackGeometry();
         updateGeometry();
         update();
         return;
@@ -242,6 +226,7 @@ void FloatingInputBar::refreshPlatformAppearance()
     }
 #endif
 
+    updateQtFallbackGeometry();
     update();
 }
 
@@ -379,10 +364,47 @@ void FloatingInputBar::paintEvent(QPaintEvent *event)
 void FloatingInputBar::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
+    updateQtFallbackGeometry();
+}
 
+void FloatingInputBar::updateQtFallbackGeometry()
+{
+    if (!m_inputEdit) {
+        return;
+    }
+
+    const int toolbarY = kQtMode3ToolbarY;
+    const int emojiX = TOOLBAR_LEFT_MARGIN;
+    const int imageX = emojiX + BUTTON_SIZE + BUTTON_SPACING;
+    const int screenshotX = imageX + BUTTON_SIZE + BUTTON_SPACING;
+    const int historyCandidateX = width() - RIGHT_MARGIN - 4 - BUTTON_SIZE;
+    const int historyX = historyCandidateX > TOOLBAR_LEFT_MARGIN
+            ? historyCandidateX
+            : TOOLBAR_LEFT_MARGIN;
+    const int inputY = toolbarY + BUTTON_SIZE + kQtMode3ToolbarInputGap;
+    const int rawInputHeight = height() - inputY - kQtMode3InputBottomMargin;
+    const int availableInputHeight = rawInputHeight > 0 ? rawInputHeight : 0;
+    const int inputHeight = availableInputHeight < kQtMode3InputMaxHeight
+            ? availableInputHeight
+            : kQtMode3InputMaxHeight;
+    const int rawInputWidth = width() - INPUT_LEFT_MARGIN - kQtMode3InputRightPadding;
+    const int inputWidth = rawInputWidth > 0 ? rawInputWidth : 0;
+
+    m_emojiLabel->setGeometry(emojiX, toolbarY, BUTTON_SIZE, BUTTON_SIZE);
+    m_imageLabel->setGeometry(imageX, toolbarY, BUTTON_SIZE, BUTTON_SIZE);
+    m_screenshotLabel->setGeometry(screenshotX, toolbarY, BUTTON_SIZE, BUTTON_SIZE);
+    m_historyLabel->setGeometry(historyX, toolbarY, BUTTON_SIZE, BUTTON_SIZE);
+    m_inputEdit->setGeometry(INPUT_LEFT_MARGIN, inputY, inputWidth, inputHeight);
+    updateSendButtonPosition();
+}
+
+void FloatingInputBar::updateSendButtonPosition()
+{
     if (m_sendLabel) {
-        m_sendLabel->move(width() - SEND_BUTTON_SIZE - RIGHT_MARGIN,
-                          height() - SEND_BUTTON_SIZE - VERTICAL_MARGIN);
+        m_sendLabel->setGeometry(width() - SEND_BUTTON_SIZE - RIGHT_MARGIN,
+                                 height() - SEND_BUTTON_SIZE - VERTICAL_MARGIN,
+                                 SEND_BUTTON_SIZE,
+                                 SEND_BUTTON_SIZE);
         m_sendLabel->raise();
     }
 }
