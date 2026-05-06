@@ -154,7 +154,8 @@ protected:
         Q_UNUSED(event);
 
         QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setRenderHint(QPainter::TextAntialiasing, true);
         const QColor borderColor = isEnabled()
                 ? ThemeManager::instance().color(ThemeColor::Divider)
                 : ThemeManager::instance().color(ThemeColor::ListHover);

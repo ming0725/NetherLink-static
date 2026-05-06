@@ -174,19 +174,15 @@ QPixmap renderWidgetSnapshot(QWidget* widget)
         return {};
     }
 
-    const bool wasVisible = widget->isVisible();
-    if (!wasVisible) {
-        widget->ensurePolished();
-        widget->show();
-        widget->repaint();
-    }
+    widget->ensurePolished();
+    const qreal dpr = widget->devicePixelRatioF();
+    QPixmap pixmap(QSize(qMax(1, qRound(widget->width() * dpr)),
+                         qMax(1, qRound(widget->height() * dpr))));
+    pixmap.setDevicePixelRatio(dpr);
+    pixmap.fill(Qt::transparent);
 
-    const QPixmap pixmap = widget->grab();
-
-    if (!wasVisible) {
-        widget->hide();
-    }
-
+    QPainter painter(&pixmap);
+    widget->render(&painter);
     return pixmap;
 }
 

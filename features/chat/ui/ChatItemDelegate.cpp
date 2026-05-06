@@ -49,7 +49,8 @@ void ChatItemDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opti
     }
 
     painter->save();
-    painter->setRenderHint(QPainter::Antialiasing);
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    painter->setRenderHint(QPainter::TextAntialiasing, true);
 
     if (timeHeader) {
         // 绘制时间标识

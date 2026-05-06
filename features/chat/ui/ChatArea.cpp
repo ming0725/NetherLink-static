@@ -63,7 +63,8 @@ protected:
     void paintEvent(QPaintEvent*) override
     {
         QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setRenderHint(QPainter::TextAntialiasing, true);
 
         if (isDown()) {
             painter.setBrush(ThemeManager::instance().color(ThemeColor::Divider));
@@ -105,7 +106,8 @@ protected:
         QWidget::paintEvent(event);
 
         QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setRenderHint(QPainter::TextAntialiasing, true);
 
         QLinearGradient gradient(rect().topLeft(), rect().bottomLeft());
         const qreal fadeStop = rect().height() > 0
@@ -156,6 +158,7 @@ protected:
     {
         Q_UNUSED(event);
         QPainter painter(this);
+        painter.setRenderHint(QPainter::TextAntialiasing, true);
         painter.setFont(font());
         painter.setPen(ThemeManager::instance().color(ThemeColor::PrimaryText));
         painter.drawText(rect(), alignment() | Qt::TextSingleLine, text());

@@ -191,7 +191,6 @@ void OverlayScrollListView::refreshTheme()
         view->update();
     }
 
-    doItemsLayout();
     updateOverlayScrollBar();
     if (m_overlayScrollBar) {
         m_overlayScrollBar->update();

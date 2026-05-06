@@ -122,7 +122,8 @@ protected:
         Q_UNUSED(event);
 
         QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setRenderHint(QPainter::TextAntialiasing, true);
         painter.setPen(QPen(ThemeManager::instance().color(ThemeColor::Divider), 1));
         painter.setBrush((m_hovered && !m_menuHoverSuppressed)
                                  ? ThemeManager::instance().color(ThemeColor::ListHover)

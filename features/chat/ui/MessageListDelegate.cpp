@@ -125,6 +125,7 @@ void MessageListDelegate::paint(QPainter* painter,
                                 const QModelIndex& index) const
 {
     painter->save();
+    painter->setRenderHint(QPainter::TextAntialiasing, true);
 
     const bool selected = option.state & QStyle::State_Selected;
     const bool hovered = (option.state & QStyle::State_MouseOver) ||
@@ -231,4 +232,3 @@ QSize MessageListDelegate::sizeHint(const QStyleOptionViewItem& option,
     Q_UNUSED(index);
     return QSize(0, kItemHeight);
 }
-

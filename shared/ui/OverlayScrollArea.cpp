@@ -12,15 +12,6 @@
 
 #include "SmoothScrollBar.h"
 
-namespace {
-void makeTransparent(QWidget* widget)
-{
-    widget->setAutoFillBackground(false);
-    widget->setAttribute(Qt::WA_TranslucentBackground);
-    widget->setAttribute(Qt::WA_NoSystemBackground);
-}
-} // namespace
-
 OverlayScrollArea::OverlayScrollArea(QWidget* parent)
     : QAbstractScrollArea(parent)
     , contentWidget(new QWidget(viewport()))
@@ -31,13 +22,10 @@ OverlayScrollArea::OverlayScrollArea(QWidget* parent)
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setFrameShape(QFrame::NoFrame);
     setMouseTracking(true);
-    makeTransparent(this);
 
     viewport()->setMouseTracking(true);
-    makeTransparent(viewport());
 
     contentWidget->installEventFilter(this);
-    makeTransparent(contentWidget);
     contentWidget->move(0, 0);
 
     m_overlayScrollBar->hide();
@@ -108,13 +96,20 @@ void OverlayScrollArea::setViewportBackgroundColor(const QColor& color)
 
 void OverlayScrollArea::clearViewportBackground()
 {
-    makeTransparent(this);
-    makeTransparent(viewport());
+    setAutoFillBackground(false);
+    setAttribute(Qt::WA_TranslucentBackground);
+    setAttribute(Qt::WA_NoSystemBackground);
+    viewport()->setAutoFillBackground(false);
+    viewport()->setAttribute(Qt::WA_TranslucentBackground);
+    viewport()->setAttribute(Qt::WA_NoSystemBackground);
+    contentWidget->setAutoFillBackground(false);
+    contentWidget->setAttribute(Qt::WA_TranslucentBackground);
+    contentWidget->setAttribute(Qt::WA_NoSystemBackground);
+
     QPalette palette = viewport()->palette();
     palette.setColor(QPalette::Base, Qt::transparent);
     palette.setColor(QPalette::Window, Qt::transparent);
     viewport()->setPalette(palette);
-    makeTransparent(contentWidget);
 }
 
 void OverlayScrollArea::relayoutContent()

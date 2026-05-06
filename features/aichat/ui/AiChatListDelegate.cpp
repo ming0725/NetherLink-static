@@ -17,7 +17,8 @@ void AiChatListDelegate::paint(QPainter* painter,
                                const QModelIndex& index) const
 {
     painter->save();
-    painter->setRenderHint(QPainter::Antialiasing);
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    painter->setRenderHint(QPainter::TextAntialiasing, true);
     painter->setRenderHint(QPainter::SmoothPixmapTransform);
 
     const bool selected = option.state & QStyle::State_Selected;

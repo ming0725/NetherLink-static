@@ -530,7 +530,8 @@ void GroupNotificationDelegate::paint(QPainter* painter,
                                       const QModelIndex& index) const
 {
     painter->save();
-    painter->setRenderHint(QPainter::Antialiasing);
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    painter->setRenderHint(QPainter::TextAntialiasing, true);
 
     painter->fillRect(option.rect, ThemeManager::instance().color(ThemeColor::PageBackground));
     if (index.data(GroupNotificationListModel::BottomSpaceRole).toBool()) {

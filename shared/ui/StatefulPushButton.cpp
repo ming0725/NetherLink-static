@@ -249,7 +249,8 @@ void StatefulPushButton::paintEvent(QPaintEvent* e)
     Q_UNUSED(e);
 
     QPainter p(this);
-    p.setRenderHint(QPainter::Antialiasing);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    p.setRenderHint(QPainter::TextAntialiasing, true);
     QPainterPath path;
     path.addRoundedRect(rect(), m_radius, m_radius);
 

@@ -228,7 +228,8 @@ void StyledActionMenu::paintEvent(QPaintEvent* event)
     Q_UNUSED(event);
 
     QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
 
     const QRectF panelRect = QRectF(rect()).adjusted(ShadowMargin, ShadowMargin,
                                                     -ShadowMargin, -ShadowMargin);

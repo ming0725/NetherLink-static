@@ -63,7 +63,8 @@ protected:
         Q_UNUSED(event);
 
         QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setRenderHint(QPainter::TextAntialiasing, true);
         painter.setPen(Qt::NoPen);
         painter.setBrush(ThemeManager::instance().color(ThemeColor::PageBackground));
         painter.drawRoundedRect(rect(), 6, 6);
@@ -129,7 +130,8 @@ protected:
         Q_UNUSED(event);
 
         QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setRenderHint(QPainter::TextAntialiasing, true);
 
         QFont textFont = font();
         textFont.setPixelSize(12);
@@ -453,7 +455,8 @@ void FriendApplication::resizeEvent(QResizeEvent* /*event*/)
 void FriendApplication::paintEvent(QPaintEvent*)
 {
     QPainter p(this);
-    p.setRenderHint(QPainter::Antialiasing);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    p.setRenderHint(QPainter::TextAntialiasing, true);
     p.setPen(Qt::NoPen);
     p.setBrush(ThemeManager::instance().color(ThemeColor::PanelBackground));
     p.drawRect(rect());

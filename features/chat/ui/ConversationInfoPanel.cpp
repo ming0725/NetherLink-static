@@ -184,7 +184,8 @@ protected:
         QWidget::paintEvent(event);
 
         QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setRenderHint(QPainter::TextAntialiasing, true);
 
         QFont titleFont = QApplication::font();
         titleFont.setPixelSize(14);
@@ -239,7 +240,8 @@ protected:
         QWidget::paintEvent(event);
 
         QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setRenderHint(QPainter::TextAntialiasing, true);
 
         QFont font = QApplication::font();
         font.setPixelSize(15);
@@ -420,7 +422,8 @@ protected:
         QWidget::paintEvent(event);
 
         QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setRenderHint(QPainter::TextAntialiasing, true);
         painter.setRenderHint(QPainter::SmoothPixmapTransform);
         painter.setPen(Qt::NoPen);
         painter.setBrush(m_hovered ? memberListHoverColor() : memberListBackgroundColor());

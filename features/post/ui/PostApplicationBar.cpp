@@ -228,7 +228,8 @@ void PostApplicationBar::paintEvent(QPaintEvent*)
     }
 
     QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
     painter.setOpacity(m_visualOpacity);
     painter.setPen(Qt::NoPen);
 

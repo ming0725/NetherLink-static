@@ -85,6 +85,12 @@ struct PostDetailRequest {
     QString postId;
 };
 
+struct PostCommentsRequest {
+    QString postId;
+    int offset = 0;
+    int limit = 20;
+};
+
 struct FriendSummary {
     QString userId;
     QString displayName;
@@ -179,6 +185,7 @@ struct PostSummary {
     int likeCount = 0;
     int commentCount = 0;
     bool isLiked = false;
+    QDateTime createdAt;
 };
 
 struct PostDetailData {
@@ -192,4 +199,44 @@ struct PostDetailData {
     int likeCount = 0;
     int commentCount = 0;
     bool isLiked = false;
+    QDateTime createdAt;
+    QDateTime contentCreatedAt;
+};
+
+struct PostCommentReply {
+    QString replyId;
+    QString commentId;
+    QString postId;
+    QString authorId;
+    QString authorName;
+    QString authorAvatarPath;
+    QString targetUserId;
+    QString targetUserName;
+    QString targetReplyId;
+    QString content;
+    QDateTime createdAt;
+    int likeCount = 0;
+    bool isLiked = false;
+};
+
+struct PostComment {
+    QString commentId;
+    QString postId;
+    QString authorId;
+    QString authorName;
+    QString authorAvatarPath;
+    QString content;
+    QDateTime createdAt;
+    int likeCount = 0;
+    bool isLiked = false;
+    QVector<PostCommentReply> replies;
+    int totalReplyCount = 0;
+};
+
+struct PostCommentsPage {
+    QString postId;
+    QVector<PostComment> comments;
+    int offset = 0;
+    int totalCount = 0;
+    bool hasMore = false;
 };

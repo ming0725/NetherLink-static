@@ -13,6 +13,7 @@ struct Post {
     int commentCount = 0;
     QString authorID;
     QDateTime createdAt;
+    QDateTime contentCreatedAt;
     QString thumbnailPath;
     QSize thumbnailSize;
     QVector<QString> picturesPath;

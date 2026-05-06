@@ -3,19 +3,13 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QJsonObject>
+#include <QPointer>
 #include "shared/ui/IconLineEdit.h"
-#include "shared/ui/OverlayScrollArea.h"
 #include "shared/types/RepositoryTypes.h"
 
-class PostDetailScrollArea : public OverlayScrollArea {
-    Q_OBJECT
-public:
-    explicit PostDetailScrollArea(QWidget* parent = nullptr);
-    void setLabels(QLabel* titleLabel, QLabel* contentLabel);
-    void relayout();
-    QLabel* m_titleLabel = nullptr;
-    QLabel* m_contentLabel = nullptr;
-};
+class PostCommentDelegate;
+class PostDetailListModel;
+class PostDetailListView;
 
 class PostDetailView : public QWidget {
     Q_OBJECT
@@ -46,6 +40,7 @@ private:
         QString authorAvatarPath;
         QString title;
         QString content;
+        QDateTime contentCreatedAt;
         QString previewImageSource;
         QSize previewImageSize;
         QString fullImageSource;
@@ -65,18 +60,43 @@ private:
     void applySummaryState(const PostSummary& summary, bool resetDetailContent);
     void syncUiFromState();
     void syncEngagementUi();
+    void updateDetailTextHeight();
+    void loadInitialComments();
+    void loadMoreComments();
+    void maybeLoadMoreComments();
+    void scheduleMaybeLoadMoreComments();
+    void onCommentsReady(const QString& requestId, const PostCommentsPage& page);
+    void setReplyTarget(const QString& commentId, const QString& replyId = QString());
+    void clearReplyTarget();
+    void submitCommentText();
 private:
+    struct ReplyTarget {
+        QString commentId;
+        QString replyId;
+    };
+
     State m_state;
+    ReplyTarget m_replyTarget;
     QLabel* m_authorAvatar;
     QLabel* m_authorName;
     QPushButton* m_followBtn;
     QWidget* m_panelContainer;
-    PostDetailScrollArea* m_contentArea;
+    PostDetailListView* m_contentList;
+    PostDetailListModel* m_detailModel;
+    PostCommentDelegate* m_commentDelegate;
+    QPointer<QWidget> m_detailTextWidget;
     QLabel* m_titleLabel;
     QLabel* m_contentLabel;
+    QLabel* m_postDateLabel;
+    QWidget* m_postDivider;
     QPushButton* m_likeBtn;
     QLabel* m_likeCount;
     QPushButton* m_commentBtn;
     QLabel* m_commentCount;
     IconLineEdit* m_commentLineEdit;
+    bool m_loadingComments = false;
+    bool m_pendingLoadMoreCheck = false;
+    QString m_commentsRequestId;
+    int m_pendingCommentsOffset = -1;
+    int m_commentPageSize = 12;
 };

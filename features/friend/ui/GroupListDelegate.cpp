@@ -136,6 +136,7 @@ void GroupListDelegate::paint(QPainter* painter,
                               const QModelIndex& index) const
 {
     painter->save();
+    painter->setRenderHint(QPainter::TextAntialiasing, true);
     painter->setClipRect(option.rect);
 
     const bool isNotice = index.data(GroupListModel::IsNoticeRole).toBool();
@@ -152,11 +153,13 @@ void GroupListDelegate::paint(QPainter* painter,
                             qMax(0, hoverColor.green() - delta),
                             qMax(0, hoverColor.blue() - delta));
             painter->setRenderHint(QPainter::Antialiasing, true);
+            painter->setRenderHint(QPainter::TextAntialiasing, true);
             painter->setBrush(selColor);
             painter->setPen(Qt::NoPen);
             painter->drawRoundedRect(overlayRect, 6, 6);
         } else if (hovered) {
             painter->setRenderHint(QPainter::Antialiasing, true);
+            painter->setRenderHint(QPainter::TextAntialiasing, true);
             painter->setBrush(ThemeManager::instance().color(ThemeColor::ListHover));
             painter->setPen(Qt::NoPen);
             painter->drawRoundedRect(overlayRect, 6, 6);
@@ -208,6 +211,7 @@ void GroupListDelegate::paint(QPainter* painter,
         if (hovered) {
             const QRect hoverRect = option.rect.adjusted(6, 3, -6, -3);
             painter->setRenderHint(QPainter::Antialiasing, true);
+            painter->setRenderHint(QPainter::TextAntialiasing, true);
             painter->setBrush(ThemeManager::instance().color(ThemeColor::ListHover));
             painter->setPen(Qt::NoPen);
             painter->drawRoundedRect(hoverRect, 6, 6);
@@ -222,6 +226,7 @@ void GroupListDelegate::paint(QPainter* painter,
 
         painter->save();
         painter->setRenderHint(QPainter::Antialiasing, true);
+        painter->setRenderHint(QPainter::TextAntialiasing, true);
         painter->translate(arrowRect.center());
         painter->rotate(progress * 90.0);
         QPen arrowPen(ThemeManager::instance().color(ThemeColor::TertiaryText),

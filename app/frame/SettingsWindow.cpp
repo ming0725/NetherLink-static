@@ -297,6 +297,7 @@ void SettingsWindow::paintEvent(QPaintEvent* event)
     Q_UNUSED(event);
 
     QPainter painter(this);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
     const QPixmap background = ImageService::instance().pixmap(kSettingsBackgroundSource);
     if (background.isNull()) {
         painter.fillRect(rect(), kSettingsFallbackBackground);

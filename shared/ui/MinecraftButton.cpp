@@ -173,6 +173,7 @@ void MinecraftButton::paintEvent(QPaintEvent* event)
 
     QPainter painter(this);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
 
     const QPixmap pixmap = ImageService::instance().pixmap(currentImage());
     if (pixmap.isNull()) {

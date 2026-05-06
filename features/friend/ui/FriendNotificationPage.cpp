@@ -100,7 +100,8 @@ void FriendNotificationPage::paintEvent(QPaintEvent* event)
     Q_UNUSED(event);
 
     QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
 
     // Full background
     painter.fillRect(rect(), ThemeManager::instance().color(ThemeColor::PageBackground));

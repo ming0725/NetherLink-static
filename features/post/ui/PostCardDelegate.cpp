@@ -57,6 +57,9 @@ void PostCardDelegate::paint(QPainter* painter,
                              const QModelIndex& index) const
 {
     painter->save();
+    painter->setRenderHints(QPainter::Antialiasing
+                            | QPainter::TextAntialiasing
+                            | QPainter::SmoothPixmapTransform);
 
     const CardLayout layout = calculateLayout(index, option.rect);
     const qreal devicePixelRatio = painter->device()->devicePixelRatioF();

@@ -148,7 +148,9 @@ PostDetailData PostRepository::requestPostDetail(const PostDetailRequest& query)
             post.picturesPath,
             post.likes,
             post.commentCount,
-            post.isLiked
+            post.isLiked,
+            post.createdAt,
+            post.contentCreatedAt
     };
 }
 
@@ -214,6 +216,7 @@ Post PostRepository::buildPostAt(int index) const
     post.commentCount = (index * 29 + 17) % 200;
     post.authorID = authorIDs.at((index * 3 + 1) % authorIDs.size());
     post.createdAt = baseTime.addSecs(-index * 1800);
+    post.contentCreatedAt = post.createdAt;
     const QString imagePath = QString(":/resources/post/%1.jpg").arg((index * 7 + 3) % 10);
     post.thumbnailPath = imagePath;
     post.thumbnailSize = imageSizeForSource(imagePath);
@@ -252,6 +255,7 @@ PostSummary PostRepository::buildSummary(const Post& post) const
             author.avatarPath,
             post.likes,
             post.commentCount,
-            post.isLiked
+            post.isLiked,
+            post.createdAt
     };
 }

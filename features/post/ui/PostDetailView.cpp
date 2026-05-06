@@ -1,14 +1,22 @@
 // PostDetailView.cpp
+#include <QDate>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPalette>
+#include <QScrollBar>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QVariantAnimation>
 
+#include "app/state/CurrentUser.h"
+#include "features/post/data/PostCommentRepository.h"
+#include "features/post/model/PostDetailListModel.h"
 #include "shared/services/ImageService.h"
 #include "shared/theme/ThemeManager.h"
 #include "shared/ui/StatefulPushButton.h"
+#include "PostCommentDelegate.h"
+#include "PostDetailListView.h"
 #include "PostDetailView.h"
 
 namespace {
@@ -105,6 +113,26 @@ private:
     bool m_pressed = false;
 };
 
+class ShortDivider final : public QWidget
+{
+public:
+    explicit ShortDivider(QWidget* parent = nullptr)
+        : QWidget(parent)
+    {
+        setFixedHeight(12);
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QPen(ThemeManager::instance().color(ThemeColor::Divider), 1));
+        const int y = height() / 2;
+        painter.drawLine(0, y, width() , y);
+    }
+};
+
 void setWidgetTextColor(QWidget* widget, const QColor& color)
 {
     QPalette palette = widget->palette();
@@ -113,43 +141,40 @@ void setWidgetTextColor(QWidget* widget, const QColor& color)
     widget->setPalette(palette);
 }
 
-} // namespace
-
-PostDetailScrollArea::PostDetailScrollArea(QWidget* parent)
-    : OverlayScrollArea(parent)
+void disableContextMenu(QWidget* widget)
 {
-    getContentWidget()->setObjectName("PostDetailContentWidget");
-    useVerticalContentLayout(QMargins(20, 20, 20, 20), 20);
-    setViewportBackgroundColor(ThemeManager::instance().color(ThemeColor::PanelBackground));
-    setWheelStepPixels(64);
-    setScrollBarInsets(8, 4);
-}
-
-void PostDetailScrollArea::setLabels(QLabel* titleLabel, QLabel* contentLabel)
-{
-    m_titleLabel = titleLabel;
-    m_contentLabel = contentLabel;
-    if (auto* layout = qobject_cast<QVBoxLayout*>(contentLayout())) {
-        if (m_titleLabel && layout->indexOf(m_titleLabel) < 0) {
-            layout->addWidget(m_titleLabel);
-        }
-        if (m_contentLabel && layout->indexOf(m_contentLabel) < 0) {
-            layout->addWidget(m_contentLabel);
-        }
+    if (widget) {
+        widget->setContextMenuPolicy(Qt::NoContextMenu);
     }
-    relayoutContent();
 }
 
-void PostDetailScrollArea::relayout()
+QString postDateText(const QDateTime& time)
 {
-    relayoutContent();
+    if (!time.isValid()) {
+        return {};
+    }
+    const QDate date = time.date();
+    const QDate today = QDate::currentDate();
+    if (date == today) {
+        return time.toString(QStringLiteral("hh:mm"));
+    }
+    if (date == today.addDays(-1)) {
+        return QStringLiteral("昨天 %1").arg(time.toString(QStringLiteral("hh:mm")));
+    }
+    if (date <= today.addYears(-1)) {
+        return time.toString(QStringLiteral("yyyy-MM-dd"));
+    }
+    return time.toString(QStringLiteral("MM-dd"));
 }
+
+} // namespace
 
 PostDetailView::PostDetailView(QWidget* parent)
     : QWidget(parent)
 {
     setupUI();
     setAttribute(Qt::WA_TranslucentBackground);
+    disableContextMenu(this);
 }
 
 QRect PostDetailView::fittedImageRect(const QRect& bounds, const QSize& imageSize) const
@@ -166,15 +191,22 @@ void PostDetailView::setupUI()
 {
     m_panelContainer = new QWidget(this);
     m_panelContainer->setAttribute(Qt::WA_TranslucentBackground);
+    disableContextMenu(m_panelContainer);
 
     m_authorAvatar = new QLabel(m_panelContainer);
     m_authorAvatar->setFixedSize({40, 40});
+    disableContextMenu(m_authorAvatar);
 
     m_commentLineEdit = new IconLineEdit(m_panelContainer);
     m_commentLineEdit->setIcon(QStringLiteral(":/resources/icon/selected_message.png"));
     m_commentLineEdit->getLineEdit()->setPlaceholderText("说点什么吧...");
+    disableContextMenu(m_commentLineEdit);
+    disableContextMenu(m_commentLineEdit->getLineEdit());
+    connect(m_commentLineEdit, &QLineEdit::returnPressed,
+            this, &PostDetailView::submitCommentText);
 
     m_authorName = new QLabel(m_panelContainer);
+    disableContextMenu(m_authorName);
     QFont nameFont;
     nameFont.setStyleStrategy(QFont::PreferAntialias);
     nameFont.setPointSize(13);
@@ -187,10 +219,30 @@ void PostDetailView::setupUI()
     followButton->setPrimaryStyle();
     m_followBtn = followButton;
     m_followBtn->setFixedSize(80, 32);
+    disableContextMenu(m_followBtn);
 
-    m_contentArea = new PostDetailScrollArea(m_panelContainer);
+    m_contentList = new PostDetailListView(m_panelContainer);
+    m_detailModel = new PostDetailListModel(this);
+    m_commentDelegate = new PostCommentDelegate(this);
+    m_contentList->setModel(m_detailModel);
+    m_contentList->setPostCommentDelegate(m_commentDelegate);
+    m_contentList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    m_contentList->setSpacing(0);
+    m_contentList->setWheelStepPixels(64);
+    m_contentList->setScrollBarInsets(8, 4);
+    m_contentList->setBackgroundRole(ThemeColor::PanelBackground);
+    disableContextMenu(m_contentList);
+    disableContextMenu(m_contentList->viewport());
 
-    m_titleLabel = new QLabel(m_contentArea->getContentWidget());
+    m_detailTextWidget = new QWidget;
+    m_detailTextWidget->setContextMenuPolicy(Qt::NoContextMenu);
+    m_detailTextWidget->setAutoFillBackground(false);
+    auto* detailLayout = new QVBoxLayout(m_detailTextWidget);
+    detailLayout->setContentsMargins(20, 20, 20, 16);
+    detailLayout->setSpacing(16);
+
+    m_titleLabel = new QLabel(m_detailTextWidget);
+    disableContextMenu(m_titleLabel);
     m_titleLabel->setWordWrap(true);
     m_titleLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     QFont titleFont;
@@ -199,8 +251,10 @@ void PostDetailView::setupUI()
     titleFont.setBold(true);
     m_titleLabel->setFont(titleFont);
     setWidgetTextColor(m_titleLabel, ThemeManager::instance().color(ThemeColor::PrimaryText));
+    detailLayout->addWidget(m_titleLabel);
 
-    m_contentLabel = new QLabel(m_contentArea->getContentWidget());
+    m_contentLabel = new QLabel(m_detailTextWidget);
+    disableContextMenu(m_contentLabel);
     m_contentLabel->setWordWrap(true);
     m_contentLabel->setTextFormat(Qt::PlainText);
     m_contentLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
@@ -210,23 +264,70 @@ void PostDetailView::setupUI()
     contentFont.setPointSize(13);
     m_contentLabel->setFont(contentFont);
     setWidgetTextColor(m_contentLabel, ThemeManager::instance().color(ThemeColor::SecondaryText));
+    detailLayout->addWidget(m_contentLabel);
 
-    m_contentArea->setLabels(m_titleLabel, m_contentLabel);
+    m_postDateLabel = new QLabel(m_detailTextWidget);
+    disableContextMenu(m_postDateLabel);
+    m_postDateLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    QFont postDateFont;
+    postDateFont.setStyleStrategy(QFont::PreferAntialias);
+    postDateFont.setPointSize(11);
+    m_postDateLabel->setFont(postDateFont);
+    setWidgetTextColor(m_postDateLabel, ThemeManager::instance().color(ThemeColor::TertiaryText));
+    detailLayout->addWidget(m_postDateLabel);
+
+    m_postDivider = new ShortDivider(m_detailTextWidget);
+    disableContextMenu(m_postDivider);
+    detailLayout->addWidget(m_postDivider);
+
+    m_contentList->setIndexWidget(m_detailModel->index(0, 0), m_detailTextWidget);
+    connect(m_detailModel, &QAbstractItemModel::dataChanged,
+            this, [this](const QModelIndex& topLeft,
+                         const QModelIndex& bottomRight,
+                         const QList<int>& roles) {
+        if (m_contentList) {
+            const bool needsLayout = roles.isEmpty()
+                    || topLeft.row() == 0
+                    || roles.contains(PostDetailListModel::DetailHeightRole)
+                    || roles.contains(PostDetailListModel::CommentLayoutRole)
+                    || roles.contains(PostDetailListModel::CommentEngagementRole);
+            if (needsLayout) {
+                m_contentList->doItemsLayout();
+            }
+
+            const QRect dirty = m_contentList->visualRect(topLeft)
+                    .united(m_contentList->visualRect(bottomRight));
+            if (dirty.isValid()) {
+                m_contentList->viewport()->update(dirty);
+            }
+            scheduleMaybeLoadMoreComments();
+        }
+    });
+    connect(m_detailModel, &QAbstractItemModel::rowsInserted, this, [this]() {
+        if (m_contentList) {
+            m_contentList->doItemsLayout();
+            scheduleMaybeLoadMoreComments();
+        }
+    });
 
     m_likeBtn = new IconActionButton(m_panelContainer);
+    disableContextMenu(m_likeBtn);
     m_likeBtn->setIcon(QIcon(ThemeManager::instance().isDark()
                              ? ":/resources/icon/empty_heart_darkmode.png"
                              : ":/resources/icon/heart.png"));
     m_likeBtn->setIconSize(QSize(18, 18));
 
     m_likeCount = new QLabel("666", m_panelContainer);
+    disableContextMenu(m_likeCount);
     setWidgetTextColor(m_likeCount, ThemeManager::instance().color(ThemeColor::SecondaryText));
 
     m_commentBtn = new IconActionButton(m_panelContainer);
+    disableContextMenu(m_commentBtn);
     m_commentBtn->setIcon(QIcon(":/resources/icon/selected_message.png"));
     m_commentBtn->setIconSize(QSize(18, 18));
 
     m_commentCount = new QLabel("0", m_panelContainer);
+    disableContextMenu(m_commentCount);
     setWidgetTextColor(m_commentCount, ThemeManager::instance().color(ThemeColor::SecondaryText));
 
     connect(m_followBtn, &QPushButton::clicked, this, [this]() {
@@ -238,6 +339,38 @@ void PostDetailView::setupUI()
     connect(m_likeBtn, &QPushButton::clicked, this, [this]() {
         emit likeClicked(!m_state.isLiked);
     });
+    connect(m_contentList, &PostDetailListView::commentLikeRequested, this, [this](const QString& commentId, bool liked) {
+        if (PostCommentRepository::instance().setCommentLiked(commentId, liked)
+            || m_detailModel->commentById(commentId)) {
+            m_detailModel->updateCommentLike(commentId, liked);
+        }
+    });
+    connect(m_contentList, &PostDetailListView::replyLikeRequested, this, [this](const QString& commentId,
+                                                                                 const QString& replyId,
+                                                                                 bool liked) {
+        if (PostCommentRepository::instance().setReplyLiked(replyId, liked)
+            || m_detailModel->commentById(commentId)) {
+            m_detailModel->updateReplyLike(commentId, replyId, liked);
+        }
+    });
+    connect(m_contentList, &PostDetailListView::replyToCommentRequested,
+            this, [this](const QString& commentId) {
+                setReplyTarget(commentId);
+            });
+    connect(m_contentList, &PostDetailListView::replyToReplyRequested,
+            this, [this](const QString& commentId, const QString& replyId) {
+                setReplyTarget(commentId, replyId);
+            });
+    connect(m_contentList, &PostDetailListView::commentExpandRequested,
+            m_detailModel, &PostDetailListModel::setCommentExpanded);
+    connect(m_contentList, &PostDetailListView::replyExpandRequested,
+            m_detailModel, &PostDetailListModel::setReplyExpanded);
+    connect(m_contentList, &PostDetailListView::moreRepliesRequested,
+            m_detailModel, &PostDetailListModel::showMoreReplies);
+    connect(m_contentList->verticalScrollBar(), &QScrollBar::valueChanged,
+            this, &PostDetailView::maybeLoadMoreComments);
+    connect(&PostCommentRepository::instance(), &PostCommentRepository::postCommentsReady,
+            this, &PostDetailView::onCommentsReady);
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
             this, &PostDetailView::applyTheme);
     applyTheme();
@@ -364,7 +497,8 @@ void PostDetailView::updateLayout()
     m_commentBtn->setGeometry(x, btnY, 32, 32);
     x += 40;
     m_commentCount->setGeometry(x - 10, btnY, 50, 32);
-    m_contentArea->setGeometry(0, topH, rightW, h - topH - bottomH);
+    m_contentList->setGeometry(0, topH, rightW, h - topH - bottomH);
+    updateDetailTextHeight();
 }
 
 void PostDetailView::applyTheme()
@@ -372,15 +506,20 @@ void PostDetailView::applyTheme()
     setWidgetTextColor(m_authorName, ThemeManager::instance().color(ThemeColor::PrimaryText));
     setWidgetTextColor(m_titleLabel, ThemeManager::instance().color(ThemeColor::PrimaryText));
     setWidgetTextColor(m_contentLabel, ThemeManager::instance().color(ThemeColor::SecondaryText));
+    setWidgetTextColor(m_postDateLabel, ThemeManager::instance().color(ThemeColor::TertiaryText));
     setWidgetTextColor(m_likeCount, ThemeManager::instance().color(ThemeColor::SecondaryText));
     setWidgetTextColor(m_commentCount, ThemeManager::instance().color(ThemeColor::SecondaryText));
     if (auto* followButton = qobject_cast<StatefulPushButton*>(m_followBtn)) {
         followButton->setPrimaryStyle();
     }
-    m_contentArea->setViewportBackgroundColor(ThemeManager::instance().color(ThemeColor::PanelBackground));
+    if (m_commentDelegate) {
+        m_commentDelegate->clearCaches();
+    }
+    m_contentList->setBackgroundRole(ThemeColor::PanelBackground);
     syncEngagementUi();
     m_likeBtn->update();
     m_commentBtn->update();
+    m_contentList->viewport()->update();
     update();
 }
 
@@ -391,12 +530,14 @@ void PostDetailView::setPreviewSummary(const PostSummary& summary)
 
 void PostDetailView::setPostData(const PostDetailData& data)
 {
+    const bool postChanged = m_state.postId != data.postId;
     m_state.postId = data.postId;
     m_state.authorId = data.authorId;
     m_state.authorName = data.authorName;
     m_state.authorAvatarPath = data.authorAvatarPath;
     m_state.title = data.title;
     m_state.content = data.content;
+    m_state.contentCreatedAt = data.contentCreatedAt;
     m_state.isLiked = data.isLiked;
     m_state.likeCount = data.likeCount;
     m_state.commentCount = data.commentCount;
@@ -411,6 +552,15 @@ void PostDetailView::setPostData(const PostDetailData& data)
     m_state.fullImageOpacity = 0.0;
 
     syncUiFromState();
+    if (postChanged) {
+        clearReplyTarget();
+        m_commentsRequestId.clear();
+        m_pendingCommentsOffset = -1;
+        m_loadingComments = false;
+        m_pendingLoadMoreCheck = false;
+        m_detailModel->resetForPost(m_state.postId);
+    }
+    loadInitialComments();
 
     auto* imageFade = new QVariantAnimation(this);
     imageFade->setDuration(180);
@@ -449,9 +599,18 @@ void PostDetailView::applySummaryState(const PostSummary& summary, bool resetDet
 
     if (resetDetailContent) {
         m_state.content = QStringLiteral("加载中...");
+        m_state.contentCreatedAt = {};
         m_state.fullImageSource.clear();
         m_state.fullImageSize = {};
         m_state.fullImageOpacity = 0.0;
+        if (m_detailModel) {
+            clearReplyTarget();
+            m_commentsRequestId.clear();
+            m_pendingCommentsOffset = -1;
+            m_loadingComments = false;
+            m_pendingLoadMoreCheck = false;
+            m_detailModel->resetForPost(m_state.postId);
+        }
     }
 
     syncUiFromState();
@@ -464,9 +623,12 @@ void PostDetailView::syncUiFromState()
     m_followBtn->setText(m_state.isFollowed ? "已关注" : "关注");
     m_titleLabel->setText(m_state.title);
     m_contentLabel->setText(m_state.content);
+    const QString contentDateText = postDateText(m_state.contentCreatedAt);
+    m_postDateLabel->setText(contentDateText);
+    m_postDateLabel->setVisible(!contentDateText.isEmpty());
     syncEngagementUi();
-    m_contentArea->relayout();
     updateLayout();
+    updateDetailTextHeight();
     update();
 }
 
@@ -478,4 +640,206 @@ void PostDetailView::syncEngagementUi()
                                                 : ":/resources/icon/heart.png")));
     m_likeCount->setText(QString::number(m_state.likeCount));
     m_commentCount->setText(QString::number(m_state.commentCount));
+}
+
+void PostDetailView::updateDetailTextHeight()
+{
+    if (!m_detailTextWidget || !m_detailModel || !m_contentList) {
+        return;
+    }
+
+    const int width = qMax(1, m_contentList->viewport()->width());
+    m_detailTextWidget->setFixedWidth(width);
+    if (auto* layout = m_detailTextWidget->layout()) {
+        layout->invalidate();
+        layout->activate();
+    }
+    const int height = qMax(1, m_detailTextWidget->sizeHint().height());
+    m_detailTextWidget->setFixedHeight(height);
+    m_detailModel->setDetailHeight(height);
+    m_contentList->doItemsLayout();
+}
+
+void PostDetailView::loadInitialComments()
+{
+    if (!m_detailModel || m_state.postId.isEmpty()) {
+        return;
+    }
+
+    m_loadingComments = true;
+    m_pendingCommentsOffset = 0;
+    m_commentsRequestId = PostCommentRepository::instance().requestPostCommentsAsync({
+            m_state.postId,
+            0,
+            m_commentPageSize
+    });
+}
+
+void PostDetailView::loadMoreComments()
+{
+    if (!m_detailModel || m_loadingComments || m_state.postId.isEmpty() || !m_detailModel->hasMoreComments()) {
+        return;
+    }
+
+    m_loadingComments = true;
+    m_pendingCommentsOffset = m_detailModel->commentCount();
+    m_commentsRequestId = PostCommentRepository::instance().requestPostCommentsAsync({
+            m_state.postId,
+            m_pendingCommentsOffset,
+            m_commentPageSize
+    });
+}
+
+void PostDetailView::onCommentsReady(const QString& requestId, const PostCommentsPage& page)
+{
+    if (!m_detailModel
+        || requestId != m_commentsRequestId
+        || page.postId != m_state.postId
+        || page.offset != m_pendingCommentsOffset) {
+        return;
+    }
+
+    const bool initialPage = page.offset == 0;
+    m_commentsRequestId.clear();
+    m_pendingCommentsOffset = -1;
+    m_loadingComments = false;
+
+    if (initialPage) {
+        m_detailModel->setComments(page.comments, page.hasMore);
+    } else if (page.offset == m_detailModel->commentCount()) {
+        m_detailModel->appendComments(page.comments, page.hasMore);
+    }
+
+    scheduleMaybeLoadMoreComments();
+}
+
+void PostDetailView::setReplyTarget(const QString& commentId, const QString& replyId)
+{
+    if (!m_detailModel || commentId.isEmpty()) {
+        return;
+    }
+
+    const PostComment* comment = m_detailModel->commentById(commentId);
+    if (!comment) {
+        return;
+    }
+
+    QString targetName = comment->authorName;
+    if (!replyId.isEmpty()) {
+        for (const PostCommentReply& reply : comment->replies) {
+            if (reply.replyId == replyId) {
+                targetName = reply.authorName;
+                break;
+            }
+        }
+    }
+
+    m_replyTarget.commentId = commentId;
+    m_replyTarget.replyId = replyId;
+    m_commentLineEdit->setPlaceholderText(QStringLiteral("回复 %1...").arg(targetName));
+    m_commentLineEdit->setFocus();
+}
+
+void PostDetailView::clearReplyTarget()
+{
+    m_replyTarget = {};
+    m_commentLineEdit->setPlaceholderText(QStringLiteral("说点什么吧..."));
+}
+
+void PostDetailView::submitCommentText()
+{
+    if (!m_detailModel || m_state.postId.isEmpty()) {
+        return;
+    }
+
+    const QString text = m_commentLineEdit->text().trimmed();
+    if (text.isEmpty()) {
+        return;
+    }
+
+    const CurrentUser& currentUser = CurrentUser::instance();
+    const QDateTime now = QDateTime::currentDateTime();
+    const QString idSuffix = QString::number(now.toMSecsSinceEpoch());
+
+    if (m_replyTarget.commentId.isEmpty()) {
+        PostComment comment;
+        comment.commentId = QStringLiteral("%1-local-c%2").arg(m_state.postId, idSuffix);
+        comment.postId = m_state.postId;
+        comment.authorId = currentUser.getUserId();
+        comment.authorName = currentUser.getUserName();
+        comment.authorAvatarPath = currentUser.getAvatarPath();
+        comment.content = text;
+        comment.createdAt = now;
+        comment.likeCount = 0;
+        comment.isLiked = false;
+        comment.totalReplyCount = 0;
+        m_detailModel->insertComment(std::move(comment));
+    } else {
+        const PostComment* parentComment = m_detailModel->commentById(m_replyTarget.commentId);
+        if (!parentComment) {
+            clearReplyTarget();
+            return;
+        }
+
+        QString targetUserId = parentComment->authorId;
+        QString targetUserName = parentComment->authorName;
+        if (!m_replyTarget.replyId.isEmpty()) {
+            for (const PostCommentReply& reply : parentComment->replies) {
+                if (reply.replyId == m_replyTarget.replyId) {
+                    targetUserId = reply.authorId;
+                    targetUserName = reply.authorName;
+                    break;
+                }
+            }
+        }
+
+        PostCommentReply reply;
+        reply.replyId = QStringLiteral("%1-local-r%2").arg(m_replyTarget.commentId, idSuffix);
+        reply.commentId = m_replyTarget.commentId;
+        reply.postId = m_state.postId;
+        reply.authorId = currentUser.getUserId();
+        reply.authorName = currentUser.getUserName();
+        reply.authorAvatarPath = currentUser.getAvatarPath();
+        reply.targetUserId = targetUserId;
+        reply.targetUserName = targetUserName;
+        reply.targetReplyId = m_replyTarget.replyId;
+        reply.content = text;
+        reply.createdAt = now;
+        reply.likeCount = 0;
+        reply.isLiked = false;
+        m_detailModel->insertReply(m_replyTarget.commentId, m_replyTarget.replyId, std::move(reply));
+    }
+
+    ++m_state.commentCount;
+    syncEngagementUi();
+    m_commentLineEdit->clear();
+    clearReplyTarget();
+}
+
+void PostDetailView::maybeLoadMoreComments()
+{
+    if (!m_contentList || !m_detailModel || !m_detailModel->hasMoreComments() || m_loadingComments) {
+        return;
+    }
+
+    QScrollBar* scrollBar = m_contentList->verticalScrollBar();
+    if (!scrollBar) {
+        return;
+    }
+    if (scrollBar->maximum() <= 0 || scrollBar->maximum() - scrollBar->value() <= 240) {
+        loadMoreComments();
+    }
+}
+
+void PostDetailView::scheduleMaybeLoadMoreComments()
+{
+    if (m_pendingLoadMoreCheck) {
+        return;
+    }
+
+    m_pendingLoadMoreCheck = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_pendingLoadMoreCheck = false;
+        maybeLoadMoreComments();
+    });
 }

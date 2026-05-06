@@ -217,6 +217,7 @@ void MinecraftSlider::paintEvent(QPaintEvent* event)
 
     QPainter painter(this);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
 
     const QPixmap sliderPixmap = ImageService::instance().pixmap(m_normalImage);
     if (sliderPixmap.isNull()) {
