@@ -9,7 +9,7 @@
 
 namespace {
 
-int scrollAnimationDuration(int distance)
+int scrollAnimationDuration(int distance, int viewportHeight, bool accelerateFarDistance)
 {
     if (distance <= 0) {
         return 0;
@@ -22,7 +22,27 @@ int scrollAnimationDuration(int distance)
     const double normalized = std::min(distance / 1000.0, 1.0);
     const double curved = std::pow(normalized, kDistanceFactor);
     const double duration = kMaxDurationMs * curved;
-    return static_cast<int>(std::clamp(duration, kMinDurationMs, kMaxDurationMs));
+    const int normalDuration = static_cast<int>(std::clamp(duration, kMinDurationMs, kMaxDurationMs));
+
+    if (!accelerateFarDistance) {
+        return normalDuration;
+    }
+
+    const int farDistanceThreshold = std::max(viewportHeight * 2, 1000);
+    if (distance <= farDistanceThreshold) {
+        return normalDuration;
+    }
+
+    constexpr double kFastestDurationScale = 0.35;
+    const double farProgress = std::clamp(
+        static_cast<double>(distance - farDistanceThreshold) /
+            static_cast<double>(farDistanceThreshold * 2),
+        0.0,
+        1.0);
+    const double scale = 1.0 - (1.0 - kFastestDurationScale) * farProgress;
+    return static_cast<int>(std::clamp(std::round(normalDuration * scale),
+                                       kMinDurationMs,
+                                       static_cast<double>(normalDuration)));
 }
 
 } // namespace
@@ -66,7 +86,7 @@ void ChatListView::setModel(QAbstractItemModel *model)
     QTimer::singleShot(0, this, [this]() { updateOverlayScrollBar(); });
 }
 
-void ChatListView::scrollToBottom()
+void ChatListView::scrollToBottom(bool accelerateFarDistance)
 {
     doItemsLayout();
     updateGeometries();
@@ -81,7 +101,9 @@ void ChatListView::scrollToBottom()
     }
 
     m_scrollAnimation->stop();
-    m_scrollAnimation->setDuration(scrollAnimationDuration(targetValue - startValue));
+    m_scrollAnimation->setDuration(scrollAnimationDuration(targetValue - startValue,
+                                                           viewport()->height(),
+                                                           accelerateFarDistance));
     m_scrollAnimation->setStartValue(startValue);
     m_scrollAnimation->setEndValue(targetValue);
     m_scrollAnimation->start();

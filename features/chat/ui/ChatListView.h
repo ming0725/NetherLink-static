@@ -13,7 +13,7 @@ class ChatListView : public OverlayScrollListView
 public:
     explicit ChatListView(QWidget *parent = nullptr);
     void setModel(QAbstractItemModel *model) override;
-    void scrollToBottom();
+    void scrollToBottom(bool accelerateFarDistance = false);
     void jumpToBottom();
     void preserveScrollPositionAfterPrepend(int previousValue, int previousMaximum);
 

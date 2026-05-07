@@ -377,7 +377,9 @@ bool ChatArea::isScrollAtBottom() const
 
 void ChatArea::onNewMessageNotifierClicked()
 {
-    scrollToBottom();
+    chatView->scrollToBottom(true);
+    m_state.unreadMessageCount = 0;
+    updateNewMessageNotifier();
 }
 
 void ChatArea::resizeEvent(QResizeEvent *event)
