@@ -5,6 +5,7 @@
 #include <QFile>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QtGlobal>
 
 #include <memory>
 #include <iterator>
@@ -62,6 +63,8 @@ struct AudioServicePrivate {
     QMutex mutex;
     ma_engine engine {};
     bool engineInitialized = false;
+    int masterVolumePercent = 100;
+    int soundEffectVolumePercent = 100;
     std::vector<std::unique_ptr<AudioClip>> clips;
 
     AudioServicePrivate()
@@ -119,6 +122,30 @@ struct AudioServicePrivate {
         return nullptr;
     }
 
+    float effectiveSoundVolume(const AudioClip& clip) const
+    {
+        const float masterScale = static_cast<float>(masterVolumePercent) / 100.0f;
+        const float effectScale = static_cast<float>(soundEffectVolumePercent) / 100.0f;
+        return clip.volume * masterScale * effectScale;
+    }
+
+    void applyVolume(AudioClip& clip)
+    {
+        const float volume = effectiveSoundVolume(clip);
+        for (const std::unique_ptr<AudioVoice>& voice : clip.voices) {
+            if (voice->soundInitialized) {
+                ma_sound_set_volume(&voice->sound, volume);
+            }
+        }
+    }
+
+    void applyVolumes()
+    {
+        for (const std::unique_ptr<AudioClip>& clip : clips) {
+            applyVolume(*clip);
+        }
+    }
+
     bool ensureClip(AudioClip& clip)
     {
         if (clip.loaded) {
@@ -164,7 +191,7 @@ struct AudioServicePrivate {
             }
 
             voice->soundInitialized = true;
-            ma_sound_set_volume(&voice->sound, clip.volume);
+            ma_sound_set_volume(&voice->sound, effectiveSoundVolume(clip));
             ma_sound_set_looping(&voice->sound, MA_FALSE);
             clip.voices.push_back(std::move(voice));
         }
@@ -249,4 +276,40 @@ void AudioService::playButtonClick()
 void AudioService::playPortalClick()
 {
     play(SoundEffect::Portal);
+}
+
+int AudioService::masterVolume() const
+{
+    QMutexLocker locker(&d->mutex);
+    return d->masterVolumePercent;
+}
+
+int AudioService::soundEffectVolume() const
+{
+    QMutexLocker locker(&d->mutex);
+    return d->soundEffectVolumePercent;
+}
+
+void AudioService::setMasterVolume(int volume)
+{
+    const int boundedVolume = qBound(0, volume, 100);
+    QMutexLocker locker(&d->mutex);
+    if (d->masterVolumePercent == boundedVolume) {
+        return;
+    }
+
+    d->masterVolumePercent = boundedVolume;
+    d->applyVolumes();
+}
+
+void AudioService::setSoundEffectVolume(int volume)
+{
+    const int boundedVolume = qBound(0, volume, 100);
+    QMutexLocker locker(&d->mutex);
+    if (d->soundEffectVolumePercent == boundedVolume) {
+        return;
+    }
+
+    d->soundEffectVolumePercent = boundedVolume;
+    d->applyVolumes();
 }

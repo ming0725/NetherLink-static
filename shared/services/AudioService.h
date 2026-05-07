@@ -29,6 +29,11 @@ public:
     void playButtonClick();
     void playPortalClick();
 
+    int masterVolume() const;
+    int soundEffectVolume() const;
+    void setMasterVolume(int volume);
+    void setSoundEffectVolume(int volume);
+
 private:
     explicit AudioService(QObject* parent = nullptr);
     AudioService(const AudioService&) = delete;

@@ -47,17 +47,8 @@ NetherLink‑static 是一个基于 Qt 的聊天社交客户端静态演示，**
 
 > 以下为示例截图，展示主要页面风格。
 
-<img src="https://github.com/ming0725/NetherLink-static/blob/master/doc/images/1_chat.jpg?raw=true" alt="聊天界面" width="600"/>
+<!-- <img src="https://github.com/ming0725/NetherLink-static/blob/master/doc/images/1_chat.jpg?raw=true" alt="聊天界面" width="600"/> -->
 
-<img src="https://github.com/ming0725/NetherLink-static/blob/master/doc/images/2_friends.png?raw=true" alt="联系人界面" width="600"/>
-
-<img src="https://github.com/ming0725/NetherLink-static/blob/master/doc/images/3_posts.png?raw=true" alt="帖子中心" width="600"/>
-
-<img src="https://github.com/ming0725/NetherLink-static/blob/master/doc/images/4_detail_post.png?raw=true" alt="帖子详情页" width="600"/>
-
-<img src="https://github.com/ming0725/NetherLink-static/blob/master/doc/images/6_lqglass.png?raw=true" alt="Mac 液态玻璃底部栏" width="600"/>
-
-<img src="https://github.com/ming0725/NetherLink-static/blob/master/doc/images/7_gsblur.png?raw=true" alt="Mac 高斯模糊底部栏" width="600"/>
 
 ---
 
@@ -71,7 +62,7 @@ NetherLink‑static 是一个基于 Qt 的聊天社交客户端静态演示，**
 
 ## 📌 后续展望
 
-完善基础功能，添加 Minecraft 音效，统一数据接口层：将当前静态数据抽象为统一的数据访问接口，保持与未来网络请求结构一致，便于后续无缝切换为真实 API。
+完善基础功能，统一数据接口层：将当前静态数据抽象为统一的数据访问接口，保持与未来网络请求结构一致，便于后续无缝切换为真实 API。
 
 ## 📅 更新日志
 

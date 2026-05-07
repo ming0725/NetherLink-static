@@ -1,6 +1,7 @@
 #include "SettingsWindow.h"
 
 #include "shared/services/ImageService.h"
+#include "shared/services/AudioService.h"
 #include "shared/theme/ThemeManager.h"
 #include "shared/ui/MinecraftButton.h"
 #include "shared/ui/MinecraftSlider.h"
@@ -743,9 +744,16 @@ void SettingsWindow::createSoundPage()
         return slider;
     };
 
-    auto* masterSlider = makeSlider(QStringLiteral("主音量"), 80);
-    auto* sfxSlider    = makeSlider(QStringLiteral("音效"), 70);
-    auto* voiceSlider  = makeSlider(QStringLiteral("语音音量"), 90);
+    auto* masterSlider = makeSlider(QStringLiteral("主音量"), AudioService::instance().masterVolume());
+    auto* sfxSlider    = makeSlider(QStringLiteral("音效"), AudioService::instance().soundEffectVolume());
+    auto* voiceSlider  = makeSlider(QStringLiteral("语音音量"), 100);
+
+    connect(masterSlider, &MinecraftSlider::valueChanged, this, [](int value) {
+        AudioService::instance().setMasterVolume(value);
+    });
+    connect(sfxSlider, &MinecraftSlider::valueChanged, this, [](int value) {
+        AudioService::instance().setSoundEffectVolume(value);
+    });
 
     auto* doneBtn = createMenuButton(QStringLiteral("完成"), page);
     connect(doneBtn, &QPushButton::clicked, this, &SettingsWindow::goBack);

@@ -5,6 +5,7 @@
 #include "features/chat/ui/ConversationInfoPanel.h"
 #include "features/chat/ui/ChatSessionController.h"
 #include "app/state/CurrentUser.h"
+#include "shared/services/AudioService.h"
 #include "shared/services/ImageService.h"
 #include "shared/theme/ThemeManager.h"
 #ifdef Q_OS_MACOS
@@ -669,6 +670,7 @@ void ChatArea::showInfoPanel(bool animated)
         return;
     }
 
+    AudioService::instance().play(AudioService::SoundEffect::ChestOpen);
     infoPanelAnimation->setTargetObject(panel);
     infoPanelAnimation->setStartValue(panel->geometry());
     infoPanelAnimation->setEndValue(openRect);
@@ -698,6 +700,7 @@ void ChatArea::hideInfoPanel(bool animated)
 
     panel->show();
     panel->raise();
+    AudioService::instance().play(AudioService::SoundEffect::ChestClosed);
     infoPanelAnimation->setTargetObject(panel);
     infoPanelAnimation->setStartValue(panel->geometry());
     infoPanelAnimation->setEndValue(closedRect);

@@ -4,6 +4,7 @@
 #include "ChatArea.h"
 #include "shared/services/ImageService.h"
 #include "shared/theme/ThemeManager.h"
+#include "shared/ui/GlobalNotification.h"
 #include <QPainter>
 #include <QTextLayout>
 #include <QTextOption>
@@ -14,6 +15,7 @@
 #include <QPainterPath>
 #include <QPersistentModelIndex>
 #include <QMenu>
+#include <QKeyEvent>
 
 namespace {
 
@@ -26,6 +28,12 @@ QColor groupRoleBackgroundColor(GroupRole role)
         return QColor(0xC2, 0xE1, 0xF5);
     }
     return ThemeManager::instance().color(ThemeColor::PanelRaisedBackground);
+}
+
+void showCopyNotification(QObject* owner)
+{
+    QWidget* widget = qobject_cast<QWidget*>(owner);
+    GlobalNotification::showSuccess(widget, QStringLiteral("复制成功"));
 }
 
 } // namespace
@@ -129,6 +137,7 @@ bool ChatItemDelegate::editorEvent(QEvent* event, QAbstractItemModel* model,
             if (message && message->getType() == MessageType::Text && message->getIsSelected()) {
                 const TextMessage* textMessage = static_cast<const TextMessage*>(message);
                 QApplication::clipboard()->setText(textMessage->getText());
+                showCopyNotification(parent());
                 return true;
             }
         }
@@ -560,6 +569,7 @@ void ChatItemDelegate::showContextMenu(const QPoint& pos, const QModelIndex& ind
         connect(copyAction, &QAction::triggered, [this, message, index, model = const_cast<QAbstractItemModel*>(index.model())]() {
             const TextMessage* textMessage = static_cast<const TextMessage*>(message);
             QApplication::clipboard()->setText(textMessage->getText());
+            showCopyNotification(parent());
             model->setData(index, false, Qt::UserRole + 1);
         });
         menu->addSeparator();

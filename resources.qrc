@@ -40,6 +40,7 @@
         <file>resources/icon/more.png</file>
         <file>resources/icon/nether.png</file>
         <file>resources/icon/NETHER2D.png</file>
+        <file>resources/icon/global_notification.png</file>
         <file>resources/icon/notification.png</file>
         <file>resources/icon/offline.png</file>
         <file>resources/icon/online.png</file>

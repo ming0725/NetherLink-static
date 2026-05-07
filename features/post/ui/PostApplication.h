@@ -25,7 +25,6 @@ private slots:
     void onPostDetailReady(const QString& requestId, const PostDetailData& detail);
 protected:
     void resizeEvent(QResizeEvent* ev) override;
-    void showEvent(QShowEvent* event) override;
     bool eventFilter(QObject* obj, QEvent* ev) override;
 private:
     enum class TransitionPhase {
