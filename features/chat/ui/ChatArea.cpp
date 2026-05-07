@@ -311,7 +311,8 @@ void ChatArea::addMessage(QSharedPointer<ChatMessage> message)
         return;
     }
 
-    bool shouldScroll = message->isFromMe() || isNearBottom();
+    const bool isOwnMessage = message->isFromMe();
+    bool shouldScroll = isOwnMessage || isNearBottom();
     // 添加消息
     chatModel->addMessage(message);
     MessageRepository::instance().addMessage(conversationId(), message);
@@ -328,7 +329,9 @@ void ChatArea::addMessage(QSharedPointer<ChatMessage> message)
     
     // 如果需要滚动到底部，使用延时确保布局更新完成
     if (shouldScroll) {
-        QTimer::singleShot(0, this, &ChatArea::scrollToBottom);
+        QTimer::singleShot(0, this, [this, isOwnMessage]() {
+            scrollToBottom(isOwnMessage);
+        });
     }
 }
 
@@ -377,9 +380,7 @@ bool ChatArea::isScrollAtBottom() const
 
 void ChatArea::onNewMessageNotifierClicked()
 {
-    chatView->scrollToBottom(true);
-    m_state.unreadMessageCount = 0;
-    updateNewMessageNotifier();
+    scrollToBottom(true);
 }
 
 void ChatArea::resizeEvent(QResizeEvent *event)
@@ -422,9 +423,9 @@ void ChatArea::updateNewMessageNotifierPosition()
     }
 }
 
-void ChatArea::scrollToBottom()
+void ChatArea::scrollToBottom(bool accelerateFarDistance)
 {
-    chatView->scrollToBottom();
+    chatView->scrollToBottom(accelerateFarDistance);
     m_state.unreadMessageCount = 0;
     updateNewMessageNotifier();
 }

@@ -1,5 +1,6 @@
 #include "MinecraftButton.h"
 
+#include "shared/services/AudioService.h"
 #include "shared/services/ImageService.h"
 
 #include <QEvent>
@@ -68,6 +69,10 @@ void MinecraftButton::initialize()
     QFont buttonFont = font();
     buttonFont.setBold(true);
     setFont(buttonFont);
+
+    connect(this, &QPushButton::pressed, this, []() {
+        AudioService::instance().playButtonClick();
+    });
 }
 
 void MinecraftButton::setNormalImage(const QString& source)

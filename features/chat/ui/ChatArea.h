@@ -85,7 +85,7 @@ private:
     
     void updateNewMessageNotifier();
     void updateNewMessageNotifierPosition();
-    void scrollToBottom();
+    void scrollToBottom(bool accelerateFarDistance = false);
     bool isScrollAtBottom() const;
     bool isNearBottom() const;
     void adjustBottomSpace();

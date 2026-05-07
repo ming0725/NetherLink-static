@@ -80,5 +80,12 @@
         <file>resources/post/8.jpg</file>
         <file>resources/post/9.jpg</file>
         <file>resources/audio/portal.wav</file>
+        <file>resources/audio/successful_hit.wav</file>
+        <file>resources/audio/click.wav</file>
+        <file>resources/audio/break.wav</file>
+        <file>resources/audio/classic_hurt.wav</file>
+        <file>resources/audio/chestopen.wav</file>
+        <file>resources/audio/fuse.wav</file>
+        <file>resources/audio/chestclosed.wav</file>
     </qresource>
 </RCC>

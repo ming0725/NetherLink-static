@@ -1,5 +1,6 @@
 #include "MinecraftSlider.h"
 
+#include "shared/services/AudioService.h"
 #include "shared/services/ImageService.h"
 
 #include <QEvent>
@@ -204,6 +205,7 @@ void MinecraftSlider::mouseReleaseEvent(QMouseEvent* event)
     if (m_dragging && event->button() == Qt::LeftButton) {
         m_dragging = false;
         setHovered(rect().contains(event->position().toPoint()));
+        AudioService::instance().playButtonClick();
         event->accept();
         return;
     }

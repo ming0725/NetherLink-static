@@ -1,17 +1,32 @@
 #pragma once
 
 #include <QObject>
-#include <QVector>
 
-class QSoundEffect;
+#include <memory>
+
+struct AudioServicePrivate;
 
 class AudioService : public QObject {
     Q_OBJECT
 
 public:
+    enum class SoundEffect {
+        ButtonClick,
+        Portal,
+        SuccessfulHit,
+        Break,
+        ClassicHurt,
+        ChestOpen,
+        ChestClosed,
+        Fuse
+    };
+
     static AudioService& instance();
+    ~AudioService() override;
 
     void preloadUiSounds();
+    void play(SoundEffect effect);
+    void playButtonClick();
     void playPortalClick();
 
 private:
@@ -19,9 +34,5 @@ private:
     AudioService(const AudioService&) = delete;
     AudioService& operator=(const AudioService&) = delete;
 
-    void ensurePortalPool();
-    QSoundEffect* idlePortalSound();
-
-    QVector<QSoundEffect*> m_portalPool;
-    int m_nextPortalIndex = 0;
+    std::unique_ptr<AudioServicePrivate> d;
 };

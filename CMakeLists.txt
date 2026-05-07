@@ -13,8 +13,9 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Multimedia)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Multimedia)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
+find_package(Threads REQUIRED)
 
 file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/app/*.cpp"
@@ -43,6 +44,7 @@ endif()
 set(PROJECT_SOURCES
     main.cpp
     resources.qrc
+    third_party/miniaudio/miniaudio.cpp
     ${APP_SOURCES}
     ${FEATURE_SOURCES}
     ${SHARED_SOURCES}
@@ -74,9 +76,14 @@ endif()
 
 target_include_directories(NetherLink-static PRIVATE
     ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/third_party/miniaudio
 )
 
-target_link_libraries(NetherLink-static PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Multimedia)
+target_link_libraries(NetherLink-static PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Threads::Threads)
+
+if(UNIX AND NOT APPLE)
+    target_link_libraries(NetherLink-static PRIVATE ${CMAKE_DL_LIBS} m)
+endif()
 
 if(APPLE)
     target_link_libraries(NetherLink-static PRIVATE "-framework QuartzCore")
