@@ -47,10 +47,14 @@ constexpr int kLineHeight = 17;
 constexpr int kTextRightPadding = 16;
 constexpr int kTextFontSize = 13;
 constexpr int kSlideDuration = 260;
-constexpr int kHoldDuration = 1900;
+constexpr int kHoldDuration = 3900;
+constexpr int kExpandedDismissDelay = 2000;
 constexpr int kDismissDuration = 220;
+constexpr int kExpandedOverflowDismissDuration = 320;
+constexpr int kCloseFadeDuration = 280;
 
 QPointer<QWidget> expandedParent;
+QPointer<QTimer> expandedDismissTimer;
 
 quint64 nextNotificationSequence()
 {
@@ -197,8 +201,9 @@ bool GlobalNotification::eventFilter(QObject* watched, QEvent* event)
 
     if (event->type() == QEvent::MouseButtonPress && isExpanded(parentWidget())) {
         auto* mouseEvent = static_cast<QMouseEvent*>(event);
-        if (!containsGlobalPos(parentWidget(), mouseGlobalPosition(mouseEvent))) {
-            collapseNotifications(parentWidget());
+        if (mouseEvent->button() == Qt::LeftButton
+            && !containsGlobalPos(parentWidget(), mouseGlobalPosition(mouseEvent))) {
+            clearNotifications(parentWidget());
         }
     }
 
@@ -211,17 +216,20 @@ void GlobalNotification::enterEvent(QEnterEvent* event)
 void GlobalNotification::enterEvent(QEvent* event)
 #endif
 {
-    m_hovered = true;
-    update();
+    animateCloseButton(1.0);
     pauseDismissTimers(parentWidget());
+    pauseExpandedDismissTimer(parentWidget());
     QWidget::enterEvent(event);
 }
 
 void GlobalNotification::leaveEvent(QEvent* event)
 {
-    m_hovered = false;
-    update();
-    if (!isExpanded(parentWidget()) && !containsCursor(parentWidget())) {
+    animateCloseButton(0.0);
+    if (isExpanded(parentWidget())) {
+        if (!containsCursor(parentWidget())) {
+            restartExpandedDismissTimer(parentWidget());
+        }
+    } else if (!containsCursor(parentWidget())) {
         resumeDismissTimers(parentWidget());
     }
     QWidget::leaveEvent(event);
@@ -232,6 +240,12 @@ void GlobalNotification::mousePressEvent(QMouseEvent* event)
     if (event->button() == Qt::LeftButton) {
         if (closeButtonRect().contains(event->pos())) {
             clearNotifications(parentWidget());
+            event->accept();
+            return;
+        }
+
+        if (isExpanded(parentWidget())) {
+            collapseNotifications(parentWidget());
             event->accept();
             return;
         }
@@ -296,15 +310,15 @@ void GlobalNotification::paintEvent(QPaintEvent* event)
     painter.setPen(QColor(0xFF, 0xFF, 0xFF));
     painter.drawText(secondLineRect, Qt::AlignLeft | Qt::AlignVCenter, detail);
 
-    if (m_hovered) {
+    if (m_closeButtonOpacity > 0.0) {
         const QRectF closeRect(closeButtonRect());
         const QPointF center = closeRect.center();
         painter.setRenderHint(QPainter::Antialiasing, true);
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(255, 255, 255, 220));
+        painter.setBrush(QColor(255, 255, 255, qRound(220 * m_closeButtonOpacity)));
         painter.drawEllipse(closeRect);
 
-        QPen closePen(QColor(0, 0, 0, 210), 2);
+        QPen closePen(QColor(0, 0, 0, qRound(210 * m_closeButtonOpacity)), 2);
         closePen.setCapStyle(Qt::RoundCap);
         painter.setPen(closePen);
         painter.drawLine(QPointF(center.x() - kCloseLineHalfLength,
@@ -327,6 +341,9 @@ void GlobalNotification::start()
     restartDismissTimer();
     if (isExpanded(parentWidget()) || containsCursor(parentWidget())) {
         pauseDismissTimer();
+    }
+    if (isExpanded(parentWidget())) {
+        startExpandedDismissTimer(parentWidget());
     }
 }
 
@@ -380,6 +397,17 @@ qreal GlobalNotification::stackOpacity(int depth) const
     return kStackOpacities[stackDepth];
 }
 
+qreal GlobalNotification::closeButtonOpacity() const
+{
+    return m_closeButtonOpacity;
+}
+
+void GlobalNotification::setCloseButtonOpacity(qreal opacity)
+{
+    m_closeButtonOpacity = qBound<qreal>(0.0, opacity, 1.0);
+    update(closeButtonRect().adjusted(-2, -2, 2, 2));
+}
+
 QParallelAnimationGroup* GlobalNotification::animateTo(const QRect& targetGeometry,
                                                        qreal targetOpacity,
                                                        int duration,
@@ -424,6 +452,30 @@ QParallelAnimationGroup* GlobalNotification::animateTo(const QRect& targetGeomet
     return group;
 }
 
+void GlobalNotification::animateCloseButton(qreal targetOpacity)
+{
+    targetOpacity = qBound<qreal>(0.0, targetOpacity, 1.0);
+    if (m_closeButtonAnimation) {
+        m_closeButtonAnimation->stop();
+        m_closeButtonAnimation->deleteLater();
+        m_closeButtonAnimation = nullptr;
+    }
+
+    auto* animation = new QPropertyAnimation(this, "closeButtonOpacity", this);
+    m_closeButtonAnimation = animation;
+    animation->setDuration(kCloseFadeDuration);
+    animation->setEasingCurve(QEasingCurve::OutCubic);
+    animation->setStartValue(m_closeButtonOpacity);
+    animation->setEndValue(targetOpacity);
+    connect(animation, &QPropertyAnimation::finished, this, [this, animation] {
+        if (m_closeButtonAnimation == animation) {
+            m_closeButtonAnimation = nullptr;
+        }
+        animation->deleteLater();
+    });
+    animation->start();
+}
+
 void GlobalNotification::stopLayoutAnimation()
 {
     if (!m_layoutAnimation) {
@@ -450,17 +502,22 @@ void GlobalNotification::animateToStackDepth(int depth, bool animated)
 
 void GlobalNotification::dismiss(bool slideToHidden)
 {
+    QRect targetGeometry = geometry();
+    if (slideToHidden && m_attachedWidget) {
+        targetGeometry.moveLeft(m_attachedWidget->width() + kRightMargin);
+    }
+    dismissTo(targetGeometry, kDismissDuration);
+}
+
+void GlobalNotification::dismissTo(const QRect& targetGeometry, int duration)
+{
     if (m_dismissing) {
         return;
     }
 
     m_dismissing = true;
     pauseDismissTimer();
-    QRect targetGeometry = geometry();
-    if (slideToHidden && m_attachedWidget) {
-        targetGeometry.moveLeft(m_attachedWidget->width() + kRightMargin);
-    }
-    QParallelAnimationGroup* animation = animateTo(targetGeometry, 0.0, kDismissDuration, QEasingCurve::InCubic);
+    QParallelAnimationGroup* animation = animateTo(targetGeometry, 0.0, duration, QEasingCurve::InCubic);
     if (!animation) {
         hide();
         QWidget* parent = parentWidget();
@@ -574,7 +631,12 @@ void GlobalNotification::relayoutNotifications(QWidget* parent, bool animated)
         if (i < kMaxStackedNotifications) {
             notification->animateToStackDepth(i, animated);
         } else {
-            notification->dismiss(false);
+            if (isExpanded(parent)) {
+                notification->dismissTo(notification->expandedGeometry(i),
+                                        kExpandedOverflowDismissDuration);
+            } else {
+                notification->dismiss(false);
+            }
         }
     }
 }
@@ -612,6 +674,7 @@ void GlobalNotification::expandNotifications(QWidget* parent)
 
     expandedParent = parent;
     pauseDismissTimers(parent);
+    startExpandedDismissTimer(parent);
     relayoutNotifications(parent, true);
 }
 
@@ -622,6 +685,7 @@ void GlobalNotification::collapseNotifications(QWidget* parent)
     }
 
     expandedParent = nullptr;
+    stopExpandedDismissTimer(parent);
     relayoutNotifications(parent, true);
     restartDismissTimers(parent);
 }
@@ -635,11 +699,72 @@ void GlobalNotification::clearNotifications(QWidget* parent)
     if (isExpanded(parent)) {
         expandedParent = nullptr;
     }
+    stopExpandedDismissTimer(parent);
 
     const QVector<GlobalNotification*> notifications = activeNotifications(parent);
     for (GlobalNotification* notification : notifications) {
         notification->dismiss(true);
     }
+}
+
+void GlobalNotification::startExpandedDismissTimer(QWidget* parent)
+{
+    if (!parent || !isExpanded(parent)) {
+        return;
+    }
+
+    stopExpandedDismissTimer(parent);
+    if (containsCursor(parent)) {
+        return;
+    }
+    restartExpandedDismissTimer(parent);
+}
+
+void GlobalNotification::pauseExpandedDismissTimer(QWidget* parent)
+{
+    if (!parent || !isExpanded(parent)) {
+        return;
+    }
+
+    stopExpandedDismissTimer(parent);
+}
+
+void GlobalNotification::restartExpandedDismissTimer(QWidget* parent)
+{
+    if (!parent || !isExpanded(parent) || containsCursor(parent)) {
+        return;
+    }
+
+    stopExpandedDismissTimer(parent);
+
+    auto* timer = new QTimer(parent);
+    timer->setSingleShot(true);
+    expandedDismissTimer = timer;
+    QPointer<QWidget> guardedParent(parent);
+    connect(timer, &QTimer::timeout, parent, [guardedParent, timer] {
+        if (expandedDismissTimer == timer) {
+            expandedDismissTimer = nullptr;
+        }
+        timer->deleteLater();
+        if (guardedParent && isExpanded(guardedParent)) {
+            clearNotifications(guardedParent);
+        }
+    });
+    timer->start(kExpandedDismissDelay);
+}
+
+void GlobalNotification::stopExpandedDismissTimer(QWidget* parent)
+{
+    Q_UNUSED(parent);
+
+    if (!expandedDismissTimer) {
+        return;
+    }
+
+    QTimer* timer = expandedDismissTimer;
+    expandedDismissTimer = nullptr;
+    timer->stop();
+    timer->deleteLater();
 }
 
 void GlobalNotification::pauseDismissTimers(QWidget* parent)

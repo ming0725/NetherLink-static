@@ -19,6 +19,7 @@ class QTimer;
 class GlobalNotification final : public QWidget
 {
     Q_OBJECT
+    Q_PROPERTY(qreal closeButtonOpacity READ closeButtonOpacity WRITE setCloseButtonOpacity)
 
 public:
     enum class Type {
@@ -54,13 +55,17 @@ private:
     QRect expandedGeometry(int depth) const;
     QRect hiddenGeometry(int depth) const;
     qreal stackOpacity(int depth) const;
+    qreal closeButtonOpacity() const;
+    void setCloseButtonOpacity(qreal opacity);
     QParallelAnimationGroup* animateTo(const QRect& targetGeometry,
                                        qreal targetOpacity,
                                        int duration,
                                        QEasingCurve::Type easingCurve);
+    void animateCloseButton(qreal targetOpacity);
     void stopLayoutAnimation();
     void animateToStackDepth(int depth, bool animated);
     void dismiss(bool slideToHidden);
+    void dismissTo(const QRect& targetGeometry, int duration);
     void startDismissTimer(int duration);
     void pauseDismissTimer();
     void resumeDismissTimer();
@@ -75,6 +80,10 @@ private:
     static void expandNotifications(QWidget* parent);
     static void collapseNotifications(QWidget* parent);
     static void clearNotifications(QWidget* parent);
+    static void startExpandedDismissTimer(QWidget* parent);
+    static void pauseExpandedDismissTimer(QWidget* parent);
+    static void restartExpandedDismissTimer(QWidget* parent);
+    static void stopExpandedDismissTimer(QWidget* parent);
     static void pauseDismissTimers(QWidget* parent);
     static void resumeDismissTimers(QWidget* parent);
     static void restartDismissTimers(QWidget* parent);
@@ -84,12 +93,13 @@ private:
     QWidget* m_attachedWidget = nullptr;
     QGraphicsOpacityEffect* m_opacityEffect = nullptr;
     QParallelAnimationGroup* m_layoutAnimation = nullptr;
+    QPropertyAnimation* m_closeButtonAnimation = nullptr;
     QTimer* m_dismissTimer = nullptr;
     QElapsedTimer m_dismissElapsed;
     int m_remainingDismissMs = 0;
     QMargins m_sourceMargins;
     quint64 m_sequence = 0;
+    qreal m_closeButtonOpacity = 0.0;
     bool m_dismissTimerRunning = false;
     bool m_dismissing = false;
-    bool m_hovered = false;
 };

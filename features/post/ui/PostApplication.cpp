@@ -245,11 +245,6 @@ PostApplication::PostApplication(QWidget* parent)
     }
 }
 
-void PostApplication::showEvent(QShowEvent* event)
-{
-    QWidget::showEvent(event);
-}
-
 void PostApplication::setSystemFloatingBarsSuppressed(bool suppressed)
 {
     if (!m_bar || !m_bar->usesNativeBar() || m_systemFloatingBarsSuppressed == suppressed) {
