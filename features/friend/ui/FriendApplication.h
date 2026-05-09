@@ -15,6 +15,7 @@
 #include "app/frame/DefaultPage.h"
 
 class QPushButton;
+class FriendSessionController;
 
 class FriendApplication : public QWidget {
     Q_OBJECT
@@ -51,6 +52,7 @@ private:
         GroupListWidget* m_groupList;
     };
 
+    FriendSessionController* m_friendController;
     LeftPane*    m_leftPane;     // 左侧面板
     DefaultPage* m_defaultPage;  // 右侧默认页
     FriendDetailPage* m_detailPage;

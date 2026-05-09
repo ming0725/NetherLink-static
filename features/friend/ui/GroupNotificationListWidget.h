@@ -9,6 +9,7 @@
 
 class GroupNotificationDelegate;
 class GroupNotificationListModel;
+class FriendSessionController;
 
 class GroupNotificationListWidget : public OverlayScrollListView
 {
@@ -17,6 +18,7 @@ class GroupNotificationListWidget : public OverlayScrollListView
 public:
     explicit GroupNotificationListWidget(QWidget* parent = nullptr);
 
+    void setController(FriendSessionController* controller);
     void setNotifications(QVector<GroupNotification> notifications);
     void appendNotifications(QVector<GroupNotification> notifications);
     int notificationCount() const;

@@ -4,13 +4,14 @@
 #include "PostFeedPage.h"
 #include "PostDetailView.h"
 #include "PostOverlay.h"
-#include "features/post/data/PostRepository.h"
+#include "PostSessionController.h"
 #include "shared/services/ImageService.h"
 #include "shared/theme/ThemeManager.h"
 #include <QParallelAnimationGroup>
 #include <QPropertyAnimation>
 #include <QPainter>
 #include <QResizeEvent>
+#include <QStackedWidget>
 #include <QTimer>
 
 namespace {
@@ -190,6 +191,7 @@ QPixmap renderWidgetSnapshot(QWidget* widget)
 
 PostApplication::PostApplication(QWidget* parent)
         : QWidget(parent)
+        , m_postController(new PostSessionController(this))
         , m_bar(new PostApplicationBar(this))
         , m_stack(new QStackedWidget(this))
         , m_detailView(nullptr)
@@ -204,9 +206,9 @@ PostApplication::PostApplication(QWidget* parent)
 
     m_stack->addWidget(createPlaceholderPage());
     m_stack->setCurrentIndex(0);
-    connect(&PostRepository::instance(), &PostRepository::postDetailReady,
-            this, &PostApplication::onPostDetailReady);
-    connect(&PostRepository::instance(), &PostRepository::postUpdated,
+    connect(m_postController, &PostSessionController::currentPostDetailLoaded,
+            this, &PostApplication::onCurrentPostDetailLoaded);
+    connect(m_postController, &PostSessionController::currentPostUpdated,
             this, &PostApplication::onPostUpdated);
 
     m_barFadeAnimation = new QVariantAnimation(this);
@@ -316,7 +318,7 @@ void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, cons
 {
     stopActiveTransition();
     m_openPostSession.postId = summary.postId;
-    m_openPostSession.detailRequestId.clear();
+    m_openPostSession.waitingForDetail = true;
     m_openPostSession.sourceGeometry = QRect(mapFromGlobal(sourceGeometry.topLeft()), sourceGeometry.size());
     m_pendingPostDetail.reset();
     removeTransitionImage();
@@ -329,12 +331,11 @@ void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, cons
     fadeBar(m_bar ? m_bar->visualOpacity() : 1.0, 0.0, true);
 
     m_detailView = new PostDetailView(this);
+    m_detailView->setController(m_postController);
     m_detailView->setPreviewSummary(summary);
     m_detailView->setImageVisible(false);
     connect(m_detailView, &PostDetailView::likeClicked, this, [this](bool liked) {
-        if (!m_openPostSession.postId.isEmpty()) {
-            PostRepository::instance().setPostLiked(m_openPostSession.postId, liked);
-        }
+        m_postController->setCurrentPostLiked(liked);
     });
     m_detailView->setGeometry(detailRectForCurrentPost());
     m_detailView->show();
@@ -397,9 +398,9 @@ void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, cons
     connect(group, &QParallelAnimationGroup::finished, this, [this, group]() {
         m_transitionAnimation = nullptr;
         m_transitionPhase = TransitionPhase::Idle;
-        if (m_detailView && m_openPostSession.detailRequestId.isEmpty()) {
+        if (m_detailView && !m_openPostSession.waitingForDetail) {
             revealDetailViewAfterLoad();
-        } else if (m_openPostSession.detailRequestId.isEmpty()) {
+        } else if (!m_openPostSession.waitingForDetail) {
             removeTransitionImage();
         }
         updateLayerOrder();
@@ -407,19 +408,18 @@ void PostApplication::onPostClickedWithGeometry(const PostSummary& summary, cons
     });
     group->start();
 
-    m_openPostSession.detailRequestId = PostRepository::instance().requestPostDetailAsync({summary.postId});
+    m_postController->openPost(summary);
 }
 
-void PostApplication::onPostDetailReady(const QString& requestId, const PostDetailData& detail)
+void PostApplication::onCurrentPostDetailLoaded(const PostDetailData& detail)
 {
     if (!m_detailView
-        || requestId != m_openPostSession.detailRequestId
         || detail.postId != m_openPostSession.postId) {
         return;
     }
 
     m_pendingPostDetail = detail;
-    m_openPostSession.detailRequestId.clear();
+    m_openPostSession.waitingForDetail = false;
     if (m_transitionPhase == TransitionPhase::Opening) {
         return;
     }
@@ -487,6 +487,7 @@ void PostApplication::ensurePageLoaded(int index)
     case 0:
         if (!m_homeFeedPage) {
             m_homeFeedPage = new PostFeedPage(this);
+            m_homeFeedPage->setController(m_postController);
             connect(m_homeFeedPage, &PostFeedPage::postClickedWithGeometry,
                     this, &PostApplication::onPostClickedWithGeometry);
             m_homeFeedPage->ensureInitialized();
@@ -672,7 +673,8 @@ void PostApplication::clearDetailSnapshot()
 
 void PostApplication::stopActiveTransition()
 {
-    m_openPostSession.detailRequestId.clear();
+    m_postController->closePost();
+    m_openPostSession.waitingForDetail = false;
     m_pendingPostDetail.reset();
 
     if (m_detailSnapshotFadeAnimation) {

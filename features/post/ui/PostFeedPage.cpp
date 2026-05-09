@@ -4,7 +4,7 @@
 
 #include "PostCardDelegate.h"
 #include "features/post/model/PostFeedModel.h"
-#include "features/post/data/PostRepository.h"
+#include "features/post/ui/PostSessionController.h"
 #include "shared/theme/ThemeManager.h"
 
 PostFeedPage::PostFeedPage(QWidget* parent)
@@ -28,8 +28,26 @@ PostFeedPage::PostFeedPage(QWidget* parent)
             this, &PostFeedPage::onPostActivated);
     connect(this, &PostMasonryView::postLikeRequested,
             this, &PostFeedPage::onPostLikeRequested);
-    connect(&PostRepository::instance(), &PostRepository::postUpdated,
-            this, &PostFeedPage::onRepositoryPostUpdated);
+}
+
+void PostFeedPage::setController(PostSessionController* controller)
+{
+    if (m_controller == controller) {
+        return;
+    }
+
+    if (m_postUpdatedConnection) {
+        disconnect(m_postUpdatedConnection);
+        m_postUpdatedConnection = {};
+    }
+
+    m_controller = controller;
+    if (!m_controller) {
+        return;
+    }
+
+    m_postUpdatedConnection = connect(m_controller, &PostSessionController::postUpdated,
+                                      this, &PostFeedPage::onRepositoryPostUpdated);
 }
 
 void PostFeedPage::ensureInitialized()
@@ -52,11 +70,11 @@ void PostFeedPage::setPosts(const QVector<PostSummary>& posts)
 
 void PostFeedPage::loadMore()
 {
-    if (!m_hasMore) {
+    if (!m_controller || !m_hasMore) {
         return;
     }
 
-    const QVector<PostSummary> posts = PostRepository::instance().requestPostFeed({m_nextOffset, kPageSize});
+    const QVector<PostSummary> posts = m_controller->loadFeedPage(m_nextOffset, kPageSize);
     if (posts.isEmpty()) {
         m_hasMore = false;
         return;
@@ -79,7 +97,9 @@ void PostFeedPage::onPostActivated(const PostSummary& summary, const QRect& glob
 
 void PostFeedPage::onPostLikeRequested(const QString& postId, bool liked)
 {
-    PostRepository::instance().setPostLiked(postId, liked);
+    if (m_controller) {
+        m_controller->setPostLiked(postId, liked);
+    }
 }
 
 void PostFeedPage::onRepositoryPostUpdated(const PostSummary& summary)

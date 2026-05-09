@@ -7,6 +7,7 @@
 #include "shared/types/FriendNotification.h"
 
 class FriendNotificationListWidget;
+class FriendSessionController;
 
 class FriendNotificationPage : public QWidget
 {
@@ -15,6 +16,7 @@ class FriendNotificationPage : public QWidget
 public:
     explicit FriendNotificationPage(QWidget* parent = nullptr);
 
+    void setController(FriendSessionController* controller);
     void reloadNotifications();
     void refreshLoadedNotifications();
 
@@ -31,6 +33,7 @@ private:
     void loadMoreNotifications();
 
     FriendNotificationListWidget* m_listWidget;
+    FriendSessionController* m_controller = nullptr;
     QWidget* m_header;
     int m_loadedCount = 0;
     bool m_loading = false;

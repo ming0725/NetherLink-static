@@ -32,6 +32,12 @@ GroupNotificationListWidget::GroupNotificationListWidget(QWidget* parent)
             this, [this]() { maybeRequestMore(); });
 }
 
+void GroupNotificationListWidget::setController(FriendSessionController* controller)
+{
+    m_delegate->setController(controller);
+    viewport()->update();
+}
+
 void GroupNotificationListWidget::setNotifications(QVector<GroupNotification> notifications)
 {
     m_model->setNotifications(std::move(notifications));

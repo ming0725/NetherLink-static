@@ -4,9 +4,8 @@
 #include <QPainter>
 
 #include "app/state/CurrentUser.h"
-#include "features/chat/data/GroupRepository.h"
-#include "features/friend/data/UserRepository.h"
 #include "features/friend/model/GroupNotificationListModel.h"
+#include "features/friend/ui/FriendSessionController.h"
 #include "shared/services/ImageService.h"
 #include "shared/theme/ThemeManager.h"
 
@@ -78,37 +77,28 @@ QString formatNotificationTime(const QDateTime& time)
             : time.toString(QStringLiteral("yyyy/MM/dd"));
 }
 
-QString userNickname(const QString& userId)
+QString userNickname(const FriendSessionController* controller, const QString& userId)
 {
-    const User user = UserRepository::instance().requestUserDetail({userId});
-    if (user.id.isEmpty()) {
-        return userId;
-    }
-    return user.nick.isEmpty() ? user.id : user.nick;
+    return controller ? controller->userNickname(userId) : userId;
 }
 
-QString groupDisplayName(const QString& groupId)
+QString groupDisplayName(const FriendSessionController* controller, const QString& groupId)
 {
-    const Group group = GroupRepository::instance().requestGroupDetail({groupId});
-    if (group.groupId.isEmpty()) {
-        return groupId;
-    }
-    return group.remark.isEmpty() ? group.groupName : group.remark;
+    return controller ? controller->groupDisplayName(groupId) : groupId;
 }
 
-QString groupNicknameFor(const QString& groupId, const QString& userId)
+QString groupNicknameFor(const FriendSessionController* controller,
+                         const QString& groupId,
+                         const QString& userId)
 {
-    const Group group = GroupRepository::instance().requestGroupDetail({groupId});
-    const QString groupNickname = group.memberNicknames.value(userId);
-    return groupNickname.isEmpty() ? userNickname(userId) : groupNickname;
+    return controller ? controller->groupNicknameFor(groupId, userId) : userNickname(controller, userId);
 }
 
-QString managerRoleTextFor(const QString& groupId, const QString& userId)
+QString managerRoleTextFor(const FriendSessionController* controller,
+                           const QString& groupId,
+                           const QString& userId)
 {
-    const Group group = GroupRepository::instance().requestGroupDetail({groupId});
-    return group.ownerId == userId
-            ? QStringLiteral("群主")
-            : QStringLiteral("管理员");
+    return controller ? controller->groupManagerRoleText(groupId, userId) : QStringLiteral("管理员");
 }
 
 QRect cardRect(const QStyleOptionViewItem& option)
@@ -401,7 +391,8 @@ QRect handledStatusRect(const QRect& card,
                         const QRect& content,
                         const QString& groupId,
                         const QString& operatorId,
-                        GroupNotificationStatus status)
+                        GroupNotificationStatus status,
+                        const FriendSessionController* controller)
 {
     const QRect action = actionRect(card, content);
     const QString statusText = status == GroupNotificationStatus::Accepted
@@ -413,8 +404,8 @@ QRect handledStatusRect(const QRect& card,
         return action;
     }
 
-    const QString roleText = managerRoleTextFor(groupId, operatorId);
-    const QString name = groupNicknameFor(groupId, operatorId);
+    const QString roleText = managerRoleTextFor(controller, groupId, operatorId);
+    const QString name = groupNicknameFor(controller, groupId, operatorId);
     const int naturalWidth = textFm().horizontalAdvance(roleText)
             + textFm().horizontalAdvance(name)
             + statusWidth;
@@ -433,10 +424,11 @@ int textRightBeforeHandledStatus(const QRect& line,
                                  const QRect& content,
                                  const QString& groupId,
                                  const QString& operatorId,
-                                 GroupNotificationStatus status)
+                                 GroupNotificationStatus status,
+                                 const FriendSessionController* controller)
 {
     return qMin(line.right(),
-                handledStatusRect(card, content, groupId, operatorId, status).left()
+                handledStatusRect(card, content, groupId, operatorId, status, controller).left()
                     - kHandledStatusTextGap);
 }
 
@@ -446,7 +438,8 @@ void drawHandledStatus(QPainter* painter,
                        const QString& operatorId,
                        GroupNotificationStatus status,
                        const QColor& accent,
-                       const QColor& secondary)
+                       const QColor& secondary,
+                       const FriendSessionController* controller)
 {
     const QString statusText = status == GroupNotificationStatus::Accepted
             ? QStringLiteral("已同意")
@@ -454,8 +447,8 @@ void drawHandledStatus(QPainter* painter,
 
     painter->setFont(buttonFont());
     if (!isHandledByCurrentUser(operatorId) && !operatorId.isEmpty()) {
-        const QString roleText = managerRoleTextFor(groupId, operatorId);
-        const QString name = groupNicknameFor(groupId, operatorId);
+        const QString roleText = managerRoleTextFor(controller, groupId, operatorId);
+        const QString name = groupNicknameFor(controller, groupId, operatorId);
         const int roleWidth = textFm().horizontalAdvance(roleText);
         const int statusWidth = textFm().horizontalAdvance(statusText);
         const int maxNameWidth = qMax(0, rect.width() - roleWidth - statusWidth - kStatusSegmentGap);
@@ -500,6 +493,11 @@ void drawHandledStatus(QPainter* painter,
 GroupNotificationDelegate::GroupNotificationDelegate(QObject* parent)
     : QStyledItemDelegate(parent)
 {
+}
+
+void GroupNotificationDelegate::setController(FriendSessionController* controller)
+{
+    m_controller = controller;
 }
 
 int GroupNotificationDelegate::buttonAt(const QStyleOptionViewItem& option,
@@ -561,8 +559,8 @@ void GroupNotificationDelegate::paint(QPainter* painter,
 
     const QRect avatar = avatarRect(card);
     const QString avatarPath = type == GroupNotificationType::JoinRequest
-            ? UserRepository::instance().requestUserAvatarPath(actorId)
-            : GroupRepository::instance().requestGroupAvatarPath(groupId);
+            ? (m_controller ? m_controller->userAvatarPath(actorId) : QString())
+            : (m_controller ? m_controller->groupAvatarPath(groupId) : QString());
     const qreal dpr = painter->device()->devicePixelRatioF();
     const QPixmap pixmap = ImageService::instance().circularAvatarPreview(avatarPath, kAvatarSize, dpr);
     if (pixmap.isNull()) {
@@ -582,8 +580,8 @@ void GroupNotificationDelegate::paint(QPainter* painter,
     if (type == GroupNotificationType::JoinRequest) {
         drawJoinTitle(painter,
                       l1,
-                      userNickname(actorId),
-                      groupDisplayName(groupId),
+                      userNickname(m_controller, actorId),
+                      groupDisplayName(m_controller, groupId),
                       date,
                       accent,
                       secondary,
@@ -592,7 +590,7 @@ void GroupNotificationDelegate::paint(QPainter* painter,
         drawPrefixNameLine(painter,
                            l1,
                            {},
-                           groupNicknameFor(groupId, actorId),
+                           groupNicknameFor(m_controller, groupId, actorId),
                            date,
                            accent,
                            secondary,
@@ -600,7 +598,7 @@ void GroupNotificationDelegate::paint(QPainter* painter,
     } else {
         drawTextWithTrailingTime(painter,
                                  l1,
-                                 {{groupNicknameFor(groupId, operatorId), accent}},
+                                 {{groupNicknameFor(m_controller, groupId, operatorId), accent}},
                                  date,
                                  tertiary);
     }
@@ -616,7 +614,8 @@ void GroupNotificationDelegate::paint(QPainter* painter,
                                                     content,
                                                     groupId,
                                                     operatorId,
-                                                    status);
+                                                    status,
+                                                    m_controller);
         }
         l2.setRight(qMax(l2.left(), textRight));
         painter->setFont(textFont());
@@ -651,19 +650,20 @@ void GroupNotificationDelegate::paint(QPainter* painter,
             }
         } else {
             drawHandledStatus(painter,
-                              handledStatusRect(card, content, groupId, operatorId, status),
+                              handledStatusRect(card, content, groupId, operatorId, status, m_controller),
                               groupId,
                               operatorId,
                               status,
                               accent,
-                              secondary);
+                              secondary,
+                              m_controller);
         }
     } else if (type == GroupNotificationType::MemberExited) {
         QRect l2 = lineRect(content, 1, lineCount);
         drawActionGroupLine(painter,
                             l2,
                             QStringLiteral("退出 "),
-                            groupDisplayName(groupId),
+                            groupDisplayName(m_controller, groupId),
                             {},
                             accent,
                             secondary);
@@ -672,7 +672,7 @@ void GroupNotificationDelegate::paint(QPainter* painter,
         drawActionGroupLine(painter,
                             l2,
                             QStringLiteral("将你设为 "),
-                            groupDisplayName(groupId),
+                            groupDisplayName(m_controller, groupId),
                             QStringLiteral(" 管理员"),
                             accent,
                             secondary);
@@ -681,7 +681,7 @@ void GroupNotificationDelegate::paint(QPainter* painter,
         drawActionGroupLine(painter,
                             l2,
                             QStringLiteral("将 "),
-                            groupDisplayName(groupId),
+                            groupDisplayName(m_controller, groupId),
                             QStringLiteral(" 转让给你"),
                             accent,
                             secondary);

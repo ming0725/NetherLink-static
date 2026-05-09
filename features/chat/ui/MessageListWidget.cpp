@@ -6,6 +6,7 @@
 #include <QScrollBar>
 #include <QTimer>
 
+#include "app/state/CurrentUser.h"
 #include "shared/ui/StyledActionMenu.h"
 #include "shared/theme/ThemeManager.h"
 #include "features/friend/data/UserRepository.h"
@@ -287,7 +288,10 @@ QString MessageListWidget::previewTextForMessage(const QString& conversationId,
 
     QString senderName = message->getSenderName();
     if (senderName.isEmpty()) {
-        senderName = UserRepository::instance().requestUserName(message->getSenderId());
+        const CurrentUser& currentUser = CurrentUser::instance();
+        senderName = currentUser.isCurrentUserId(message->getSenderId())
+                ? currentUser.getUserName()
+                : UserRepository::instance().requestUserName(message->getSenderId());
     }
     return QString("%1：%2").arg(senderName, message->getContent());
 }

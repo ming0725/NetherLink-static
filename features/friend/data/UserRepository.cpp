@@ -236,28 +236,28 @@ private:
 UserRepository::UserRepository(QObject* parent)
     : QObject(parent)
 {
+    // Current user is owned by CurrentUserProfileRepository, not seeded as a friend/user row here.
     const QVector<User> users = {
-            {"u001", "momo", "小桃", ":/resources/avatar/1.jpg", Online, "我是好momo", false, true, "g001", "常用联系人", "上海"},
-            {"u002", "blazer", "", ":/resources/avatar/0.jpg", Mining, "不掉烈焰棒", false, true, "g001", "常用联系人", ""},
-            {"u003", "不吃香菜（考研版）", "香菜克星", ":/resources/avatar/3.jpg", Online, "绝不吃一口香菜！", false, true, "g001", "常用联系人", "北京"},
-            {"u004", "不抽香烟（一路菜花版）", "", ":/resources/avatar/5.jpg", Online, "芝士雪豹", false, true, "g002", "同学", "杭州"},
-            {"u005", "不会演戏（许仙版）", "许仙", ":/resources/avatar/4.jpg", Offline, "不碍事的白姑娘", false, true, "g002", "同学", ""},
-            {"u006", "TralaleroTralala", "", ":/resources/avatar/2.jpg", Online, "不穿Nike（蓝勾版）", false, true, "g002", "同学", "广州"},
-            {"u007", "圆头耄耋", "", ":/resources/avatar/6.jpg", Offline, "这只猫很懒，什么都没留下来", false, true, "g003", "服务器伙伴", ""},
-            {"u008", "歪比巴卜", "指令哥", ":/resources/avatar/7.jpg", Mining, "歪比歪比", false, true, "g003", "服务器伙伴", "深圳"},
-            {"u009", "tung tung tung sahur", "", ":/resources/avatar/8.jpg", Offline, "tung tung tung tung tung tung tung tung tung sahur", false, true, "g003", "服务器伙伴", ""},
-            {"u010", "BombardinoCrocodilo", "", ":/resources/avatar/9.jpg", Flying, "已塌房", false, true, "g003", "服务器伙伴", "成都"},
-            {"u011", "momo", "临时 momo", ":/resources/avatar/10.jpg", Online, "今天也要准时上线", false, true, "g004", "临时会话", ""},
-            {"u012", "blazer", "", ":/resources/avatar/0.jpg", Offline, "刷怪塔维护中", false, true, "g004", "临时会话", "武汉"},
-            {"u013", "不吃香菜（考研版）", "", ":/resources/avatar/3.jpg", Mining, "背书到下界", false, true, "g004", "临时会话", ""},
-            {"u014", "歪比巴卜", "", ":/resources/avatar/7.jpg", Online, "收到请回复", false, true, "g005", "最近添加", "南京"},
-            {"u015", "圆头耄耋", "新好友", ":/resources/avatar/6.jpg", Flying, "刚刚通过好友验证", false, true, "g005", "最近添加", ""},
-            {"u016", "TralaleroTralala", "", ":/resources/avatar/2.jpg", Offline, "晚点再聊", false, true, "g005", "最近添加", "重庆"},
-            {"u101", "像素工坊管理员", "", ":/resources/avatar/10.jpg", Online, "验证来自像素工坊", false, false, "default", "默认分组", "上海"},
-            {"u102", "技术交流群友", "", ":/resources/avatar/3.jpg", Mining, "一起讨论过 Qt", false, false, "default", "默认分组", "北京"},
-            {"u103", "林深时见鹿", "", ":/resources/avatar/5.jpg", Online, "朋友推荐添加", false, false, "default", "默认分组", "杭州"},
-            {"u104", "春风十里", "", ":/resources/avatar/2.jpg", Offline, "通过 ID 搜索找到你", false, false, "default", "默认分组", ""},
-            {"u105", "星河", "", ":/resources/avatar/8.jpg", Flying, "来自好友名片", false, false, "default", "默认分组", "深圳"},
+            {"u001", "方块诗人", "桃木匠", ":/resources/avatar/1.jpg", Online, "今天的灵感从一块草方块开始", false, true, "g001", "建筑搭子", "上海"},
+            {"u002", "烈焰建筑师", "", ":/resources/avatar/0.jpg", Mining, "用下界砖搭一座会发光的门厅", false, true, "g001", "建筑搭子", ""},
+            {"u003", "红石逻辑师", "中继器同学", ":/resources/avatar/3.jpg", Online, "每条线路都要留一个观察者", false, true, "g001", "建筑搭子", "北京"},
+            {"u004", "云杉小屋设计师", "", ":/resources/avatar/5.jpg", Online, "屋檐再低一格就有冒险感", false, true, "g002", "红石同伴", "杭州"},
+            {"u005", "玻璃穹顶匠", "穹顶许愿池", ":/resources/avatar/4.jpg", Offline, "把星光封进彩色玻璃", false, true, "g002", "红石同伴", ""},
+            {"u006", "海晶灯调色员", "", ":/resources/avatar/2.jpg", Online, "给主城调一盏柔和的灯", false, true, "g002", "红石同伴", "广州"},
+            {"u008", "指令方块导演", "指令哥", ":/resources/avatar/7.jpg", Mining, "用一行命令点亮整座剧场", false, true, "g003", "服务器伙伴", "深圳"},
+            {"u009", "蘑菇岛园艺师", "", ":/resources/avatar/8.jpg", Offline, "菌丝地也能开出花园", false, true, "g003", "服务器伙伴", ""},
+            {"u010", "鞘翅巡景员", "", ":/resources/avatar/9.jpg", Flying, "从高空检查每一条屋脊", false, true, "g003", "服务器伙伴", "成都"},
+            {"u011", "樱花庭院师", "临时设计稿", ":/resources/avatar/10.jpg", Online, "今天把庭院水渠改成心形", false, true, "g004", "临时设计稿", ""},
+            {"u012", "刷怪塔调试员", "", ":/resources/avatar/0.jpg", Offline, "让怪物掉落，也让结构好看", false, true, "g004", "临时设计稿", "武汉"},
+            {"u013", "下界砖雕刻师", "", ":/resources/avatar/3.jpg", Mining, "岩浆旁边最适合找配色", false, true, "g004", "临时设计稿", ""},
+            {"u014", "信标灯塔守望者", "", ":/resources/avatar/7.jpg", Online, "收到请发一束信标光", false, true, "g005", "最近来访", "南京"},
+            {"u015", "地图墙收藏家", "新建造好友", ":/resources/avatar/6.jpg", Flying, "刚刚交换了一张主城地图", false, true, "g005", "最近来访", ""},
+            {"u016", "末地船修复师", "", ":/resources/avatar/2.jpg", Offline, "晚点在末地船坞碰头", false, true, "g005", "最近来访", "重庆"},
+            {"u101", "创意服向导", "", ":/resources/avatar/10.jpg", Online, "验证来自创意建筑服", false, false, "default", "默认分组", "上海"},
+            {"u102", "红石课堂同学", "", ":/resources/avatar/3.jpg", Mining, "一起调过隐藏门", false, false, "default", "默认分组", "北京"},
+            {"u103", "方块花园旅人", "", ":/resources/avatar/5.jpg", Online, "朋友推荐我来参观你的工坊", false, false, "default", "默认分组", "杭州"},
+            {"u104", "坐标寻路员", "", ":/resources/avatar/2.jpg", Offline, "通过建筑坐标搜索找到你", false, false, "default", "默认分组", ""},
+            {"u105", "设计稿交换员", "", ":/resources/avatar/8.jpg", Flying, "来自作品集名片", false, false, "default", "默认分组", "深圳"},
     };
 
     for (const User& user : users) {
@@ -265,18 +265,18 @@ UserRepository::UserRepository(QObject* parent)
     }
 
     const QStringList requestNames = {
-            QStringLiteral("像素工坊管理员"),
-            QStringLiteral("技术交流群友"),
-            QStringLiteral("林深时见鹿"),
-            QStringLiteral("春风十里"),
-            QStringLiteral("星河"),
-            QStringLiteral("红石研究员"),
-            QStringLiteral("算法训练生"),
-            QStringLiteral("开黑车队队员"),
-            QStringLiteral("像素画手"),
-            QStringLiteral("服务器巡检员"),
-            QStringLiteral("前端切图仔"),
-            QStringLiteral("后端接口人")
+            QStringLiteral("空岛规划师"),
+            QStringLiteral("苔石园丁"),
+            QStringLiteral("红石剧场助手"),
+            QStringLiteral("像素雕像匠"),
+            QStringLiteral("地形笔刷练习生"),
+            QStringLiteral("主城道路测绘员"),
+            QStringLiteral("村民交易所设计师"),
+            QStringLiteral("海底基地灯光师"),
+            QStringLiteral("末地花园访客"),
+            QStringLiteral("命令方块实习生"),
+            QStringLiteral("下界大厅铺砖工"),
+            QStringLiteral("樱花塔楼摄影师")
     };
     const QVector<UserStatus> requestStatuses = {Online, Mining, Offline, Flying};
     for (int index = 5; index < 36; ++index) {
@@ -286,7 +286,7 @@ UserRepository::UserRepository(QObject* parent)
         user.nick = QStringLiteral("%1 %2").arg(requestNames.at(index % requestNames.size())).arg(index + 1);
         user.avatarPath = QStringLiteral(":/resources/avatar/%1.jpg").arg(index % 11);
         user.status = requestStatuses.at(index % requestStatuses.size());
-        user.signature = QStringLiteral("好友请求用户 %1").arg(index + 1);
+        user.signature = QStringLiteral("正在准备击败 %1 次凋零").arg(index + 1);
         user.isFriend = false;
         userMap.insert(user.id, user);
     }
@@ -296,14 +296,14 @@ UserRepository::UserRepository(QObject* parent)
                                       int count,
                                       int idOffset) {
         const QStringList names = {
-                "momo",
-                "blazer",
-                "不吃香菜（考研版）",
-                "歪比巴卜",
-                "圆头耄耋",
-                "TralaleroTralala",
-                "BombardinoCrocodilo",
-                "不抽香烟（一路菜花版）"
+                "石砖街区设计师",
+                "红石电梯测试员",
+                "橡木屋顶匠",
+                "海底玻璃师",
+                "末地桥梁师",
+                "苔藓洞穴园丁",
+                "信标广场策展人",
+                "沙漠神殿修缮员"
         };
         const QVector<UserStatus> statuses = {
                 Online,
@@ -317,10 +317,10 @@ UserRepository::UserRepository(QObject* parent)
             User user{
                     QString("perf_%1").arg(serial, 4, 10, QChar('0')),
                     QString("%1 %2").arg(names.at(index % names.size())).arg(index + 1),
-                    (index % 9 == 0) ? QString("备注好友 %1").arg(index + 1) : QString(),
+                    (index % 9 == 0) ? QString("红石搭子 %1").arg(index + 1) : QString(),
                     QString(":/resources/avatar/%1.jpg").arg(index % 11),
                     statuses.at(index % statuses.size()),
-                    QString("性能测试好友 %1").arg(index + 1),
+                    QString("创意服长列表样本 %1").arg(index + 1),
                     false,
                     true,
                     groupId,

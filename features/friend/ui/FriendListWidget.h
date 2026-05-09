@@ -4,11 +4,13 @@
 #include "shared/types/RepositoryTypes.h"
 
 #include <QHash>
+#include <QMetaObject>
 #include <QPointer>
 #include <QString>
 
 class FriendListDelegate;
 class FriendListModel;
+class FriendSessionController;
 class QEvent;
 class QPaintEvent;
 class QPainter;
@@ -21,6 +23,7 @@ class FriendListWidget : public OverlayScrollListView
 
 public:
     explicit FriendListWidget(QWidget* parent = nullptr);
+    void setController(FriendSessionController* controller);
     void ensureInitialized();
     void setKeyword(const QString& keyword);
 
@@ -92,6 +95,8 @@ private:
 
     FriendListModel* m_model;
     FriendListDelegate* m_delegate;
+    FriendSessionController* m_controller = nullptr;
+    QMetaObject::Connection m_friendListChangedConnection;
     QTimer* m_searchDebounceTimer;
     ViewState m_state;
     QHash<QString, QPointer<QVariantAnimation>> m_groupAnimations;

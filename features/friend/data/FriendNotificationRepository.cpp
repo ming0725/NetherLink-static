@@ -99,16 +99,16 @@ QVector<FriendNotification> buildInitialNotifications()
         QStringLiteral("g012"), QStringLiteral("g013"), QStringLiteral("g014")
     };
     const QVector<QString> shareNames = {
-        QStringLiteral("momo"), QStringLiteral("香菜克星"), QStringLiteral("指令哥"),
-        QStringLiteral("Qt 群友"), QStringLiteral("红石群友"), QStringLiteral("开黑队友")
+        QStringLiteral("桃木匠"), QStringLiteral("中继器同学"), QStringLiteral("指令哥"),
+        QStringLiteral("创意服群友"), QStringLiteral("红石群友"), QStringLiteral("共建队友")
     };
     const QVector<QString> messages = {
-        QStringLiteral("之前在群里看过你的分享，想加个好友继续交流。"),
-        QStringLiteral("你发的内容挺有帮助，方便加好友吗？"),
-        QStringLiteral("朋友把你的名片发给我了，想认识一下。"),
-        QStringLiteral("通过 ID 搜索找到你，想加个好友。"),
-        QStringLiteral("后续有问题想请教你，方便通过一下。"),
-        QStringLiteral("我们在同一个群里聊过几句，想继续交流。")
+        QStringLiteral("看到你在创意服分享的建筑设计稿，想加好友继续交流。"),
+        QStringLiteral("你做的红石机关很有启发，方便加好友吗？"),
+        QStringLiteral("朋友把你的作品名片发给我了，想认识一下。"),
+        QStringLiteral("通过主城坐标搜索找到你，想参观你的工坊。"),
+        QStringLiteral("后续想请教地形笔刷和配色，方便通过一下。"),
+        QStringLiteral("我们在同一个 Minecraft 群里聊过建造，想继续交流。")
     };
 
     QVector<FriendNotification> notifications;

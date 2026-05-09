@@ -4,8 +4,8 @@
 #include <QPainter>
 #include <QResizeEvent>
 
-#include "features/friend/data/GroupNotificationRepository.h"
 #include "features/friend/ui/GroupNotificationListWidget.h"
+#include "features/friend/ui/FriendSessionController.h"
 #include "shared/theme/ThemeManager.h"
 
 namespace {
@@ -53,25 +53,35 @@ void GroupNotificationPage::reloadNotifications()
     loadMoreNotifications();
 }
 
+void GroupNotificationPage::setController(FriendSessionController* controller)
+{
+    m_controller = controller;
+    m_listWidget->setController(controller);
+}
+
 void GroupNotificationPage::refreshLoadedNotifications()
 {
+    if (!m_controller) {
+        return;
+    }
+
     const int count = qMax(kPageSize, m_listWidget->notificationCount());
-    auto notifications = GroupNotificationRepository::instance().requestNotificationList({0, count});
+    auto notifications = m_controller->loadGroupNotifications(0, count);
     m_loadedCount = notifications.size();
-    m_hasMore = m_loadedCount < GroupNotificationRepository::instance().notificationCount();
+    m_hasMore = m_loadedCount < m_controller->groupNotificationCount();
     m_listWidget->setNotifications(std::move(notifications));
 }
 
 void GroupNotificationPage::loadMoreNotifications()
 {
-    if (m_loading || !m_hasMore) {
+    if (m_loading || !m_hasMore || !m_controller) {
         return;
     }
     m_loading = true;
-    auto notifications = GroupNotificationRepository::instance().requestNotificationList({m_loadedCount, kPageSize});
+    auto notifications = m_controller->loadGroupNotifications(m_loadedCount, kPageSize);
     m_loadedCount += notifications.size();
     m_hasMore = !notifications.isEmpty() &&
-            m_loadedCount < GroupNotificationRepository::instance().notificationCount();
+            m_loadedCount < m_controller->groupNotificationCount();
     m_listWidget->appendNotifications(std::move(notifications));
     m_loading = false;
 }

@@ -106,10 +106,10 @@ QVector<GroupNotification> buildInitialNotifications()
         QStringLiteral("u116"), QStringLiteral("u117"), QStringLiteral("u118")
     };
     const QVector<QString> messages = {
-        QStringLiteral("我想加入群聊，方便一起交流。"),
-        QStringLiteral("朋友推荐我来这个群，想申请加入。"),
-        QStringLiteral("之前关注过群里的内容，希望通过一下。"),
-        QStringLiteral("想加入后续活动讨论。")
+        QStringLiteral("想加入群聊，一起做 Minecraft 创意建造。"),
+        QStringLiteral("朋友推荐我来这个群参观建筑设计，想申请加入。"),
+        QStringLiteral("之前关注过群里的红石/建筑内容，希望通过一下。"),
+        QStringLiteral("想加入后续服务器活动和共建讨论。")
     };
 
     QVector<GroupNotification> notifications;
@@ -156,22 +156,22 @@ QVector<GroupNotification> buildInitialNotifications()
                            QStringLiteral("u119"),
                            QStringLiteral("u001"),
                            0,
-                           QStringLiteral("我是亲戚介绍来的，麻烦通过一下。"));
+                           QStringLiteral("想参观主城规划，也带了一份广场设计稿。"));
     addAcceptedJoinRequest(QStringLiteral("g010"),
                            QStringLiteral("u120"),
                            QStringLiteral("u002"),
                            1,
-                           QStringLiteral("参与服务器维护值班，申请加入。"));
+                           QStringLiteral("参与创意服维护值班，申请加入。"));
     addAcceptedJoinRequest(QStringLiteral("g004"),
                            QStringLiteral("u121"),
                            QStringLiteral("u002"),
                            1,
-                           QStringLiteral("想加入 Qt 学习讨论。"));
+                           QStringLiteral("想加入红石课堂，学习活塞门布线。"));
     addAcceptedJoinRequest(QStringLiteral("g005"),
                            QStringLiteral("u122"),
                            QStringLiteral("u007"),
                            2,
-                           QStringLiteral("希望加入技术交流。"));
+                           QStringLiteral("希望加入工坊交流建筑结构和材质搭配。"));
     addAcceptedJoinRequest(QStringLiteral("g012"),
                            QStringLiteral("u123"),
                            QStringLiteral("u005"),
@@ -181,7 +181,7 @@ QVector<GroupNotification> buildInitialNotifications()
                            QStringLiteral("u124"),
                            QStringLiteral("u007"),
                            3,
-                           QStringLiteral("朋友邀请我周末一起开黑。"));
+                           QStringLiteral("朋友邀请我周末一起开荒创意地图。"));
 
     for (int i = 0; i < manageableGroups.size(); ++i) {
         const Group& group = manageableGroups.at(i);

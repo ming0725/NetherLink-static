@@ -5,6 +5,7 @@
 #include <QEvent>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMap>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPainter>
@@ -17,8 +18,7 @@
 #include <QVariant>
 #include <QVBoxLayout>
 
-#include "features/friend/data/UserRepository.h"
-#include "features/chat/data/MessageRepository.h"
+#include "features/friend/ui/FriendSessionController.h"
 #include "shared/services/ImageService.h"
 #include "shared/ui/InlineEditableText.h"
 #include "shared/ui/PaintedLabel.h"
@@ -318,13 +318,18 @@ FriendDetailPage::~FriendDetailPage()
     qApp->removeEventFilter(this);
 }
 
+void FriendDetailPage::setController(FriendSessionController* controller)
+{
+    m_controller = controller;
+}
+
 void FriendDetailPage::setUserId(const QString& userId)
 {
     if (userId.isEmpty()) {
         clear();
         return;
     }
-    setUser(UserRepository::instance().requestUserDetail({userId}));
+    setUser(m_controller ? m_controller->loadFriend(userId) : User());
 }
 
 void FriendDetailPage::clear()
@@ -482,7 +487,9 @@ void FriendDetailPage::saveRemark()
     }
 
     m_user.remark = remark;
-    UserRepository::instance().saveUser(m_user);
+    if (!m_controller || !m_controller->saveFriend(m_user)) {
+        return;
+    }
     updateRemarkText();
 }
 
@@ -527,7 +534,9 @@ void FriendDetailPage::rebuildGroupMenu()
     };
 
     addGroupAction(m_user.friendGroupId, m_user.friendGroupName);
-    const QMap<QString, QString> groups = UserRepository::instance().requestFriendGroups();
+    const QMap<QString, QString> groups = m_controller
+            ? m_controller->loadFriendGroups()
+            : QMap<QString, QString>();
     for (auto it = groups.constBegin(); it != groups.constEnd(); ++it) {
         if (it.key() == m_user.friendGroupId) {
             continue;
@@ -545,7 +554,9 @@ void FriendDetailPage::changeGroup(const QString& groupId, const QString& groupN
 
     m_user.friendGroupId = groupId;
     m_user.friendGroupName = groupName;
-    UserRepository::instance().saveUser(m_user);
+    if (!m_controller || !m_controller->saveFriend(m_user)) {
+        return;
+    }
     updateGroupButtonText();
 }
 
@@ -564,8 +575,8 @@ void FriendDetailPage::confirmDeleteFriend()
         return;
     }
 
-    MessageRepository::instance().removeConversation(m_user.id);
-    UserRepository::instance().removeUser(m_user.id);
-    clear();
-    emit friendDeleted();
+    if (m_controller && m_controller->deleteFriend(m_user.id)) {
+        clear();
+        emit friendDeleted();
+    }
 }

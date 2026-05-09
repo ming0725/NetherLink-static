@@ -166,6 +166,57 @@ protected:
     }
 };
 
+GroupRole groupRoleForUser(const Group& group, const QString& userId)
+{
+    if (!group.ownerId.isEmpty() && group.ownerId == userId) {
+        return GroupRole::Owner;
+    }
+    if (group.adminsID.contains(userId)) {
+        return GroupRole::Admin;
+    }
+    return GroupRole::Member;
+}
+
+QString groupMemberDisplayName(const Group& group, const QString& userId)
+{
+    const CurrentUser& currentUser = CurrentUser::instance();
+    const QString groupNickname = group.memberNicknames.value(userId).trimmed();
+    if (!groupNickname.isEmpty()) {
+        return groupNickname;
+    }
+    if (currentUser.isCurrentUserId(userId)) {
+        return currentUser.getUserName();
+    }
+
+    const User user = UserRepository::instance().requestUserDetail({userId});
+    if (!user.remark.trimmed().isEmpty()) {
+        return user.remark.trimmed();
+    }
+    if (!user.nick.trimmed().isEmpty()) {
+        return user.nick.trimmed();
+    }
+    return userId;
+}
+
+QString simulatedPeerIdForGroup(const Group& group)
+{
+    const CurrentUser& currentUser = CurrentUser::instance();
+    if (!currentUser.isCurrentUserId(group.ownerId)) {
+        return group.ownerId;
+    }
+    for (const QString& adminId : group.adminsID) {
+        if (!currentUser.isCurrentUserId(adminId)) {
+            return adminId;
+        }
+    }
+    for (const QString& memberId : group.membersID) {
+        if (!currentUser.isCurrentUserId(memberId)) {
+            return memberId;
+        }
+    }
+    return {};
+}
+
 } // namespace
 
 ChatArea::ChatArea(QWidget *parent)
@@ -932,13 +983,18 @@ void ChatArea::updateInputBarPosition() {
 void ChatArea::onSendImage(const QString &path)
 {
     if (ImageService::instance().sourceSize(path).isValid()) {
+        GroupRole role = GroupRole::Member;
+        if (isGroupMode()) {
+            const Group group = GroupRepository::instance().requestGroupDetail({conversationId()});
+            role = groupRoleForUser(group, CurrentUser::instance().getUserId());
+        }
         auto ptr =
                 QSharedPointer<ImageMessage>::create(path,
                                                true,
                                                CurrentUser::instance().getUserId(),
                                                isGroupMode(),
                                                CurrentUser::instance().getUserName(),
-                                               GroupRole::Admin);
+                                               role);
         addMessage(ptr);
     }
 }
@@ -946,13 +1002,18 @@ void ChatArea::onSendImage(const QString &path)
 void ChatArea::onSendText(const QString &text)
 {
     if (!text.trimmed().isEmpty()) {
+        GroupRole role = GroupRole::Member;
+        if (isGroupMode()) {
+            const Group group = GroupRepository::instance().requestGroupDetail({conversationId()});
+            role = groupRoleForUser(group, CurrentUser::instance().getUserId());
+        }
         auto ptr =
                 QSharedPointer<TextMessage>::create(text,
                                                true,
                                                CurrentUser::instance().getUserId(),
                                                isGroupMode(),
                                                CurrentUser::instance().getUserName(),
-                                               GroupRole::Admin);
+                                               role);
         addMessage(ptr);
     }
 }
@@ -970,9 +1031,12 @@ void ChatArea::onSendTextAsPeer(const QString& text)
 
     if (isGroupMode()) {
         const Group group = GroupRepository::instance().requestGroupDetail({conversationId()});
-        senderId = group.ownerId;
-        senderName = UserRepository::instance().requestUserName(group.ownerId);
-        role = GroupRole::Owner;
+        senderId = simulatedPeerIdForGroup(group);
+        if (senderId.isEmpty()) {
+            return;
+        }
+        senderName = groupMemberDisplayName(group, senderId);
+        role = groupRoleForUser(group, senderId);
     }
 
     auto ptr = QSharedPointer<TextMessage>::create(trimmedText,

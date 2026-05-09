@@ -4,8 +4,8 @@
 #include <QPainter>
 #include <QResizeEvent>
 
-#include "features/friend/data/FriendNotificationRepository.h"
 #include "features/friend/ui/FriendNotificationListWidget.h"
+#include "features/friend/ui/FriendSessionController.h"
 #include "shared/theme/ThemeManager.h"
 
 namespace {
@@ -55,28 +55,36 @@ void FriendNotificationPage::reloadNotifications()
     loadMoreNotifications();
 }
 
+void FriendNotificationPage::setController(FriendSessionController* controller)
+{
+    m_controller = controller;
+}
+
 void FriendNotificationPage::refreshLoadedNotifications()
 {
+    if (!m_controller) {
+        return;
+    }
+
     const int count = qMax(kPageSize, m_listWidget->notificationCount());
-    QVector<FriendNotification> notifications =
-            FriendNotificationRepository::instance().requestNotificationList({0, count});
+    QVector<FriendNotification> notifications = m_controller->loadFriendNotifications(0, count);
     m_loadedCount = notifications.size();
-    m_hasMore = m_loadedCount < FriendNotificationRepository::instance().notificationCount();
+    m_hasMore = m_loadedCount < m_controller->friendNotificationCount();
     m_listWidget->setNotifications(std::move(notifications));
 }
 
 void FriendNotificationPage::loadMoreNotifications()
 {
-    if (m_loading || !m_hasMore) {
+    if (m_loading || !m_hasMore || !m_controller) {
         return;
     }
 
     m_loading = true;
     QVector<FriendNotification> notifications =
-            FriendNotificationRepository::instance().requestNotificationList({m_loadedCount, kPageSize});
+            m_controller->loadFriendNotifications(m_loadedCount, kPageSize);
     m_loadedCount += notifications.size();
     m_hasMore = !notifications.isEmpty() &&
-            m_loadedCount < FriendNotificationRepository::instance().notificationCount();
+            m_loadedCount < m_controller->friendNotificationCount();
     m_listWidget->appendNotifications(std::move(notifications));
     m_loading = false;
 }

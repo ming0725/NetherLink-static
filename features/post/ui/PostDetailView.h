@@ -1,20 +1,28 @@
 #pragma once
-#include <QWidget>
-#include <QLabel>
-#include <QPushButton>
-#include <QJsonObject>
+
+#include <QDateTime>
+#include <QMetaObject>
 #include <QPointer>
-#include "shared/ui/IconLineEdit.h"
+#include <QPixmap>
+#include <QRect>
+#include <QSize>
+#include <QWidget>
+
 #include "shared/types/RepositoryTypes.h"
 
+class IconLineEdit;
+class QLabel;
 class PostCommentDelegate;
 class PostDetailListModel;
 class PostDetailListView;
+class PostSessionController;
+class QPushButton;
 
 class PostDetailView : public QWidget {
     Q_OBJECT
 public:
     explicit PostDetailView(QWidget* parent = nullptr);
+    void setController(PostSessionController* controller);
     void setPreviewSummary(const PostSummary& summary);
     void setPostData(const PostDetailData& data);
     void updatePostSummary(const PostSummary& summary);
@@ -84,6 +92,8 @@ private:
     PostDetailListView* m_contentList;
     PostDetailListModel* m_detailModel;
     PostCommentDelegate* m_commentDelegate;
+    PostSessionController* m_controller = nullptr;
+    QMetaObject::Connection m_commentsLoadedConnection;
     QPointer<QWidget> m_detailTextWidget;
     QLabel* m_titleLabel;
     QLabel* m_contentLabel;

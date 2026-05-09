@@ -1,4 +1,5 @@
 #include "ChatItemDelegate.h"
+#include "app/state/CurrentUser.h"
 #include "features/chat/model/ChatListModel.h"
 #include "features/friend/data/UserRepository.h"
 #include "ChatArea.h"
@@ -210,7 +211,10 @@ void ChatItemDelegate::drawBubble(QPainter* painter, const QRect& rect,
 void ChatItemDelegate::drawAvatar(QPainter* painter, const QRect& rect,
                                   const QString& userID) const
 {
-    const QString avatarPath = UserRepository::instance().requestUserAvatarPath(userID);
+    const CurrentUser& currentUser = CurrentUser::instance();
+    const QString avatarPath = currentUser.isCurrentUserId(userID)
+            ? currentUser.getAvatarPath()
+            : UserRepository::instance().requestUserAvatarPath(userID);
     const QPixmap avatar = ImageService::instance().circularAvatar(avatarPath,
                                                                    rect.width(),
                                                                    painter->device()->devicePixelRatioF());

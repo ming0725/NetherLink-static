@@ -1,19 +1,21 @@
 // PostDetailView.cpp
 #include <QDate>
+#include <QLabel>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPalette>
+#include <QPushButton>
 #include <QScrollBar>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QVariantAnimation>
 
-#include "app/state/CurrentUser.h"
-#include "features/post/data/PostCommentRepository.h"
 #include "features/post/model/PostDetailListModel.h"
+#include "features/post/ui/PostSessionController.h"
 #include "shared/services/ImageService.h"
 #include "shared/theme/ThemeManager.h"
+#include "shared/ui/IconLineEdit.h"
 #include "shared/ui/StatefulPushButton.h"
 #include "PostCommentDelegate.h"
 #include "PostDetailListView.h"
@@ -175,6 +177,26 @@ PostDetailView::PostDetailView(QWidget* parent)
     setupUI();
     setAttribute(Qt::WA_TranslucentBackground);
     disableContextMenu(this);
+}
+
+void PostDetailView::setController(PostSessionController* controller)
+{
+    if (m_controller == controller) {
+        return;
+    }
+
+    if (m_commentsLoadedConnection) {
+        disconnect(m_commentsLoadedConnection);
+        m_commentsLoadedConnection = {};
+    }
+
+    m_controller = controller;
+    if (!m_controller) {
+        return;
+    }
+
+    m_commentsLoadedConnection = connect(m_controller, &PostSessionController::postCommentsLoaded,
+                                         this, &PostDetailView::onCommentsReady);
 }
 
 QRect PostDetailView::fittedImageRect(const QRect& bounds, const QSize& imageSize) const
@@ -340,7 +362,7 @@ void PostDetailView::setupUI()
         emit likeClicked(!m_state.isLiked);
     });
     connect(m_contentList, &PostDetailListView::commentLikeRequested, this, [this](const QString& commentId, bool liked) {
-        if (PostCommentRepository::instance().setCommentLiked(commentId, liked)
+        if ((m_controller && m_controller->setCommentLiked(commentId, liked))
             || m_detailModel->commentById(commentId)) {
             m_detailModel->updateCommentLike(commentId, liked);
         }
@@ -348,7 +370,7 @@ void PostDetailView::setupUI()
     connect(m_contentList, &PostDetailListView::replyLikeRequested, this, [this](const QString& commentId,
                                                                                  const QString& replyId,
                                                                                  bool liked) {
-        if (PostCommentRepository::instance().setReplyLiked(replyId, liked)
+        if ((m_controller && m_controller->setReplyLiked(replyId, liked))
             || m_detailModel->commentById(commentId)) {
             m_detailModel->updateReplyLike(commentId, replyId, liked);
         }
@@ -369,8 +391,6 @@ void PostDetailView::setupUI()
             m_detailModel, &PostDetailListModel::showMoreReplies);
     connect(m_contentList->verticalScrollBar(), &QScrollBar::valueChanged,
             this, &PostDetailView::maybeLoadMoreComments);
-    connect(&PostCommentRepository::instance(), &PostCommentRepository::postCommentsReady,
-            this, &PostDetailView::onCommentsReady);
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
             this, &PostDetailView::applyTheme);
     applyTheme();
@@ -662,32 +682,24 @@ void PostDetailView::updateDetailTextHeight()
 
 void PostDetailView::loadInitialComments()
 {
-    if (!m_detailModel || m_state.postId.isEmpty()) {
+    if (!m_controller || !m_detailModel || m_state.postId.isEmpty()) {
         return;
     }
 
     m_loadingComments = true;
     m_pendingCommentsOffset = 0;
-    m_commentsRequestId = PostCommentRepository::instance().requestPostCommentsAsync({
-            m_state.postId,
-            0,
-            m_commentPageSize
-    });
+    m_commentsRequestId = m_controller->requestPostComments(m_state.postId, 0, m_commentPageSize);
 }
 
 void PostDetailView::loadMoreComments()
 {
-    if (!m_detailModel || m_loadingComments || m_state.postId.isEmpty() || !m_detailModel->hasMoreComments()) {
+    if (!m_controller || !m_detailModel || m_loadingComments || m_state.postId.isEmpty() || !m_detailModel->hasMoreComments()) {
         return;
     }
 
     m_loadingComments = true;
     m_pendingCommentsOffset = m_detailModel->commentCount();
-    m_commentsRequestId = PostCommentRepository::instance().requestPostCommentsAsync({
-            m_state.postId,
-            m_pendingCommentsOffset,
-            m_commentPageSize
-    });
+    m_commentsRequestId = m_controller->requestPostComments(m_state.postId, m_pendingCommentsOffset, m_commentPageSize);
 }
 
 void PostDetailView::onCommentsReady(const QString& requestId, const PostCommentsPage& page)
@@ -748,7 +760,7 @@ void PostDetailView::clearReplyTarget()
 
 void PostDetailView::submitCommentText()
 {
-    if (!m_detailModel || m_state.postId.isEmpty()) {
+    if (!m_controller || !m_detailModel || m_state.postId.isEmpty()) {
         return;
     }
 
@@ -757,22 +769,8 @@ void PostDetailView::submitCommentText()
         return;
     }
 
-    const CurrentUser& currentUser = CurrentUser::instance();
-    const QDateTime now = QDateTime::currentDateTime();
-    const QString idSuffix = QString::number(now.toMSecsSinceEpoch());
-
     if (m_replyTarget.commentId.isEmpty()) {
-        PostComment comment;
-        comment.commentId = QStringLiteral("%1-local-c%2").arg(m_state.postId, idSuffix);
-        comment.postId = m_state.postId;
-        comment.authorId = currentUser.getUserId();
-        comment.authorName = currentUser.getUserName();
-        comment.authorAvatarPath = currentUser.getAvatarPath();
-        comment.content = text;
-        comment.createdAt = now;
-        comment.likeCount = 0;
-        comment.isLiked = false;
-        comment.totalReplyCount = 0;
+        PostComment comment = m_controller->createLocalComment(m_state.postId, text);
         m_detailModel->insertComment(std::move(comment));
     } else {
         const PostComment* parentComment = m_detailModel->commentById(m_replyTarget.commentId);
@@ -793,20 +791,12 @@ void PostDetailView::submitCommentText()
             }
         }
 
-        PostCommentReply reply;
-        reply.replyId = QStringLiteral("%1-local-r%2").arg(m_replyTarget.commentId, idSuffix);
-        reply.commentId = m_replyTarget.commentId;
-        reply.postId = m_state.postId;
-        reply.authorId = currentUser.getUserId();
-        reply.authorName = currentUser.getUserName();
-        reply.authorAvatarPath = currentUser.getAvatarPath();
-        reply.targetUserId = targetUserId;
-        reply.targetUserName = targetUserName;
-        reply.targetReplyId = m_replyTarget.replyId;
-        reply.content = text;
-        reply.createdAt = now;
-        reply.likeCount = 0;
-        reply.isLiked = false;
+        PostCommentReply reply = m_controller->createLocalReply(m_state.postId,
+                                                                m_replyTarget.commentId,
+                                                                m_replyTarget.replyId,
+                                                                targetUserId,
+                                                                targetUserName,
+                                                                text);
         m_detailModel->insertReply(m_replyTarget.commentId, m_replyTarget.replyId, std::move(reply));
     }
 

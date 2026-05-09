@@ -3,7 +3,6 @@
 #include "shared/services/ImageService.h"
 #include "shared/ui/StyledActionMenu.h"
 #include "shared/theme/ThemeManager.h"
-#include "features/friend/data/UserRepository.h"
 #include "app/state/CurrentUser.h"
 #include <QMouseEvent>
 #include <QPainter>
@@ -18,7 +17,11 @@ ApplicationBar::ApplicationBar(QWidget* parent)
     setAttribute(Qt::WA_TranslucentBackground);
 #endif
 
-    setAvatarSource(UserRepository::instance().requestUserAvatarPath(CurrentUser::instance().getUserId()));
+    setAvatarSource(CurrentUser::instance().getAvatarPath());
+    connect(&CurrentUser::instance(), &CurrentUser::identityChanged, this, [this]() {
+        setAvatarSource(CurrentUser::instance().getAvatarPath());
+        update();
+    });
 
     auto msgItem = new ApplicationBarItem(
             ":/resources/icon/unselected_message.png",

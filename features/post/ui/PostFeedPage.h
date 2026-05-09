@@ -1,10 +1,13 @@
 #pragma once
 
+#include <QMetaObject>
+
 #include "PostMasonryView.h"
 #include "shared/types/RepositoryTypes.h"
 
 class PostCardDelegate;
 class PostFeedModel;
+class PostSessionController;
 
 class PostFeedPage : public PostMasonryView
 {
@@ -12,6 +15,7 @@ class PostFeedPage : public PostMasonryView
 
 public:
     explicit PostFeedPage(QWidget* parent = nullptr);
+    void setController(PostSessionController* controller);
     void ensureInitialized();
     void setPosts(const QVector<PostSummary>& posts);
 
@@ -28,6 +32,8 @@ private slots:
 private:
     PostFeedModel* m_model;
     PostCardDelegate* m_delegate;
+    PostSessionController* m_controller = nullptr;
+    QMetaObject::Connection m_postUpdatedConnection;
     int m_nextOffset = 0;
     bool m_hasMore = true;
     bool m_initialized = false;

@@ -7,6 +7,7 @@
 class QLabel;
 class PaintedLabel;
 class InlineEditableText;
+class FriendSessionController;
 class StatefulPushButton;
 class StyledActionMenu;
 class QToolButton;
@@ -18,6 +19,7 @@ class GroupDetailPage : public QWidget
 public:
     explicit GroupDetailPage(QWidget* parent = nullptr);
     ~GroupDetailPage() override;
+    void setController(FriendSessionController* controller);
 
 public slots:
     void setGroupId(const QString& groupId);
@@ -51,6 +53,7 @@ private:
 
     Group m_group;
     bool m_hasGroup = false;
+    FriendSessionController* m_controller = nullptr;
 
     QString m_avatarSource;
     QWidget* m_contentWidget;

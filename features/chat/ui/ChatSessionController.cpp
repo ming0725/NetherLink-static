@@ -33,6 +33,10 @@ QString memberDisplayName(const Group& group, const User& user)
     if (!groupNickname.isEmpty()) {
         return groupNickname;
     }
+    const CurrentUser& currentUser = CurrentUser::instance();
+    if (currentUser.isCurrentUserId(user.id)) {
+        return currentUser.getUserName();
+    }
     if (!user.remark.trimmed().isEmpty()) {
         return user.remark.trimmed();
     }
@@ -94,7 +98,18 @@ QVector<User> requestGroupMembers(const Group& group)
     QVector<User> members;
     members.reserve(group.membersID.size());
     for (const QString& memberId : group.membersID) {
-        User user = UserRepository::instance().requestUserDetail({memberId});
+        User user;
+        const CurrentUser& currentUser = CurrentUser::instance();
+        if (currentUser.isCurrentUserId(memberId)) {
+            const CurrentUserProfile profile = currentUser.identity();
+            user.id = profile.userId;
+            user.nick = profile.nickName;
+            user.avatarPath = profile.avatarPath;
+            user.status = profile.status;
+            user.isFriend = false;
+        } else {
+            user = UserRepository::instance().requestUserDetail({memberId});
+        }
         if (!user.id.isEmpty()) {
             members.push_back(user);
         }
@@ -108,7 +123,18 @@ void appendPreviewMember(QVector<User>& members, QSet<QString>& seen, const QStr
         return;
     }
 
-    User user = UserRepository::instance().requestUserDetail({userId});
+    User user;
+    const CurrentUser& currentUser = CurrentUser::instance();
+    if (currentUser.isCurrentUserId(userId)) {
+        const CurrentUserProfile profile = currentUser.identity();
+        user.id = profile.userId;
+        user.nick = profile.nickName;
+        user.avatarPath = profile.avatarPath;
+        user.status = profile.status;
+        user.isFriend = false;
+    } else {
+        user = UserRepository::instance().requestUserDetail({userId});
+    }
     if (user.id.isEmpty()) {
         return;
     }

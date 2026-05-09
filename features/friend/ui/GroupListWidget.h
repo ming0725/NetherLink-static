@@ -4,11 +4,13 @@
 #include "shared/ui/OverlayScrollListView.h"
 
 #include <QHash>
+#include <QMetaObject>
 #include <QPointer>
 #include <QString>
 
 class GroupListDelegate;
 class GroupListModel;
+class FriendSessionController;
 class QEvent;
 class QMouseEvent;
 class QPaintEvent;
@@ -23,6 +25,7 @@ class GroupListWidget : public OverlayScrollListView
 
 public:
     explicit GroupListWidget(QWidget* parent = nullptr);
+    void setController(FriendSessionController* controller);
     void ensureInitialized();
     void setKeyword(const QString& keyword);
 
@@ -95,6 +98,8 @@ private:
 
     GroupListModel* m_model;
     GroupListDelegate* m_delegate;
+    FriendSessionController* m_controller = nullptr;
+    QMetaObject::Connection m_groupListChangedConnection;
     QTimer* m_searchDebounceTimer;
     ViewState m_state;
     QHash<QString, QPointer<QVariantAnimation>> m_categoryAnimations;

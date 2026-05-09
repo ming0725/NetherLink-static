@@ -16,6 +16,95 @@ namespace {
 constexpr int kFriendConversationSampleCount = 8;
 constexpr int kGroupConversationSampleCount = 6;
 
+QString userNameForIdentity(const QString& userId)
+{
+    const CurrentUser& currentUser = CurrentUser::instance();
+    return currentUser.isCurrentUserId(userId)
+            ? currentUser.getUserName()
+            : UserRepository::instance().requestUserName(userId);
+}
+
+GroupRole groupRoleForUser(const Group& group, const QString& userId)
+{
+    if (!group.ownerId.isEmpty() && group.ownerId == userId) {
+        return GroupRole::Owner;
+    }
+    if (group.adminsID.contains(userId)) {
+        return GroupRole::Admin;
+    }
+    return GroupRole::Member;
+}
+
+struct SampleParticipant {
+    QString userId;
+    QString displayName;
+    GroupRole role = GroupRole::Member;
+};
+
+void appendGroupParticipant(QVector<SampleParticipant>& participants,
+                            QSet<QString>& seen,
+                            const Group& group,
+                            const QString& userId)
+{
+    if (userId.isEmpty() || seen.contains(userId)) {
+        return;
+    }
+
+    const CurrentUser& currentUser = CurrentUser::instance();
+    QString displayName = currentUser.isCurrentUserId(userId)
+            ? currentUser.getUserName()
+            : group.memberNicknames.value(userId);
+    if (displayName.isEmpty()) {
+        displayName = userNameForIdentity(userId);
+    }
+    if (displayName.isEmpty()) {
+        displayName = userId;
+    }
+
+    participants.push_back(SampleParticipant{
+            userId,
+            displayName,
+            groupRoleForUser(group, userId)
+    });
+    seen.insert(userId);
+}
+
+QVector<SampleParticipant> sampleParticipantsForGroup(const Group& group, int ordinal)
+{
+    QVector<SampleParticipant> candidates;
+    QSet<QString> seen;
+    const CurrentUser& currentUser = CurrentUser::instance();
+
+    appendGroupParticipant(candidates, seen, group, currentUser.getUserId());
+    appendGroupParticipant(candidates, seen, group, group.ownerId);
+    for (const QString& adminId : group.adminsID) {
+        appendGroupParticipant(candidates, seen, group, adminId);
+    }
+    for (const QString& memberId : group.membersID) {
+        appendGroupParticipant(candidates, seen, group, memberId);
+    }
+
+    if (candidates.size() <= 2) {
+        return candidates;
+    }
+
+    const SampleParticipant currentUserParticipant = candidates.takeFirst();
+    std::mt19937 generator(20240521 + ordinal * 97);
+    std::shuffle(candidates.begin(), candidates.end(), generator);
+
+    QVector<SampleParticipant> activeParticipants;
+    activeParticipants.reserve(qMin(7, candidates.size() + 1));
+    activeParticipants.push_back(currentUserParticipant);
+
+    const int targetCount = qMin(candidates.size() + 1, qBound(3, 3 + (ordinal % 5), 7));
+    for (int index = 0; index < candidates.size() && activeParticipants.size() < targetCount; ++index) {
+        activeParticipants.push_back(candidates.at(index));
+    }
+
+    std::shuffle(activeParticipants.begin(), activeParticipants.end(), generator);
+    return activeParticipants;
+}
+
 QString buildPreviewText(const QSharedPointer<ChatMessage>& message,
                          bool isGroup)
 {
@@ -24,9 +113,10 @@ QString buildPreviewText(const QSharedPointer<ChatMessage>& message,
     }
 
     if (isGroup) {
-        const QString senderName = message->getSenderName().isEmpty()
-                ? UserRepository::instance().requestUserName(message->getSenderId())
-                : message->getSenderName();
+        QString senderName = message->getSenderName();
+        if (senderName.isEmpty()) {
+            senderName = userNameForIdentity(message->getSenderId());
+        }
         return QString("%1：%2").arg(senderName, message->getContent());
     }
     return message->getContent();
@@ -418,12 +508,10 @@ private:
 MessageRepository::MessageRepository(QObject* parent)
         : QObject(parent)
 {
-    auto addGeneratedHistory = [this](const QString& conversationId,
-                                      const QString& peerId,
-                                      const QString& peerName,
-                                      bool isGroup,
-                                      int ordinal,
-                                      GroupRole role = GroupRole::Member) {
+    auto addGeneratedDirectHistory = [this](const QString& conversationId,
+                                            const QString& peerId,
+                                            const QString& peerName,
+                                            int ordinal) {
         const QVector<QDateTime> timeline = buildHistoryTimeline(ordinal);
         for (int index = 0; index < timeline.size(); ++index) {
             const bool fromMe = index % 4 == 1;
@@ -433,9 +521,9 @@ MessageRepository::MessageRepository(QObject* parent)
                     QStringLiteral("%1 历史消息 %2").arg(peerName).arg(index + 1),
                     fromMe,
                     senderId,
-                    isGroup,
+                    false,
                     senderName,
-                    fromMe ? GroupRole::Admin : role));
+                    GroupRole::Member));
             msg->setTimestamp(timeline.at(index));
             addMessage(conversationId, msg);
         }
@@ -447,25 +535,55 @@ MessageRepository::MessageRepository(QObject* parent)
         m_conversationStates.insert(conversationId, state);
     };
 
+    auto addGeneratedGroupHistory = [this](const Group& group, int ordinal) {
+        const QVector<QDateTime> timeline = buildHistoryTimeline(ordinal);
+        const QVector<SampleParticipant> participants = sampleParticipantsForGroup(group, ordinal);
+        if (participants.isEmpty()) {
+            return;
+        }
+
+        QString lastSenderId;
+        for (int index = 0; index < timeline.size(); ++index) {
+            int senderIndex = (index + ordinal * 3 + index / participants.size()) % participants.size();
+            if (participants.size() > 1 && participants.at(senderIndex).userId == lastSenderId) {
+                senderIndex = (senderIndex + 1) % participants.size();
+            }
+
+            const SampleParticipant& sender = participants.at(senderIndex);
+            const bool fromMe = CurrentUser::instance().isCurrentUserId(sender.userId);
+            auto msg = QSharedPointer<ChatMessage>(new TextMessage(
+                    QStringLiteral("%1 群聊消息 %2").arg(groupDisplayName(group)).arg(index + 1),
+                    fromMe,
+                    sender.userId,
+                    true,
+                    sender.displayName,
+                    sender.role));
+            msg->setTimestamp(timeline.at(index));
+            addMessage(group.groupId, msg);
+            lastSenderId = sender.userId;
+        }
+
+        ConversationSyncState state;
+        state.conversationId = group.groupId;
+        state.unreadCount = sampleUnreadCount(ordinal, timeline.size());
+        state.isDoNotDisturb = sampleDoNotDisturb(ordinal);
+        state.messageListTime = m_conversationStates.value(group.groupId).messageListTime;
+        m_conversationStates.insert(group.groupId, state);
+    };
+
     const QVector<Group> groups = GroupRepository::instance().requestGroupList();
     int conversationOrdinal = 0;
     for (int index = 0; index < qMin(kGroupConversationSampleCount, groups.size()); ++index) {
         const Group& group = groups.at(index);
-        addGeneratedHistory(group.groupId,
-                            group.ownerId,
-                            UserRepository::instance().requestUserName(group.ownerId),
-                            true,
-                            conversationOrdinal++,
-                            GroupRole::Owner);
+        addGeneratedGroupHistory(group, conversationOrdinal++);
     }
 
     const QVector<FriendSummary> friends = sampledFriendsForMessages();
     for (const FriendSummary& friendSummary : friends) {
-        addGeneratedHistory(friendSummary.userId,
-                            friendSummary.userId,
-                            friendSummary.displayName,
-                            false,
-                            conversationOrdinal++);
+        addGeneratedDirectHistory(friendSummary.userId,
+                                  friendSummary.userId,
+                                  friendSummary.displayName,
+                                  conversationOrdinal++);
     }
 }
 

@@ -5,6 +5,7 @@
 #include <QApplication>
 #include <QCursor>
 #include <QItemSelectionModel>
+#include <QMap>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
@@ -13,10 +14,9 @@
 #include <QTimer>
 #include <QVariantAnimation>
 
-#include "features/chat/data/GroupRepository.h"
-#include "features/chat/data/MessageRepository.h"
 #include "features/friend/model/GroupListModel.h"
 #include "features/friend/ui/GroupListDelegate.h"
+#include "features/friend/ui/FriendSessionController.h"
 #include "shared/services/ImageService.h"
 #include "shared/ui/StyledActionMenu.h"
 #include "shared/theme/ThemeManager.h"
@@ -84,8 +84,6 @@ GroupListWidget::GroupListWidget(QWidget* parent)
             emit requestMessage(m_model->groupIdAt(index));
         }
     });
-    connect(&GroupRepository::instance(), &GroupRepository::groupListChanged,
-            this, &GroupListWidget::reloadGroups);
     m_searchDebounceTimer->setSingleShot(true);
     m_searchDebounceTimer->setInterval(180);
 
@@ -107,6 +105,29 @@ GroupListWidget::GroupListWidget(QWidget* parent)
             this, [this](const QModelIndex&, const QModelIndex&, const QVector<int>&) {
                 updateStickyHeader();
             });
+}
+
+void GroupListWidget::setController(FriendSessionController* controller)
+{
+    if (m_controller == controller) {
+        return;
+    }
+
+    if (m_groupListChangedConnection) {
+        disconnect(m_groupListChangedConnection);
+    }
+
+    m_controller = controller;
+    if (m_controller) {
+        m_groupListChangedConnection = connect(m_controller, &FriendSessionController::groupListChanged,
+                                               this, &GroupListWidget::reloadGroups);
+    } else {
+        m_groupListChangedConnection = {};
+    }
+
+    if (m_state.initialized) {
+        reloadGroups();
+    }
 }
 
 void GroupListWidget::ensureInitialized()
@@ -260,15 +281,14 @@ void GroupListWidget::onCurrentChanged(const QModelIndex& current, const QModelI
 
 void GroupListWidget::reloadGroups()
 {
-    if (!m_state.initialized) {
+    if (!m_state.initialized || !m_controller) {
         return;
     }
 
     m_searchDebounceTimer->stop();
     const bool preserveLoadedItems = m_state.loadedKeyword == m_state.keyword;
     m_preservingSelection = true;
-    m_model->setCategories(GroupRepository::instance().requestGroupCategorySummaries({m_state.keyword}),
-                           preserveLoadedItems);
+    m_model->setCategories(m_controller->loadGroupCategorySummaries(m_state.keyword), preserveLoadedItems);
     m_state.loadedKeyword = m_state.keyword;
     restoreSelection();
     m_preservingSelection = false;
@@ -287,7 +307,7 @@ void GroupListWidget::restoreSelection()
     if (row < 0) {
         clearSelection();
         setCurrentIndex(QModelIndex());
-        const Group selectedGroup = GroupRepository::instance().requestGroupDetail({m_state.selectedGroupId});
+        const Group selectedGroup = m_controller->loadGroup(m_state.selectedGroupId);
         if (selectedGroup.groupId.isEmpty()) {
             m_state.selectedGroupId.clear();
             emit selectedGroupChanged(QString());
@@ -426,12 +446,12 @@ void GroupListWidget::loadNextGroupPage(const QString& categoryId)
     }
 
     const int offset = m_model->loadedGroupCount(categoryId);
-    QVector<Group> groups = GroupRepository::instance().requestGroupsInCategory({
-            categoryId,
-            m_state.keyword,
-            offset,
-            kGroupPageSize + 1
-    });
+    if (!m_controller) {
+        return;
+    }
+
+    QVector<Group> groups =
+            m_controller->loadGroupsInCategory(categoryId, m_state.keyword, offset, kGroupPageSize + 1);
     const bool hasMore = groups.size() > kGroupPageSize;
     if (hasMore) {
         groups.resize(kGroupPageSize);
@@ -513,7 +533,8 @@ void GroupListWidget::showGroupMenu(const QPoint& globalPos, const QModelIndex& 
     auto* actionGroup = new QActionGroup(categoryMenu);
     actionGroup->setExclusive(true);
 
-    const QMap<QString, QString> categories = GroupRepository::instance().requestGroupCategories();
+    const QMap<QString, QString> categories =
+            m_controller ? m_controller->loadGroupCategories() : QMap<QString, QString>();
     const QString currentCategoryId = group.listGroupId.isEmpty()
             ? QStringLiteral("gg_joined")
             : group.listGroupId;
@@ -537,7 +558,7 @@ void GroupListWidget::showGroupMenu(const QPoint& globalPos, const QModelIndex& 
     menu->addSeparator();
 
     QAction* exitAction = menu->addAction(QStringLiteral("退出群聊"));
-    const bool canExit = !GroupRepository::instance().isCurrentUserGroupOwner(group);
+    const bool canExit = m_controller && m_controller->canExitGroup(group);
     exitAction->setEnabled(canExit);
     if (canExit) {
         StyledActionMenu::setActionColors(exitAction,
@@ -565,18 +586,11 @@ void GroupListWidget::changeGroupCategory(const QString& groupId,
         return;
     }
 
-    Group group = GroupRepository::instance().requestGroupDetail({groupId});
-    const QString currentCategoryId = group.listGroupId.isEmpty()
-            ? QStringLiteral("gg_joined")
-            : group.listGroupId;
-    if (group.groupId.isEmpty() || categoryId == currentCategoryId) {
+    if (!m_controller) {
         return;
     }
 
-    group.listGroupId = categoryId;
-    group.listGroupName = categoryName;
-    GroupRepository::instance().saveGroup(group);
-    if (m_state.selectedGroupId == groupId) {
+    if (m_controller->changeGroupCategory(groupId, categoryId, categoryName) && m_state.selectedGroupId == groupId) {
         emit selectedGroupChanged(groupId);
     }
 }
@@ -587,8 +601,7 @@ void GroupListWidget::exitGroupFromMenu(const QString& groupId)
         return;
     }
 
-    const Group group = GroupRepository::instance().requestGroupDetail({groupId});
-    if (group.groupId.isEmpty() || GroupRepository::instance().isCurrentUserGroupOwner(group)) {
+    if (!m_controller || !m_controller->canExitGroup(m_controller->loadGroup(groupId))) {
         return;
     }
 
@@ -602,9 +615,7 @@ void GroupListWidget::exitGroupFromMenu(const QString& groupId)
     }
 
     const bool exitingSelected = m_state.selectedGroupId == groupId;
-    MessageRepository::instance().removeConversation(groupId);
-    GroupRepository::instance().removeGroup(groupId);
-    if (exitingSelected) {
+    if (m_controller->exitGroup(groupId) && exitingSelected) {
         clearCurrentSelection();
     }
 }

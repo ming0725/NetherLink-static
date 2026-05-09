@@ -1,19 +1,22 @@
 // PostApplication.h
 #pragma once
 
-#include <QWidget>
 #include <QMetaObject>
-#include <QParallelAnimationGroup>
-#include <QStackedWidget>
-#include <QVariantAnimation>
+#include <QRect>
+#include <QWidget>
 
 #include <optional>
 
 #include "shared/types/RepositoryTypes.h"
+
+class QParallelAnimationGroup;
+class QStackedWidget;
+class QVariantAnimation;
 class PostFeedPage;
 class PostApplicationBar;
 class PostDetailView;
 class PostOverlay;
+class PostSessionController;
 
 class PostApplication : public QWidget {
 Q_OBJECT
@@ -22,7 +25,7 @@ public:
     void setSystemFloatingBarsSuppressed(bool suppressed);
 private slots:
     void onPostClickedWithGeometry(const PostSummary& summary, const QRect& sourceGeometry);
-    void onPostDetailReady(const QString& requestId, const PostDetailData& detail);
+    void onCurrentPostDetailLoaded(const PostDetailData& detail);
 protected:
     void resizeEvent(QResizeEvent* ev) override;
     bool eventFilter(QObject* obj, QEvent* ev) override;
@@ -35,14 +38,14 @@ private:
 
     struct OpenPostSession {
         QString postId;
-        QString detailRequestId;
         QRect sourceGeometry;
+        bool waitingForDetail = false;
 
         void clear()
         {
             postId.clear();
-            detailRequestId.clear();
             sourceGeometry = {};
+            waitingForDetail = false;
         }
     };
 
@@ -63,6 +66,7 @@ private:
     QWidget* createPlaceholderPage() const;
     void replaceStackPage(int index, QWidget* page);
     void ensurePageLoaded(int index);
+    PostSessionController* m_postController = nullptr;
     PostApplicationBar*   m_bar;
     PostOverlay* m_overlay = nullptr;
     QVariantAnimation* m_overlayFadeAnimation = nullptr;

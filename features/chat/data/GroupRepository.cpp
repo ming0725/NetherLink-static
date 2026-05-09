@@ -19,11 +19,11 @@ const QString kManagedCategoryName = QStringLiteral("我管理的群聊");
 const QString kJoinedCategoryId = QStringLiteral("gg_joined");
 const QString kJoinedCategoryName = QStringLiteral("我加入的群聊");
 const QString kCollegeCategoryId = QStringLiteral("gg_college");
-const QString kCollegeCategoryName = QStringLiteral("大学");
+const QString kCollegeCategoryName = QStringLiteral("创意学院");
 const QString kWorkCategoryId = QStringLiteral("gg_work");
-const QString kWorkCategoryName = QStringLiteral("工作");
+const QString kWorkCategoryName = QStringLiteral("工坊协作");
 const QString kPerformanceCategoryId = QStringLiteral("gg_performance");
-const QString kPerformanceCategoryName = QStringLiteral("性能测试");
+const QString kPerformanceCategoryName = QStringLiteral("大型存档压测");
 
 QString currentUserId()
 {
@@ -333,8 +333,8 @@ Group makeGroup(const QString& groupId,
     group.isDnd = isDnd;
     group.adminsID = std::move(adminsID);
     group.remark = remark;
-    group.introduction = QStringLiteral("%1，用于日常交流、资料同步和协作安排。").arg(groupName);
-    group.announcement = QStringLiteral("欢迎来到%1，请保持友好沟通。").arg(groupName);
+    group.introduction = QStringLiteral("%1，专注 Minecraft 创意建筑、红石机关、地图玩法和服务器协作。").arg(groupName);
+    group.announcement = QStringLiteral("欢迎来到%1，请用设计稿、坐标和截图友好交流。").arg(groupName);
     group.currentUserNickname = CurrentUser::instance().getUserName();
     group.memberNicknames.insert(CurrentUser::instance().getUserId(), group.currentUserNickname);
     group.listGroupId = listGroupId;
@@ -348,33 +348,33 @@ GroupRepository::GroupRepository(QObject* parent)
         : QObject(parent)
 {
     const QVector<Group> groups = {
-            makeGroup("g001", "相亲相爱一家人", 55, "u007", ":/resources/avatar/10.jpg",
-                      kJoinedCategoryId, kJoinedCategoryName, "家庭群", false, {"u001"}),
-            makeGroup("g002", "考研交流群", 11, "u001", ":/resources/avatar/10.jpg",
+            makeGroup("g001", "方块主城理事会", 55, "u007", ":/resources/avatar/10.jpg",
+                      kJoinedCategoryId, kJoinedCategoryName, "主城议事厅", false, {"u001"}),
+            makeGroup("g002", "创意建筑学院", 11, "u001", ":/resources/avatar/10.jpg",
                       kCollegeCategoryId, kCollegeCategoryName),
-            makeGroup("g003", "暗广接单群", 91, "u002", ":/resources/avatar/10.jpg",
-                      kWorkCategoryId, kWorkCategoryName, "接单群"),
-            makeGroup("g004", "Qt学习交流群", 103, "u002", ":/resources/avatar/10.jpg",
-                      kCollegeCategoryId, kCollegeCategoryName, "Qt 群", false, {"u007"}),
-            makeGroup("g005", "C/C++技术交流", 78, "u004", ":/resources/avatar/10.jpg",
+            makeGroup("g003", "下界大厅接单板", 91, "u002", ":/resources/avatar/10.jpg",
+                      kWorkCategoryId, kWorkCategoryName, "大厅委托"),
+            makeGroup("g004", "红石机关课堂", 103, "u002", ":/resources/avatar/10.jpg",
+                      kCollegeCategoryId, kCollegeCategoryName, "红石课", false, {"u007"}),
+            makeGroup("g005", "方块工坊技术社", 78, "u004", ":/resources/avatar/10.jpg",
                       kWorkCategoryId, kWorkCategoryName, QString(), false, {"u007"}),
-            makeGroup("g006", "毕业设计小组", 5, "u003", ":/resources/avatar/10.jpg",
-                      kCollegeCategoryId, kCollegeCategoryName, "毕设组"),
-            makeGroup("g007", "前端/UI交流", 46, "u005", ":/resources/avatar/10.jpg",
+            makeGroup("g006", "空岛毕业设计组", 5, "u003", ":/resources/avatar/10.jpg",
+                      kCollegeCategoryId, kCollegeCategoryName, "空岛毕设"),
+            makeGroup("g007", "材质/UI灵感墙", 46, "u005", ":/resources/avatar/10.jpg",
                       kWorkCategoryId, kWorkCategoryName),
-            makeGroup("g008", "算法竞赛交流", 58, "u006", ":/resources/avatar/10.jpg",
-                      kCollegeCategoryId, kCollegeCategoryName, "算法群"),
-            makeGroup("g009", "A346宿舍", 4, "u007", ":/resources/avatar/10.jpg",
-                      kJoinedCategoryId, kJoinedCategoryName, "宿舍群"),
-            makeGroup("g010", "服务器维护群", 18, "u007", ":/resources/avatar/10.jpg",
+            makeGroup("g008", "指令与地图机制社", 58, "u006", ":/resources/avatar/10.jpg",
+                      kCollegeCategoryId, kCollegeCategoryName, "机制社"),
+            makeGroup("g009", "A346小屋共建服", 4, "u007", ":/resources/avatar/10.jpg",
+                      kJoinedCategoryId, kJoinedCategoryName, "宿舍小屋"),
+            makeGroup("g010", "主城服务器维护站", 18, "u007", ":/resources/avatar/10.jpg",
                       kWorkCategoryId, kWorkCategoryName, QString(), false, {"u002"}),
-            makeGroup("g011", "下界探险队", 24, "u008", ":/resources/avatar/10.jpg",
-                      kJoinedCategoryId, kJoinedCategoryName, "探险队"),
-            makeGroup("g012", "像素美术互助", 39, "u005", ":/resources/avatar/10.jpg",
+            makeGroup("g011", "下界探险路线队", 24, "u008", ":/resources/avatar/10.jpg",
+                      kJoinedCategoryId, kJoinedCategoryName, "探险路线"),
+            makeGroup("g012", "像素美术互助工坊", 39, "u005", ":/resources/avatar/10.jpg",
                       kWorkCategoryId, kWorkCategoryName, QString(), false, {"u007"}),
             makeGroup("g013", "红石机器研究所", 67, "u010", ":/resources/avatar/10.jpg",
                       kJoinedCategoryId, kJoinedCategoryName, "红石群"),
-            makeGroup("g014", "周末开黑车队", 12, "u007", ":/resources/avatar/10.jpg",
+            makeGroup("g014", "周末创意开荒车队", 12, "u007", ":/resources/avatar/10.jpg",
                       kJoinedCategoryId, kJoinedCategoryName),
     };
 
@@ -387,12 +387,12 @@ GroupRepository::GroupRepository(QObject* parent)
                                       int count,
                                       int idOffset) {
         const QStringList names = {
-                "性能测试群",
-                "压力测试频道",
-                "多人协作大厅",
-                "渲染性能观测",
-                "长列表滚动群",
-                "虚拟化采样群"
+                "大型主城压测群",
+                "红石阵列采样服",
+                "多人建造大厅",
+                "区块渲染观测站",
+                "长列表村庄档案",
+                "虚拟化建造档案"
         };
         const QStringList owners = {
                 "u001",
@@ -411,7 +411,7 @@ GroupRepository::GroupRepository(QObject* parent)
                                     listGroupId,
                                     listGroupName,
                                     (index % 7 == 0)
-                                            ? QString("备注群 %1").arg(index + 1)
+                                            ? QString("压测建造档案 %1").arg(index + 1)
                                             : QString());
             groupMap.insert(group.groupId, group);
         }

@@ -16,8 +16,7 @@
 
 #include "features/friend/ui/FriendListDelegate.h"
 #include "features/friend/model/FriendListModel.h"
-#include "features/friend/data/UserRepository.h"
-#include "features/chat/data/MessageRepository.h"
+#include "features/friend/ui/FriendSessionController.h"
 #include "shared/services/ImageService.h"
 #include "shared/ui/StyledActionMenu.h"
 #include "shared/theme/ThemeManager.h"
@@ -74,8 +73,6 @@ FriendListWidget::FriendListWidget(QWidget* parent)
             emit requestMessage(m_model->friendIdAt(index));
         }
     });
-    connect(&UserRepository::instance(), &UserRepository::friendListChanged,
-            this, &FriendListWidget::reloadFriends);
     m_searchDebounceTimer->setSingleShot(true);
     m_searchDebounceTimer->setInterval(180);
 
@@ -97,6 +94,29 @@ FriendListWidget::FriendListWidget(QWidget* parent)
             this, [this](const QModelIndex&, const QModelIndex&, const QVector<int>&) {
                 updateStickyHeader();
             });
+}
+
+void FriendListWidget::setController(FriendSessionController* controller)
+{
+    if (m_controller == controller) {
+        return;
+    }
+
+    if (m_friendListChangedConnection) {
+        disconnect(m_friendListChangedConnection);
+    }
+
+    m_controller = controller;
+    if (m_controller) {
+        m_friendListChangedConnection = connect(m_controller, &FriendSessionController::friendListChanged,
+                                                this, &FriendListWidget::reloadFriends);
+    } else {
+        m_friendListChangedConnection = {};
+    }
+
+    if (m_state.initialized) {
+        reloadFriends();
+    }
 }
 
 void FriendListWidget::ensureInitialized()
@@ -248,15 +268,14 @@ void FriendListWidget::onCurrentChanged(const QModelIndex& current, const QModel
 
 void FriendListWidget::reloadFriends()
 {
-    if (!m_state.initialized) {
+    if (!m_state.initialized || !m_controller) {
         return;
     }
 
     m_searchDebounceTimer->stop();
     const bool preserveLoadedItems = m_state.loadedKeyword == m_state.keyword;
     m_preservingSelection = true;
-    m_model->setGroups(UserRepository::instance().requestFriendGroupSummaries({m_state.keyword}),
-                       preserveLoadedItems);
+    m_model->setGroups(m_controller->loadFriendGroupSummaries(m_state.keyword), preserveLoadedItems);
     m_state.loadedKeyword = m_state.keyword;
     if (preserveLoadedItems) {
         refreshLoadedGroups();
@@ -278,7 +297,7 @@ void FriendListWidget::restoreSelection()
     if (row < 0) {
         clearSelection();
         setCurrentIndex(QModelIndex());
-        const User selectedUser = UserRepository::instance().requestUserDetail({m_state.selectedFriendId});
+        const User selectedUser = m_controller->loadFriend(m_state.selectedFriendId);
         if (selectedUser.id.isEmpty()) {
             m_state.selectedFriendId.clear();
             emit selectedFriendChanged(QString());
@@ -308,12 +327,8 @@ void FriendListWidget::refreshLoadedGroups()
 
         const int currentLoadedCount = m_model->loadedFriendCount(groupId);
         const int pageSize = qMax(kFriendPageSize, currentLoadedCount);
-        QVector<FriendSummary> friends = UserRepository::instance().requestFriendsInGroup({
-                groupId,
-                m_state.keyword,
-                0,
-                pageSize + 1
-        });
+        QVector<FriendSummary> friends =
+                m_controller->loadFriendsInGroup(groupId, m_state.keyword, 0, pageSize + 1);
         const bool hasMore = friends.size() > pageSize;
         if (hasMore) {
             friends.resize(pageSize);
@@ -440,12 +455,12 @@ void FriendListWidget::loadNextFriendPage(const QString& groupId)
     }
 
     const int offset = m_model->loadedFriendCount(groupId);
-    QVector<FriendSummary> friends = UserRepository::instance().requestFriendsInGroup({
-            groupId,
-            m_state.keyword,
-            offset,
-            kFriendPageSize + 1
-    });
+    if (!m_controller) {
+        return;
+    }
+
+    QVector<FriendSummary> friends =
+            m_controller->loadFriendsInGroup(groupId, m_state.keyword, offset, kFriendPageSize + 1);
     const bool hasMore = friends.size() > kFriendPageSize;
     if (hasMore) {
         friends.resize(kFriendPageSize);
@@ -540,7 +555,7 @@ void FriendListWidget::showFriendMenu(const QPoint& globalPos, const QModelIndex
     };
 
     addGroupAction(friendSummary.groupId, friendSummary.groupName);
-    const QMap<QString, QString> groups = UserRepository::instance().requestFriendGroups();
+    const QMap<QString, QString> groups = m_controller ? m_controller->loadFriendGroups() : QMap<QString, QString>();
     for (auto it = groups.constBegin(); it != groups.constEnd(); ++it) {
         if (it.key() == friendSummary.groupId) {
             continue;
@@ -575,15 +590,11 @@ void FriendListWidget::changeFriendGroup(const QString& userId,
         return;
     }
 
-    User user = UserRepository::instance().requestUserDetail({userId});
-    if (user.id.isEmpty() || user.friendGroupId == groupId) {
+    if (!m_controller) {
         return;
     }
 
-    user.friendGroupId = groupId;
-    user.friendGroupName = groupName;
-    UserRepository::instance().saveUser(user);
-    if (m_state.selectedFriendId == userId) {
+    if (m_controller->changeFriendGroup(userId, groupId, groupName) && m_state.selectedFriendId == userId) {
         emit selectedFriendChanged(userId);
     }
 }
@@ -604,9 +615,7 @@ void FriendListWidget::deleteFriendFromMenu(const QString& userId)
     }
 
     const bool deletingSelected = m_state.selectedFriendId == userId;
-    MessageRepository::instance().removeConversation(userId);
-    UserRepository::instance().removeUser(userId);
-    if (deletingSelected) {
+    if (m_controller && m_controller->deleteFriend(userId) && deletingSelected) {
         clearCurrentSelection();
     }
 }

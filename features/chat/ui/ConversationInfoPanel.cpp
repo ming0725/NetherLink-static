@@ -296,6 +296,10 @@ QString memberDisplayName(const Group& group, const User& user)
     if (!groupNickname.isEmpty()) {
         return groupNickname;
     }
+    const CurrentUser& currentUser = CurrentUser::instance();
+    if (currentUser.isCurrentUserId(user.id)) {
+        return currentUser.getUserName();
+    }
     if (!user.remark.trimmed().isEmpty()) {
         return user.remark.trimmed();
     }
@@ -434,7 +438,11 @@ protected:
         avatarPath.addRoundedRect(avatarRect, 4, 4);
         painter.save();
         painter.setClipPath(avatarPath);
-        const QPixmap avatar = ImageService::instance().scaled(m_user.avatarPath,
+        const CurrentUser& currentUser = CurrentUser::instance();
+        const QString avatarSource = currentUser.isCurrentUserId(m_user.id)
+                ? currentUser.getAvatarPath()
+                : m_user.avatarPath;
+        const QPixmap avatar = ImageService::instance().scaled(avatarSource,
                                                                avatarRect.size(),
                                                                Qt::KeepAspectRatioByExpanding,
                                                                painter.device()->devicePixelRatioF());
@@ -939,7 +947,9 @@ void GroupConversationInfoPanel::promptMemberNicknameChange(const User& user)
 
     bool accepted = false;
     const QString currentNickname = memberNickname(m_group, user.id);
-    const QString fallbackName = user.nick.trimmed().isEmpty() ? user.id : user.nick.trimmed();
+    const CurrentUser& currentUser = CurrentUser::instance();
+    const QString userNick = currentUser.isCurrentUserId(user.id) ? currentUser.getUserName() : user.nick;
+    const QString fallbackName = userNick.trimmed().isEmpty() ? user.id : userNick.trimmed();
     const QString initialText = currentNickname.isEmpty() ? fallbackName : currentNickname;
     const QString nextNickname = QInputDialog::getText(this,
                                                        QStringLiteral("修改群昵称"),

@@ -2,12 +2,15 @@
 
 #include <QStyledItemDelegate>
 
+class FriendSessionController;
+
 class GroupNotificationDelegate : public QStyledItemDelegate
 {
     Q_OBJECT
 
 public:
     explicit GroupNotificationDelegate(QObject* parent = nullptr);
+    void setController(FriendSessionController* controller);
 
     void paint(QPainter* painter,
                const QStyleOptionViewItem& option,
@@ -31,4 +34,7 @@ public:
     static constexpr int kButtonHeight = 26;
     static constexpr int kButtonRadius = 6;
     static constexpr int kButtonGap = 8;
+
+private:
+    FriendSessionController* m_controller = nullptr;
 };

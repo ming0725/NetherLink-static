@@ -3,6 +3,7 @@
 #include <QWidget>
 
 class GroupNotificationListWidget;
+class FriendSessionController;
 
 class GroupNotificationPage : public QWidget
 {
@@ -11,6 +12,7 @@ class GroupNotificationPage : public QWidget
 public:
     explicit GroupNotificationPage(QWidget* parent = nullptr);
 
+    void setController(FriendSessionController* controller);
     void reloadNotifications();
     void refreshLoadedNotifications();
 
@@ -27,6 +29,7 @@ private:
     void loadMoreNotifications();
 
     GroupNotificationListWidget* m_listWidget;
+    FriendSessionController* m_controller = nullptr;
     QWidget* m_header;
     int m_loadedCount = 0;
     bool m_loading = false;

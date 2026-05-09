@@ -17,8 +17,7 @@
 #include <QVariant>
 #include <QVBoxLayout>
 
-#include "features/chat/data/GroupRepository.h"
-#include "features/chat/data/MessageRepository.h"
+#include "features/friend/ui/FriendSessionController.h"
 #include "shared/services/ImageService.h"
 #include "shared/ui/InlineEditableText.h"
 #include "shared/ui/PaintedLabel.h"
@@ -338,13 +337,18 @@ GroupDetailPage::~GroupDetailPage()
     qApp->removeEventFilter(this);
 }
 
+void GroupDetailPage::setController(FriendSessionController* controller)
+{
+    m_controller = controller;
+}
+
 void GroupDetailPage::setGroupId(const QString& groupId)
 {
     if (groupId.isEmpty()) {
         clear();
         return;
     }
-    setGroup(GroupRepository::instance().requestGroupDetail({groupId}));
+    setGroup(m_controller ? m_controller->loadGroup(groupId) : Group());
 }
 
 void GroupDetailPage::clear()
@@ -471,7 +475,9 @@ void GroupDetailPage::updateRemarkText()
 
 void GroupDetailPage::updateCategoryButtonText()
 {
-    const QMap<QString, QString> categories = GroupRepository::instance().requestGroupCategories();
+    const QMap<QString, QString> categories = m_controller
+            ? m_controller->loadGroupCategories()
+            : QMap<QString, QString>();
     const QString categoryId = m_group.listGroupId.isEmpty()
             ? QStringLiteral("gg_joined")
             : m_group.listGroupId;
@@ -521,7 +527,9 @@ void GroupDetailPage::saveRemark()
     }
 
     m_group.remark = remark;
-    GroupRepository::instance().saveGroup(m_group);
+    if (!m_controller || !m_controller->saveGroup(m_group)) {
+        return;
+    }
     updateRemarkText();
 }
 
@@ -555,7 +563,9 @@ void GroupDetailPage::rebuildCategoryMenu()
     auto* group = new QActionGroup(menu);
     group->setExclusive(true);
 
-    const QMap<QString, QString> categories = GroupRepository::instance().requestGroupCategories();
+    const QMap<QString, QString> categories = m_controller
+            ? m_controller->loadGroupCategories()
+            : QMap<QString, QString>();
     auto addCategoryAction = [this, menu, group](const QString& categoryId, const QString& categoryName) {
         QAction* action = menu->addAction(categoryName);
         action->setCheckable(true);
@@ -586,19 +596,21 @@ void GroupDetailPage::changeCategory(const QString& categoryId, const QString& c
 
     m_group.listGroupId = categoryId;
     m_group.listGroupName = categoryName;
-    GroupRepository::instance().saveGroup(m_group);
+    if (!m_controller || !m_controller->saveGroup(m_group)) {
+        return;
+    }
     updateCategoryButtonText();
 }
 
 void GroupDetailPage::updateExitButtonState()
 {
-    const bool canExit = m_hasGroup && !GroupRepository::instance().isCurrentUserGroupOwner(m_group);
+    const bool canExit = m_hasGroup && m_controller && m_controller->canExitGroup(m_group);
     m_exitButton->setEnabled(canExit);
 }
 
 void GroupDetailPage::confirmExitGroup()
 {
-    if (!m_hasGroup || GroupRepository::instance().isCurrentUserGroupOwner(m_group)) {
+    if (!m_hasGroup || !m_controller || !m_controller->canExitGroup(m_group)) {
         return;
     }
 
@@ -611,8 +623,8 @@ void GroupDetailPage::confirmExitGroup()
         return;
     }
 
-    MessageRepository::instance().removeConversation(m_group.groupId);
-    GroupRepository::instance().removeGroup(m_group.groupId);
-    clear();
-    emit groupExited();
+    if (m_controller->exitGroup(m_group.groupId)) {
+        clear();
+        emit groupExited();
+    }
 }

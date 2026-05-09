@@ -7,6 +7,7 @@
 class QLabel;
 class PaintedLabel;
 class InlineEditableText;
+class FriendSessionController;
 class StatefulPushButton;
 class StyledActionMenu;
 class QToolButton;
@@ -20,6 +21,7 @@ class FriendDetailPage : public QWidget
 public:
     explicit FriendDetailPage(QWidget* parent = nullptr);
     ~FriendDetailPage() override;
+    void setController(FriendSessionController* controller);
 
 public slots:
     void setUserId(const QString& userId);
@@ -49,6 +51,7 @@ private:
 
     User m_user;
     bool m_hasUser = false;
+    FriendSessionController* m_controller = nullptr;
 
     QString m_avatarSource;
     QWidget* m_contentWidget;
