@@ -8,13 +8,13 @@ AiChatApplication::AiChatApplication(QWidget* parent)
 {
     m_leftPane    = new LeftPane(this);
 
-    // 2) 右侧默认页
-    m_defaultPage = new DefaultPage(this);
+    // 2) 右侧 AI 对话页
+    m_conversationWidget = new AiChatConversationWidget(this);
 
     // 3) 分割器：将左、右面板加入
     m_splitter    = new TransparentSplitter(Qt::Horizontal, this);
     m_splitter->addWidget(m_leftPane);
-    m_splitter->addWidget(m_defaultPage);
+    m_splitter->addWidget(m_conversationWidget);
     m_splitter->setHandleWidth(0);               // >0，允许拖拽
     m_splitter->setChildrenCollapsible(false);
     m_splitter->setStretchFactor(0, 0);          // 左侧不自动扩展
@@ -23,6 +23,11 @@ AiChatApplication::AiChatApplication(QWidget* parent)
     // （可选）设置初始左侧宽度
     m_splitter->setSizes({ 220, width() - 220 });
     m_splitter->handle(1)->setCursor(Qt::SizeHorCursor);
+
+    connect(m_leftPane->aiChatList(), &AiChatListWidget::conversationActivated,
+            m_conversationWidget, &AiChatConversationWidget::openConversation);
+    connect(m_leftPane->aiChatList(), &AiChatListWidget::conversationCleared,
+            m_conversationWidget, &AiChatConversationWidget::closeConversation);
 }
 
 void AiChatApplication::resizeEvent(QResizeEvent *event) {

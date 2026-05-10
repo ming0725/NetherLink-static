@@ -67,7 +67,9 @@ bool shouldClearLineEditFocus(QWidget* watched, const QPoint& globalPos)
         }
     }
 
-    if (focusedLineEdit == watched || watched->isAncestorOf(focusedLineEdit)) {
+    if (focusedLineEdit == watched ||
+        focusedLineEdit->isAncestorOf(watched) ||
+        watched->isAncestorOf(focusedLineEdit)) {
         return false;
     }
 

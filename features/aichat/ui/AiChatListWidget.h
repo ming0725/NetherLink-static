@@ -14,10 +14,16 @@ class QModelIndex;
 
 class AiChatListWidget : public OverlayScrollListView
 {
+    Q_OBJECT
+
 public:
     explicit AiChatListWidget(QWidget* parent = nullptr);
     void ensureInitialized();
     void createNewConversation();
+
+signals:
+    void conversationActivated(const AiChatListEntry& entry);
+    void conversationCleared();
 
 protected:
     void mousePressEvent(QMouseEvent* event) override;

@@ -1,6 +1,6 @@
 #pragma once
 #include "AiChatListWidget.h"
-#include "app/frame/DefaultPage.h"
+#include "features/aichat/ui/AiChatConversationWidget.h"
 #include "shared/ui/StatefulPushButton.h"
 #include "shared/theme/ThemeManager.h"
 #include <QSplitter>
@@ -41,6 +41,7 @@ private:
                 applyTheme();
             });
         }
+        AiChatListWidget* aiChatList() const { return m_aiChatList; }
     protected:
         void paintEvent(QPaintEvent* event) override {
             QPainter painter(this);
@@ -86,6 +87,6 @@ private:
         const int newButtonHeight = 30;
     };
     LeftPane*     m_leftPane;
-    DefaultPage*  m_defaultPage;
+    AiChatConversationWidget* m_conversationWidget;
     QSplitter*    m_splitter;
 };

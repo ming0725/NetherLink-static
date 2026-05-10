@@ -86,11 +86,16 @@ void AiChatListWidget::reloadEntries(const QString& selectedConversationId)
     loadMoreEntries();
 
     if (selectedConversationId.isEmpty()) {
-        clearSelection();
-        if (selectionModel()) {
-            selectionModel()->clearCurrentIndex();
+        if (m_model->rowCount() > 0 && selectionModel()) {
+            selectionModel()->setCurrentIndex(m_model->index(0, 0),
+                                              QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+        } else {
+            clearSelection();
+            if (selectionModel()) {
+                selectionModel()->clearCurrentIndex();
+            }
+            setCurrentIndex(QModelIndex());
         }
-        setCurrentIndex(QModelIndex());
         return;
     }
 
@@ -105,6 +110,7 @@ void AiChatListWidget::reloadEntries(const QString& selectedConversationId)
             selectionModel()->clearCurrentIndex();
         }
         setCurrentIndex(QModelIndex());
+        emit conversationCleared();
         return;
     }
 
@@ -189,7 +195,18 @@ void AiChatListWidget::showEvent(QShowEvent* event)
 void AiChatListWidget::onCurrentChanged(const QModelIndex& current, const QModelIndex& previous)
 {
     Q_UNUSED(previous);
-    Q_UNUSED(current);
+    if (!current.isValid()) {
+        emit conversationCleared();
+        return;
+    }
+
+    const AiChatListEntry entry = m_model->entryAt(current);
+    if (entry.conversationId.isEmpty()) {
+        emit conversationCleared();
+        return;
+    }
+
+    emit conversationActivated(entry);
 }
 
 void AiChatListWidget::updateStickyHeader()

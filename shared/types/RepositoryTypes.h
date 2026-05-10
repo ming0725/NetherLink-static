@@ -174,6 +174,14 @@ struct AiChatListEntry {
     QDateTime time;
 };
 
+struct AiChatMessage {
+    QString messageId;
+    QString conversationId;
+    QString text;
+    bool isFromUser = false;
+    QDateTime time;
+};
+
 struct PostSummary {
     QString postId;
     QString title;
