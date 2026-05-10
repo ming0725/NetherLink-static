@@ -172,16 +172,6 @@ QDateTime dateTimeAt(const QDate& date, int hour, int minute)
     return QDateTime(date, QTime(hour, minute));
 }
 
-void appendCluster(QVector<QDateTime>& timeline,
-                   const QDateTime& start,
-                   int count,
-                   int stepMinutes)
-{
-    for (int index = 0; index < count; ++index) {
-        timeline.push_back(start.addSecs(index * stepMinutes * 60));
-    }
-}
-
 enum class SampleLatestBucket {
     Today,
     Yesterday,
@@ -212,76 +202,55 @@ SampleLatestBucket sampleLatestBucket(int ordinal)
     }
 }
 
-QVector<QDateTime> buildHistoryTimeline(int ordinal)
+int sampleHistoryMessageCount(int ordinal)
 {
-    QVector<QDateTime> timeline;
-    timeline.reserve(36);
+    return 50 + (ordinal * 37) % 151;
+}
 
+QDateTime sampleLatestMessageTime(int ordinal)
+{
     const QDateTime now = QDateTime::currentDateTime();
     const int hourOffset = (ordinal % 3) * 2;
     const int minuteOffset = (ordinal % 4) * 3;
-    const SampleLatestBucket bucket = sampleLatestBucket(ordinal);
 
-    appendCluster(timeline,
-                  dateTimeAt(now.date().addYears(-2), 8 + hourOffset, 12 + minuteOffset),
-                  4,
-                  7);
-    if (bucket == SampleLatestBucket::YearsAgo) {
-        return timeline;
+    switch (sampleLatestBucket(ordinal)) {
+    case SampleLatestBucket::Today:
+        return now.addSecs((-12 - ordinal % 9) * 60);
+    case SampleLatestBucket::Yesterday:
+        return dateTimeAt(now.date().addDays(-1), 18 + hourOffset, 10 + minuteOffset);
+    case SampleLatestBucket::DaysAgo:
+        return dateTimeAt(now.date().addDays(-3), 15 + hourOffset, 8 + minuteOffset);
+    case SampleLatestBucket::OneMonthAgo:
+        return dateTimeAt(now.date().addMonths(-1), 11 + hourOffset, 9 + minuteOffset);
+    case SampleLatestBucket::MonthsAgo:
+        return dateTimeAt(now.date().addMonths(-4), 10 + hourOffset, 18 + minuteOffset);
+    case SampleLatestBucket::OneYearAgo:
+        return dateTimeAt(now.date().addYears(-1), 9 + hourOffset, 6 + minuteOffset);
+    case SampleLatestBucket::YearsAgo:
+    default:
+        return dateTimeAt(now.date().addYears(-2), 8 + hourOffset, 12 + minuteOffset);
     }
+}
 
-    appendCluster(timeline,
-                  dateTimeAt(now.date().addYears(-1), 9 + hourOffset, 6 + minuteOffset),
-                  4,
-                  6);
-    if (bucket == SampleLatestBucket::OneYearAgo) {
-        return timeline;
+QVector<QDateTime> buildHistoryTimeline(int ordinal)
+{
+    const int messageCount = sampleHistoryMessageCount(ordinal);
+    QVector<QDateTime> timeline;
+    timeline.resize(messageCount);
+
+    QDateTime cursor = sampleLatestMessageTime(ordinal);
+    for (int reverseIndex = 0; reverseIndex < messageCount; ++reverseIndex) {
+        timeline[messageCount - reverseIndex - 1] = cursor;
+
+        int gapMinutes = 3 + ((ordinal + reverseIndex * 7) % 11);
+        if (reverseIndex % 12 == 11) {
+            gapMinutes += 35 + (ordinal + reverseIndex) % 75;
+        }
+        if (reverseIndex % 37 == 36) {
+            gapMinutes += (24 + (ordinal + reverseIndex) % 48) * 60;
+        }
+        cursor = cursor.addSecs(-gapMinutes * 60);
     }
-
-    appendCluster(timeline,
-                  dateTimeAt(now.date().addMonths(-4), 10 + hourOffset, 18 + minuteOffset),
-                  4,
-                  5);
-    if (bucket == SampleLatestBucket::MonthsAgo) {
-        return timeline;
-    }
-
-    appendCluster(timeline,
-                  dateTimeAt(now.date().addMonths(-1), 11 + hourOffset, 9 + minuteOffset),
-                  4,
-                  6);
-    if (bucket == SampleLatestBucket::OneMonthAgo) {
-        return timeline;
-    }
-
-    appendCluster(timeline,
-                  dateTimeAt(now.date().addDays(-10), 13 + hourOffset, 15 + minuteOffset),
-                  4,
-                  4);
-    appendCluster(timeline,
-                  dateTimeAt(now.date().addDays(-3), 15 + hourOffset, 8 + minuteOffset),
-                  4,
-                  5);
-    if (bucket == SampleLatestBucket::DaysAgo) {
-        return timeline;
-    }
-
-    appendCluster(timeline,
-                  dateTimeAt(now.date().addDays(-2), 16 + hourOffset, 5 + minuteOffset),
-                  4,
-                  4);
-    appendCluster(timeline,
-                  dateTimeAt(now.date().addDays(-1), 18 + hourOffset, 10 + minuteOffset),
-                  4,
-                  4);
-    if (bucket == SampleLatestBucket::Yesterday) {
-        return timeline;
-    }
-
-    appendCluster(timeline,
-                  now.addSecs((-54 + ordinal) * 60),
-                  4,
-                  8);
 
     return timeline;
 }
