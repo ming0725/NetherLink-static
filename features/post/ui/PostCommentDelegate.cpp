@@ -3,14 +3,25 @@
 #include <algorithm>
 
 #include <QApplication>
+#include <QAbstractTextDocumentLayout>
 #include <QDate>
 #include <QPainter>
+#include <QPersistentModelIndex>
+#include <QTextBoundaryFinder>
+#include <QTextBlock>
+#include <QTextCharFormat>
+#include <QTextCursor>
+#include <QTextDocument>
 #include <QTextLayout>
 #include <QTextOption>
 
 #include "features/post/model/PostDetailListModel.h"
 #include "shared/services/ImageService.h"
 #include "shared/theme/ThemeManager.h"
+
+#if defined(Q_OS_DARWIN)
+#include <CoreFoundation/CoreFoundation.h>
+#endif
 
 namespace {
 
@@ -31,6 +42,12 @@ constexpr int kActionGap = 4;
 constexpr int kActionGroupGap = 10;
 constexpr int kCommentMaxLines = 4;
 constexpr int kReplyMaxLines = 4;
+constexpr int kPostBodyHorizontalMargin = 20;
+constexpr int kPostBodyTopMargin = 20;
+constexpr int kPostTitleBodyGap = 12;
+constexpr int kPostBodyDateTopGap = 16;
+constexpr int kPostBodyDividerTopGap = 16;
+constexpr int kPostBodyBottomMargin = 16;
 
 QFont fontWithPointSize(int pointSize, bool bold = false)
 {
@@ -62,6 +79,12 @@ const QFont& metaFont()
 const QFont& bodyFont()
 {
     static const QFont font = fontWithPointSize(13);
+    return font;
+}
+
+const QFont& postTitleFont()
+{
+    static const QFont font = fontWithPointSize(16, true);
     return font;
 }
 
@@ -111,6 +134,16 @@ struct ReplyTextParts {
     int targetNameLength = 0;
 };
 
+struct WordRange {
+    int start = -1;
+    int end = -1;
+
+    bool isValid() const
+    {
+        return start >= 0 && end > start;
+    }
+};
+
 ReplyTextParts replyDisplayText(const PostCommentReply& reply)
 {
     if (reply.targetReplyId.isEmpty()) {
@@ -124,9 +157,259 @@ ReplyTextParts replyDisplayText(const PostCommentReply& reply)
     return parts;
 }
 
+QString documentTextForLayout(QString text)
+{
+    text.replace(QLatin1Char('\n'), QChar::LineSeparator);
+    return text;
+}
+
+void configurePlainTextDocument(QTextDocument& document,
+                                const QString& text,
+                                const QFont& font,
+                                int textWidth,
+                                const QColor& textColor,
+                                const QColor& highlightedColor,
+                                int highlightedStart,
+                                int highlightedLength)
+{
+    document.setUndoRedoEnabled(false);
+    document.setDocumentMargin(0);
+    document.setDefaultFont(font);
+
+    QTextOption textOption;
+    textOption.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    document.setDefaultTextOption(textOption);
+    document.setPlainText(documentTextForLayout(text));
+    document.setTextWidth(qMax(1, textWidth));
+
+    QTextCursor cursor(&document);
+    cursor.select(QTextCursor::Document);
+    QTextCharFormat textFormat;
+    textFormat.setForeground(textColor);
+    cursor.mergeCharFormat(textFormat);
+
+    const int highlightedEnd = highlightedStart + qMax(0, highlightedLength);
+    if (highlightedStart >= 0 && highlightedEnd > highlightedStart) {
+        cursor.clearSelection();
+        cursor.setPosition(qBound(0, highlightedStart, text.size()));
+        cursor.setPosition(qBound(0, highlightedEnd, text.size()), QTextCursor::KeepAnchor);
+        QTextCharFormat highlightedFormat;
+        highlightedFormat.setForeground(highlightedColor);
+        cursor.mergeCharFormat(highlightedFormat);
+    }
+}
+
 int countWidth(const QFontMetrics& metrics, int count)
 {
     return qMax(18, metrics.horizontalAdvance(QString::number(count)) + 4);
+}
+
+bool isAsciiWordChar(QChar ch)
+{
+    const ushort code = ch.unicode();
+    return (code >= 'a' && code <= 'z') ||
+            (code >= 'A' && code <= 'Z') ||
+            (code >= '0' && code <= '9') ||
+            code == '_' ||
+            code == '\'';
+}
+
+bool isCjkChar(QChar ch)
+{
+    const ushort code = ch.unicode();
+    return (code >= 0x3400 && code <= 0x4dbf) ||
+            (code >= 0x4e00 && code <= 0x9fff) ||
+            (code >= 0xf900 && code <= 0xfaff);
+}
+
+bool isSelectableWordChar(QChar ch)
+{
+    return ch.isLetterOrNumber() || ch == QLatin1Char('_') || isCjkChar(ch);
+}
+
+bool containsSelectableWordChar(const QString& text, int start, int end)
+{
+    for (int i = start; i < end; ++i) {
+        if (isSelectableWordChar(text.at(i))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+int characterIndexForWordSelection(const QString& text, int cursor)
+{
+    if (text.isEmpty()) {
+        return -1;
+    }
+
+    const int forward = qBound(0, cursor, text.size() - 1);
+    if (isSelectableWordChar(text.at(forward)) || isAsciiWordChar(text.at(forward))) {
+        return forward;
+    }
+
+    if (cursor > 0) {
+        const int backward = qMin(cursor - 1, text.size() - 1);
+        if (isSelectableWordChar(text.at(backward)) || isAsciiWordChar(text.at(backward))) {
+            return backward;
+        }
+    }
+
+    return -1;
+}
+
+WordRange asciiWordRangeAt(const QString& text, int character)
+{
+    if (character < 0 || character >= text.size() || !isAsciiWordChar(text.at(character))) {
+        return {};
+    }
+
+    int start = character;
+    while (start > 0 && isAsciiWordChar(text.at(start - 1))) {
+        --start;
+    }
+
+    int end = character + 1;
+    while (end < text.size() && isAsciiWordChar(text.at(end))) {
+        ++end;
+    }
+
+    while (start < end && text.at(start) == QLatin1Char('\'')) {
+        ++start;
+    }
+    while (end > start && text.at(end - 1) == QLatin1Char('\'')) {
+        --end;
+    }
+
+    return {start, end};
+}
+
+WordRange unicodeWordRangeAt(const QString& text, int character)
+{
+    QTextBoundaryFinder finder(QTextBoundaryFinder::Word, text);
+    finder.toStart();
+
+    int start = 0;
+    while (true) {
+        int end = finder.toNextBoundary();
+        if (end < 0) {
+            break;
+        }
+
+        if (character >= start && character < end) {
+            while (start < end && !isSelectableWordChar(text.at(start))) {
+                ++start;
+            }
+            while (end > start && !isSelectableWordChar(text.at(end - 1))) {
+                --end;
+            }
+            if (character >= start && character < end &&
+                    containsSelectableWordChar(text, start, end)) {
+                return {start, end};
+            }
+            break;
+        }
+
+        start = end;
+    }
+
+    return {};
+}
+
+WordRange systemCjkWordRangeAt(const QString& text, int character)
+{
+#if defined(Q_OS_DARWIN)
+    if (character < 0 || character >= text.size() || !isCjkChar(text.at(character))) {
+        return {};
+    }
+
+    CFStringRef cfText = CFStringCreateWithCharacters(kCFAllocatorDefault,
+                                                      reinterpret_cast<const UniChar*>(text.constData()),
+                                                      text.size());
+    if (!cfText) {
+        return {};
+    }
+
+    CFLocaleRef locale = CFLocaleCreate(kCFAllocatorDefault, CFSTR("zh_CN"));
+    CFStringTokenizerRef tokenizer = CFStringTokenizerCreate(kCFAllocatorDefault,
+                                                            cfText,
+                                                            CFRangeMake(0, text.size()),
+                                                            kCFStringTokenizerUnitWord,
+                                                            locale);
+
+    WordRange range;
+    if (tokenizer) {
+        const CFStringTokenizerTokenType tokenType =
+                CFStringTokenizerGoToTokenAtIndex(tokenizer, character);
+        if (tokenType != kCFStringTokenizerTokenNone) {
+            const CFRange tokenRange = CFStringTokenizerGetCurrentTokenRange(tokenizer);
+            const int start = static_cast<int>(tokenRange.location);
+            const int end = start + static_cast<int>(tokenRange.length);
+            if (tokenRange.location != kCFNotFound &&
+                    start >= 0 && end <= text.size() &&
+                    character >= start && character < end &&
+                    containsSelectableWordChar(text, start, end)) {
+                range = {start, end};
+            }
+        }
+    }
+
+    if (tokenizer) {
+        CFRelease(tokenizer);
+    }
+    if (locale) {
+        CFRelease(locale);
+    }
+    CFRelease(cfText);
+
+    return range;
+#else
+    Q_UNUSED(text)
+    Q_UNUSED(character)
+    return {};
+#endif
+}
+
+WordRange fallbackCjkWordRangeAt(const QString& text, int character)
+{
+    if (character < 0 || character >= text.size() || !isCjkChar(text.at(character))) {
+        return {};
+    }
+
+    if (character > 0 && isCjkChar(text.at(character - 1))) {
+        return {character - 1, character + 1};
+    }
+    if (character + 1 < text.size() && isCjkChar(text.at(character + 1))) {
+        return {character, character + 2};
+    }
+    return {character, character + 1};
+}
+
+WordRange wordRangeAt(const QString& text, int cursor)
+{
+    const int character = characterIndexForWordSelection(text, cursor);
+    if (character < 0) {
+        return {};
+    }
+
+    const WordRange asciiRange = asciiWordRangeAt(text, character);
+    if (asciiRange.isValid()) {
+        return asciiRange;
+    }
+
+    if (isCjkChar(text.at(character))) {
+        const WordRange systemRange = systemCjkWordRangeAt(text, character);
+        if (systemRange.isValid()) {
+            return systemRange;
+        }
+
+        const WordRange fallbackRange = fallbackCjkWordRangeAt(text, character);
+        if (fallbackRange.isValid()) {
+            return fallbackRange;
+        }
+    }
+
+    return unicodeWordRangeAt(text, character);
 }
 
 } // namespace
@@ -146,7 +429,44 @@ void PostCommentDelegate::paint(QPainter* painter,
                                 const QStyleOptionViewItem& option,
                                 const QModelIndex& index) const
 {
-    if (index.data(PostDetailListModel::ItemTypeRole).toInt() == PostDetailListModel::DetailItem) {
+    const int itemType = index.data(PostDetailListModel::ItemTypeRole).toInt();
+    if (itemType == PostDetailListModel::PostBodyItem) {
+        const QString title = index.data(PostDetailListModel::PostTitleTextRole).toString();
+        const QString text = index.data(PostDetailListModel::PostBodyTextRole).toString();
+        const QString dateText = index.data(PostDetailListModel::PostBodyDateTextRole).toString();
+        const int textWidth = qMax(80, availableWidth(option) - kPostBodyHorizontalMargin * 2);
+        const TextMeasure titleMeasure = measureText(title, postTitleFont(), textWidth, 0);
+        const TextMeasure textMeasure = measureText(text, bodyFont(), textWidth, 0);
+        const QRect titleRect(option.rect.left() + kPostBodyHorizontalMargin,
+                              option.rect.top() + kPostBodyTopMargin,
+                              textWidth,
+                              titleMeasure.fullHeight);
+        const QRect textRect(titleRect.left(),
+                             titleRect.bottom() + 1 + kPostTitleBodyGap,
+                             textWidth,
+                             textMeasure.fullHeight);
+
+        painter->save();
+        painter->setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing);
+        painter->fillRect(option.rect, ThemeManager::instance().color(ThemeColor::PanelBackground));
+        drawMeasuredText(painter, title, titleRect, titleMeasure, PostTitleText, {}, {}, postTitleFont());
+        drawMeasuredText(painter, text, textRect, textMeasure, PostContentText, {}, {}, bodyFont());
+
+        int y = textRect.bottom() + 1 + kPostBodyDateTopGap;
+        if (!dateText.isEmpty()) {
+            painter->setFont(metaFont());
+            painter->setPen(ThemeManager::instance().color(ThemeColor::TertiaryText));
+            const QFontMetrics metaMetrics(metaFont());
+            painter->drawText(QRect(textRect.left(), y, textRect.width(), metaMetrics.lineSpacing()),
+                              Qt::AlignLeft | Qt::AlignVCenter,
+                              dateText);
+            y += metaMetrics.lineSpacing();
+        }
+
+        y += kPostBodyDividerTopGap;
+        painter->setPen(QPen(ThemeManager::instance().color(ThemeColor::Divider), 1));
+        painter->drawLine(textRect.left(), y, textRect.right(), y);
+        painter->restore();
         return;
     }
 
@@ -173,11 +493,22 @@ void PostCommentDelegate::paint(QPainter* painter,
                                                                 layout.avatarRect.width(),
                                                                 dpr));
 
-    painter->setFont(nameFont());
-    painter->setPen(ThemeManager::instance().color(ThemeColor::PrimaryText));
-    painter->drawText(layout.nameRect, Qt::AlignLeft | Qt::AlignVCenter, comment->authorName);
+    drawSingleLineText(painter,
+                       comment->authorName,
+                       layout.nameRect,
+                       CommentAuthorText,
+                       comment->commentId,
+                       {},
+                       nameFont());
 
-    drawMeasuredText(painter, comment->content, layout.contentRect, layout.contentMeasure);
+    drawMeasuredText(painter,
+                     comment->content,
+                     layout.contentRect,
+                     layout.contentMeasure,
+                     CommentContentText,
+                     comment->commentId,
+                     {},
+                     bodyFont());
 
     if (layout.commentCanExpand && !detailModel->isCommentExpanded(comment->commentId)) {
         painter->setFont(actionFont());
@@ -218,11 +549,22 @@ void PostCommentDelegate::paint(QPainter* painter,
                             ImageService::instance().circularAvatar(reply.authorAvatarPath,
                                                                     replyLayout.avatarRect.width(),
                                                                     dpr));
-        painter->setFont(nameFont());
-        painter->setPen(ThemeManager::instance().color(ThemeColor::PrimaryText));
-        painter->drawText(replyLayout.nameRect, Qt::AlignLeft | Qt::AlignVCenter, reply.authorName);
+        drawSingleLineText(painter,
+                           reply.authorName,
+                           replyLayout.nameRect,
+                           ReplyAuthorText,
+                           comment->commentId,
+                           reply.replyId,
+                           nameFont());
 
-        drawMeasuredText(painter, text.text, replyLayout.textRect, replyLayout.textMeasure);
+        drawMeasuredText(painter,
+                         text.text,
+                         replyLayout.textRect,
+                         replyLayout.textMeasure,
+                         ReplyContentText,
+                         comment->commentId,
+                         reply.replyId,
+                         bodyFont());
 
         if (!replyLayout.expandRect.isNull() && !detailModel->isReplyExpanded(reply.replyId)) {
             painter->setFont(actionFont());
@@ -268,8 +610,26 @@ void PostCommentDelegate::paint(QPainter* painter,
 QSize PostCommentDelegate::sizeHint(const QStyleOptionViewItem& option,
                                     const QModelIndex& index) const
 {
-    if (index.data(PostDetailListModel::ItemTypeRole).toInt() == PostDetailListModel::DetailItem) {
-        return QSize(availableWidth(option), index.data(PostDetailListModel::DetailHeightRole).toInt());
+    const int itemType = index.data(PostDetailListModel::ItemTypeRole).toInt();
+    if (itemType == PostDetailListModel::PostBodyItem) {
+        const QString title = index.data(PostDetailListModel::PostTitleTextRole).toString();
+        const QString text = index.data(PostDetailListModel::PostBodyTextRole).toString();
+        const QString dateText = index.data(PostDetailListModel::PostBodyDateTextRole).toString();
+        const int textWidth = qMax(80, availableWidth(option) - kPostBodyHorizontalMargin * 2);
+        const TextMeasure titleMeasure = measureText(title, postTitleFont(), textWidth, 0);
+        const TextMeasure textMeasure = measureText(text, bodyFont(), textWidth, 0);
+        const QFontMetrics metaMetrics(metaFont());
+        const int dateHeight = dateText.isEmpty() ? 0 : metaMetrics.lineSpacing();
+        const int height = kPostBodyTopMargin
+                + titleMeasure.fullHeight
+                + kPostTitleBodyGap
+                + textMeasure.fullHeight
+                + kPostBodyDateTopGap
+                + dateHeight
+                + kPostBodyDividerTopGap
+                + 1
+                + kPostBodyBottomMargin;
+        return QSize(availableWidth(option), qMax(1, height));
     }
 
     const Layout layout = calculateLayout(option, index);
@@ -281,7 +641,7 @@ PostCommentDelegate::HitAction PostCommentDelegate::actionAt(const QStyleOptionV
                                                              const QPoint& point) const
 {
     HitAction result;
-    if (index.data(PostDetailListModel::ItemTypeRole).toInt() == PostDetailListModel::DetailItem) {
+    if (index.data(PostDetailListModel::ItemTypeRole).toInt() == PostDetailListModel::PostBodyItem) {
         return result;
     }
 
@@ -346,6 +706,319 @@ PostCommentDelegate::HitAction PostCommentDelegate::actionAt(const QStyleOptionV
         result.commentId = comment->commentId;
     }
     return result;
+}
+
+PostCommentDelegate::TextHit PostCommentDelegate::textHitAt(const QStyleOptionViewItem& option,
+                                                            const QModelIndex& index,
+                                                            const QPoint& point,
+                                                            bool allowLineWhitespace) const
+{
+    TextHit hit;
+    const int itemType = index.data(PostDetailListModel::ItemTypeRole).toInt();
+
+    if (itemType == PostDetailListModel::PostBodyItem) {
+        const QString title = index.data(PostDetailListModel::PostTitleTextRole).toString();
+        const QString text = index.data(PostDetailListModel::PostBodyTextRole).toString();
+        const int textWidth = qMax(80, availableWidth(option) - kPostBodyHorizontalMargin * 2);
+        const TextMeasure titleMeasure = measureText(title, postTitleFont(), textWidth, 0);
+        const TextMeasure textMeasure = measureText(text, bodyFont(), textWidth, 0);
+        const QRect titleRect(option.rect.left() + kPostBodyHorizontalMargin,
+                              option.rect.top() + kPostBodyTopMargin,
+                              textWidth,
+                              titleMeasure.fullHeight);
+        const int titleCursor = measuredCharacterIndexAt(title,
+                                                         postTitleFont(),
+                                                         titleRect,
+                                                         point,
+                                                         allowLineWhitespace);
+        if (titleCursor >= 0) {
+            hit.target = PostTitleText;
+            hit.text = title;
+            hit.cursor = titleCursor;
+            return hit;
+        }
+
+        const QRect textRect(titleRect.left(),
+                             titleRect.bottom() + 1 + kPostTitleBodyGap,
+                             textWidth,
+                             textMeasure.fullHeight);
+        const int cursor = measuredCharacterIndexAt(text,
+                                                    bodyFont(),
+                                                    textRect,
+                                                    point,
+                                                    allowLineWhitespace);
+        if (cursor >= 0) {
+            hit.target = PostContentText;
+            hit.text = text;
+            hit.cursor = cursor;
+        }
+        return hit;
+    }
+
+    const auto* detailModel = qobject_cast<const PostDetailListModel*>(index.model());
+    if (!detailModel) {
+        return hit;
+    }
+
+    const PostComment* comment = detailModel->commentAtIndex(index);
+    if (!comment) {
+        return hit;
+    }
+
+    const Layout layout = calculateLayout(option, index);
+    const int commentContentCursor = measuredCharacterIndexAt(comment->content,
+                                                             bodyFont(),
+                                                             layout.contentRect,
+                                                             point,
+                                                             allowLineWhitespace);
+    if (commentContentCursor >= 0) {
+        hit.target = CommentContentText;
+        hit.commentId = comment->commentId;
+        hit.text = comment->content;
+        hit.cursor = commentContentCursor;
+        return hit;
+    }
+
+    const int visibleReplies = qMin(detailModel->visibleReplyCount(comment->commentId), comment->replies.size());
+    for (int i = 0; i < visibleReplies && i < layout.replyLayouts.size(); ++i) {
+        const PostCommentReply& reply = comment->replies.at(i);
+        const ReplyLayout& replyLayout = layout.replyLayouts.at(i);
+
+        const ReplyTextParts text = replyDisplayText(reply);
+        const int replyTextCursor = measuredCharacterIndexAt(text.text,
+                                                            bodyFont(),
+                                                            replyLayout.textRect,
+                                                            point,
+                                                            allowLineWhitespace);
+        if (replyTextCursor >= 0) {
+            hit.target = ReplyContentText;
+            hit.commentId = comment->commentId;
+            hit.replyId = reply.replyId;
+            hit.text = text.text;
+            hit.cursor = replyTextCursor;
+            return hit;
+        }
+    }
+
+    return hit;
+}
+
+bool PostCommentDelegate::authorHitAt(const QStyleOptionViewItem& option,
+                                      const QModelIndex& index,
+                                      const QPoint& point) const
+{
+    if (index.data(PostDetailListModel::ItemTypeRole).toInt() == PostDetailListModel::PostBodyItem) {
+        return false;
+    }
+
+    const auto* detailModel = qobject_cast<const PostDetailListModel*>(index.model());
+    if (!detailModel) {
+        return false;
+    }
+
+    const PostComment* comment = detailModel->commentAtIndex(index);
+    if (!comment) {
+        return false;
+    }
+
+    const Layout layout = calculateLayout(option, index);
+    if (layout.avatarRect.contains(point) ||
+            singleLineCharacterIndexAt(comment->authorName, nameFont(), layout.nameRect, point, false) >= 0) {
+        return true;
+    }
+
+    const int visibleReplies = qMin(detailModel->visibleReplyCount(comment->commentId), comment->replies.size());
+    for (int i = 0; i < visibleReplies && i < layout.replyLayouts.size(); ++i) {
+        const PostCommentReply& reply = comment->replies.at(i);
+        const ReplyLayout& replyLayout = layout.replyLayouts.at(i);
+        if (replyLayout.avatarRect.contains(point) ||
+                singleLineCharacterIndexAt(reply.authorName, nameFont(), replyLayout.nameRect, point, false) >= 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+PostCommentDelegate::InteractionTarget PostCommentDelegate::interactionTargetAt(const QStyleOptionViewItem& option,
+                                                                                const QModelIndex& index,
+                                                                                const QPoint& point) const
+{
+    InteractionTarget target;
+    if (index.data(PostDetailListModel::ItemTypeRole).toInt() == PostDetailListModel::PostBodyItem) {
+        return target;
+    }
+
+    const auto* detailModel = qobject_cast<const PostDetailListModel*>(index.model());
+    if (!detailModel) {
+        return target;
+    }
+
+    const PostComment* comment = detailModel->commentAtIndex(index);
+    if (!comment) {
+        return target;
+    }
+
+    const Layout layout = calculateLayout(option, index);
+    const int visibleReplies = qMin(detailModel->visibleReplyCount(comment->commentId), comment->replies.size());
+    for (int i = 0; i < visibleReplies && i < layout.replyLayouts.size(); ++i) {
+        const PostCommentReply& reply = comment->replies.at(i);
+        const ReplyLayout& replyLayout = layout.replyLayouts.at(i);
+        const QRect replyBounds = replyLayout.avatarRect
+                .united(replyLayout.nameRect)
+                .united(replyLayout.textRect)
+                .united(replyLayout.timeRect)
+                .united(replyLayout.likeRect)
+                .united(replyLayout.likeCountRect)
+                .united(replyLayout.replyButtonRect)
+                .united(replyLayout.replyTextRect)
+                .united(replyLayout.expandRect);
+        if (replyBounds.contains(point)) {
+            target.commentId = comment->commentId;
+            target.replyId = reply.replyId;
+            target.text = replyDisplayText(reply).text;
+            target.isReply = true;
+            return target;
+        }
+    }
+
+    const QRect commentBounds = layout.avatarRect
+            .united(layout.nameRect)
+            .united(layout.contentRect)
+            .united(layout.timeRect)
+            .united(layout.commentLikeRect)
+            .united(layout.commentLikeCountRect)
+            .united(layout.commentButtonRect)
+            .united(layout.commentCountRect)
+            .united(layout.expandRect);
+    if (commentBounds.contains(point) || option.rect.contains(point)) {
+        target.commentId = comment->commentId;
+        target.text = comment->content;
+    }
+    return target;
+}
+
+bool PostCommentDelegate::selectWordAt(const QStyleOptionViewItem& option,
+                                       const QModelIndex& index,
+                                       const QPoint& point)
+{
+    const TextHit hit = textHitAt(option, index, point);
+    if (!hit.isValid()) {
+        return false;
+    }
+
+    const WordRange range = wordRangeAt(hit.text, hit.cursor);
+    if (!range.isValid()) {
+        return false;
+    }
+
+    setSelection(index, hit.target, hit.commentId, hit.replyId, range.start, range.end);
+    return hasSelection();
+}
+
+void PostCommentDelegate::setSelection(const QModelIndex& index,
+                                       TextTargetType target,
+                                       const QString& commentId,
+                                       const QString& replyId,
+                                       int anchor,
+                                       int cursor)
+{
+    const QString text = textForTarget(index, target, commentId, replyId);
+    if (text.isEmpty()) {
+        clearSelection();
+        return;
+    }
+
+    m_selectionIndex = QPersistentModelIndex(index);
+    m_selectionTarget = target;
+    m_selectionCommentId = commentId;
+    m_selectionReplyId = replyId;
+    m_selectionAnchor = qBound(0, anchor, text.size());
+    m_selectionCursor = qBound(0, cursor, text.size());
+}
+
+void PostCommentDelegate::clearSelection()
+{
+    m_selectionIndex = QPersistentModelIndex();
+    m_selectionTarget = NoTextTarget;
+    m_selectionCommentId.clear();
+    m_selectionReplyId.clear();
+    m_selectionAnchor = -1;
+    m_selectionCursor = -1;
+}
+
+bool PostCommentDelegate::hasSelection() const
+{
+    return m_selectionIndex.isValid() &&
+            m_selectionTarget != NoTextTarget &&
+            m_selectionAnchor >= 0 &&
+            m_selectionCursor >= 0 &&
+            m_selectionAnchor != m_selectionCursor;
+}
+
+bool PostCommentDelegate::selectionContains(const QModelIndex& index,
+                                            TextTargetType target,
+                                            const QString& commentId,
+                                            const QString& replyId,
+                                            int cursor) const
+{
+    if (!hasSelection() || !selectionMatches(index, target, commentId, replyId) || cursor < 0) {
+        return false;
+    }
+    return cursor >= selectionStart() && cursor <= selectionEnd();
+}
+
+QString PostCommentDelegate::selectedText() const
+{
+    if (!hasSelection()) {
+        return {};
+    }
+
+    const QString text = textForTarget(m_selectionIndex,
+                                       m_selectionTarget,
+                                       m_selectionCommentId,
+                                       m_selectionReplyId);
+    return text.mid(selectionStart(), selectionEnd() - selectionStart());
+}
+
+QPersistentModelIndex PostCommentDelegate::selectionIndex() const
+{
+    return m_selectionIndex;
+}
+
+PostCommentDelegate::TextTargetType PostCommentDelegate::selectionTarget() const
+{
+    return m_selectionTarget;
+}
+
+QString PostCommentDelegate::selectionCommentId() const
+{
+    return m_selectionCommentId;
+}
+
+QString PostCommentDelegate::selectionReplyId() const
+{
+    return m_selectionReplyId;
+}
+
+void PostCommentDelegate::selectAll(const QModelIndex& index,
+                                    TextTargetType target,
+                                    const QString& commentId,
+                                    const QString& replyId)
+{
+    const QString text = textForTarget(index, target, commentId, replyId);
+    if (text.isEmpty()) {
+        return;
+    }
+    setSelection(index, target, commentId, replyId, 0, text.size());
+}
+
+int PostCommentDelegate::textLengthForTarget(const QModelIndex& index,
+                                             TextTargetType target,
+                                             const QString& commentId,
+                                             const QString& replyId) const
+{
+    return textForTarget(index, target, commentId, replyId).size();
 }
 
 PostCommentDelegate::Layout PostCommentDelegate::calculateLayout(const QStyleOptionViewItem& option,
@@ -549,6 +1222,8 @@ PostCommentDelegate::TextMeasure PostCommentDelegate::measureText(const QString&
     }
 
     TextMeasure measure;
+    measure.highlightedStart = highlightedStart;
+    measure.highlightedLength = highlightedLength;
     if (text.isEmpty()) {
         measure.fullHeight = metrics.lineSpacing();
         measure.collapsedHeight = metrics.lineSpacing();
@@ -557,80 +1232,41 @@ PostCommentDelegate::TextMeasure PostCommentDelegate::measureText(const QString&
         return measure;
     }
 
-    QTextLayout textLayout(text, font);
-    QTextOption textOption;
-    textOption.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-    textLayout.setTextOption(textOption);
-    textLayout.beginLayout();
+    QTextDocument textDocument;
+    configurePlainTextDocument(textDocument,
+                               text,
+                               font,
+                               boundedWidth,
+                               ThemeManager::instance().color(ThemeColor::PrimaryText),
+                               ThemeManager::instance().color(ThemeColor::Accent),
+                               highlightedStart,
+                               highlightedLength);
 
-    qreal y = 0.0;
-    while (true) {
-        QTextLine line = textLayout.createLine();
-        if (!line.isValid()) {
-            break;
+    int lineCount = 0;
+    int collapsedHeight = metrics.lineSpacing();
+    for (QTextBlock block = textDocument.begin(); block.isValid(); block = block.next()) {
+        const QTextLayout* layout = block.layout();
+        if (!layout) {
+            continue;
         }
-
-        line.setLineWidth(boundedWidth);
-        line.setPosition(QPointF(0.0, y));
-
-        TextMeasure::Line measuredLine;
-        measuredLine.y = qRound(line.y());
-        measuredLine.baselineY = qRound(line.y() + line.ascent());
-        measuredLine.height = qCeil(line.height());
-
-        const int lineStart = line.textStart();
-        const int lineEnd = lineStart + line.textLength();
-        QVector<int> boundaries;
-        boundaries.reserve(4);
-        boundaries.append(lineStart);
-        boundaries.append(lineEnd);
-
-        const int highlightedEnd = highlightedStart + qMax(0, highlightedLength);
-        if (highlightedStart >= 0 && highlightedEnd > highlightedStart) {
-            const int overlapStart = qMax(lineStart, highlightedStart);
-            const int overlapEnd = qMin(lineEnd, highlightedEnd);
-            if (overlapStart < overlapEnd) {
-                boundaries.append(overlapStart);
-                boundaries.append(overlapEnd);
+        const QPointF blockPosition = textDocument.documentLayout()->blockBoundingRect(block).topLeft();
+        for (int i = 0; i < layout->lineCount(); ++i) {
+            const QTextLine line = layout->lineAt(i);
+            ++lineCount;
+            if (maxLines > 0 && lineCount == maxLines) {
+                collapsedHeight = qMax(metrics.lineSpacing(),
+                                       qCeil(blockPosition.y() + line.y() + line.height()));
             }
         }
-
-        std::sort(boundaries.begin(), boundaries.end());
-        boundaries.erase(std::unique(boundaries.begin(), boundaries.end()), boundaries.end());
-
-        measuredLine.segments.reserve(qMax(1, boundaries.size() - 1));
-        for (int i = 0; i + 1 < boundaries.size(); ++i) {
-            const int segmentStart = boundaries.at(i);
-            const int segmentEnd = boundaries.at(i + 1);
-            if (segmentStart >= segmentEnd) {
-                continue;
-            }
-
-            TextMeasure::Segment segment;
-            segment.start = segmentStart;
-            segment.length = segmentEnd - segmentStart;
-            segment.x = metrics.horizontalAdvance(text.mid(lineStart, segmentStart - lineStart));
-            segment.highlighted = highlightedStart >= 0
-                    && segmentStart >= highlightedStart
-                    && segmentEnd <= highlightedEnd;
-            measuredLine.segments.append(segment);
-        }
-
-        measure.lines.append(measuredLine);
-        y += line.height();
     }
-    textLayout.endLayout();
 
-    if (measure.lines.isEmpty()) {
+    if (lineCount == 0) {
         measure.fullHeight = metrics.lineSpacing();
         measure.collapsedHeight = metrics.lineSpacing();
     } else {
-        const TextMeasure::Line& lastLine = measure.lines.constLast();
-        measure.fullHeight = qMax(metrics.lineSpacing(), lastLine.y + lastLine.height);
-        if (maxLines > 0 && measure.lines.size() > maxLines) {
-            const TextMeasure::Line& collapsedLine = measure.lines.at(maxLines - 1);
-            measure.collapsedHeight = qMax(metrics.lineSpacing(),
-                                           collapsedLine.y + collapsedLine.height);
+        measure.fullHeight = qMax(metrics.lineSpacing(), qCeil(textDocument.size().height()));
+        if (maxLines > 0 && lineCount > maxLines) {
+            measure.collapsedHeight = collapsedHeight;
             measure.canExpand = true;
         } else {
             measure.collapsedHeight = measure.fullHeight;
@@ -645,7 +1281,11 @@ PostCommentDelegate::TextMeasure PostCommentDelegate::measureText(const QString&
 void PostCommentDelegate::drawMeasuredText(QPainter* painter,
                                            const QString& text,
                                            const QRect& rect,
-                                           const TextMeasure& measure) const
+                                           const TextMeasure& measure,
+                                           TextTargetType target,
+                                           const QString& commentId,
+                                           const QString& replyId,
+                                           const QFont& font) const
 {
     if (text.isEmpty() || rect.isEmpty()) {
         return;
@@ -653,22 +1293,216 @@ void PostCommentDelegate::drawMeasuredText(QPainter* painter,
 
     const QColor primary = ThemeManager::instance().color(ThemeColor::PrimaryText);
     const QColor highlighted = ThemeManager::instance().color(ThemeColor::Accent);
+    const QColor selectionColor = ThemeManager::instance().isDark()
+            ? QColor(0x4c, 0x82, 0xc5, 150)
+            : QColor(0x8b, 0xb7, 0xff, 130);
+    const bool selected = selectionMatches(QModelIndex(m_selectionIndex), target, commentId, replyId) && hasSelection();
+
+    QTextDocument textDocument;
+    configurePlainTextDocument(textDocument,
+                               text,
+                               font,
+                               rect.width(),
+                               primary,
+                               highlighted,
+                               measure.highlightedStart,
+                               measure.highlightedLength);
+
+    QAbstractTextDocumentLayout::PaintContext paintContext;
+    if (selected) {
+        QTextCharFormat selectionFormat;
+        selectionFormat.setBackground(selectionColor);
+        selectionFormat.setForeground(primary);
+
+        QAbstractTextDocumentLayout::Selection selection;
+        selection.cursor = QTextCursor(&textDocument);
+        selection.cursor.setPosition(selectionStart());
+        selection.cursor.setPosition(selectionEnd(), QTextCursor::KeepAnchor);
+        selection.format = selectionFormat;
+        paintContext.selections.push_back(selection);
+    }
 
     painter->save();
-    painter->setFont(bodyFont());
     painter->setClipRect(rect);
-    for (const TextMeasure::Line& line : measure.lines) {
-        if (line.y >= rect.height()) {
-            break;
-        }
-        for (const TextMeasure::Segment& segment : line.segments) {
-            painter->setPen(segment.highlighted ? highlighted : primary);
-            painter->drawText(QPoint(rect.left() + segment.x,
-                                     rect.top() + line.baselineY),
-                              text.mid(segment.start, segment.length));
+    painter->translate(rect.left(), rect.top());
+    textDocument.documentLayout()->draw(painter, paintContext);
+    painter->restore();
+}
+
+void PostCommentDelegate::drawSingleLineText(QPainter* painter,
+                                             const QString& text,
+                                             const QRect& rect,
+                                             TextTargetType target,
+                                             const QString& commentId,
+                                             const QString& replyId,
+                                             const QFont& font) const
+{
+    if (text.isEmpty() || rect.isEmpty()) {
+        return;
+    }
+
+    const QFontMetrics metrics(font);
+    const QColor primary = ThemeManager::instance().color(ThemeColor::PrimaryText);
+    const QColor selectionColor = ThemeManager::instance().isDark()
+            ? QColor(0x4c, 0x82, 0xc5, 150)
+            : QColor(0x8b, 0xb7, 0xff, 130);
+    const int lineHeight = metrics.lineSpacing();
+    const int textY = rect.top() + (rect.height() - lineHeight) / 2;
+
+    painter->save();
+    painter->setFont(font);
+    painter->setClipRect(rect);
+    if (selectionMatches(QModelIndex(m_selectionIndex), target, commentId, replyId) && hasSelection()) {
+        const int start = selectionStart();
+        const int end = selectionEnd();
+        const int x1 = metrics.horizontalAdvance(text.left(start));
+        const int x2 = metrics.horizontalAdvance(text.left(end));
+        if (x2 > x1) {
+            painter->fillRect(QRect(rect.left() + x1,
+                                    textY,
+                                    qMin(x2, rect.width()) - qMin(x1, rect.width()),
+                                    lineHeight),
+                              selectionColor);
         }
     }
+    painter->setPen(primary);
+    painter->drawText(rect, Qt::AlignLeft | Qt::AlignVCenter, text);
     painter->restore();
+}
+
+int PostCommentDelegate::singleLineCharacterIndexAt(const QString& text,
+                                                    const QFont& font,
+                                                    const QRect& rect,
+                                                    const QPoint& point,
+                                                    bool allowLineWhitespace) const
+{
+    if (text.isEmpty() || !rect.adjusted(0, -2, 0, 2).contains(point)) {
+        return -1;
+    }
+
+    QTextLayout layout(text, font);
+    layout.beginLayout();
+    QTextLine line = layout.createLine();
+    if (!line.isValid()) {
+        layout.endLayout();
+        return -1;
+    }
+    line.setLineWidth(qMax(1, rect.width()));
+    layout.endLayout();
+
+    const qreal x = point.x() - rect.left();
+    if (!allowLineWhitespace && (x < 0.0 || x > line.naturalTextWidth() + 2.0)) {
+        return -1;
+    }
+    return qBound(0, line.xToCursor(qBound(0.0, x, static_cast<qreal>(rect.width()))), text.size());
+}
+
+int PostCommentDelegate::measuredCharacterIndexAt(const QString& text,
+                                                  const QFont& font,
+                                                  const QRect& rect,
+                                                  const QPoint& point,
+                                                  bool allowLineWhitespace) const
+{
+    if (text.isEmpty() || rect.isEmpty()) {
+        return -1;
+    }
+
+    if (point.y() < rect.top() || point.y() > rect.bottom()) {
+        return -1;
+    }
+    if (!allowLineWhitespace && !rect.contains(point)) {
+        return -1;
+    }
+
+    QTextDocument textDocument;
+    configurePlainTextDocument(textDocument,
+                               text,
+                               font,
+                               rect.width(),
+                               ThemeManager::instance().color(ThemeColor::PrimaryText),
+                               ThemeManager::instance().color(ThemeColor::Accent),
+                               -1,
+                               0);
+
+    const QPointF local = point - rect.topLeft();
+    if (local.y() < 0) {
+        return allowLineWhitespace ? 0 : -1;
+    }
+    if (local.y() >= qMin<qreal>(textDocument.size().height(), rect.height())) {
+        return allowLineWhitespace ? text.size() : -1;
+    }
+
+    const Qt::HitTestAccuracy accuracy = allowLineWhitespace ? Qt::FuzzyHit : Qt::ExactHit;
+    const int cursor = textDocument.documentLayout()->hitTest(local, accuracy);
+    if (cursor < 0) {
+        return -1;
+    }
+    return qBound(0, cursor, text.size());
+}
+
+QString PostCommentDelegate::textForTarget(const QModelIndex& index,
+                                           TextTargetType target,
+                                           const QString& commentId,
+                                           const QString& replyId) const
+{
+    if (target == PostTitleText &&
+            index.data(PostDetailListModel::ItemTypeRole).toInt() == PostDetailListModel::PostBodyItem) {
+        return index.data(PostDetailListModel::PostTitleTextRole).toString();
+    }
+
+    if (target == PostContentText &&
+            index.data(PostDetailListModel::ItemTypeRole).toInt() == PostDetailListModel::PostBodyItem) {
+        return index.data(PostDetailListModel::PostBodyTextRole).toString();
+    }
+
+    const auto* detailModel = qobject_cast<const PostDetailListModel*>(index.model());
+    if (!detailModel || commentId.isEmpty()) {
+        return {};
+    }
+
+    const PostComment* comment = detailModel->commentById(commentId);
+    if (!comment) {
+        return {};
+    }
+
+    switch (target) {
+    case CommentAuthorText:
+        return comment->authorName;
+    case CommentContentText:
+        return comment->content;
+    case ReplyAuthorText:
+    case ReplyContentText:
+        for (const PostCommentReply& reply : comment->replies) {
+            if (reply.replyId == replyId) {
+                return target == ReplyAuthorText ? reply.authorName : replyDisplayText(reply).text;
+            }
+        }
+        return {};
+    default:
+        return {};
+    }
+}
+
+bool PostCommentDelegate::selectionMatches(const QModelIndex& index,
+                                           TextTargetType target,
+                                           const QString& commentId,
+                                           const QString& replyId) const
+{
+    return m_selectionIndex.isValid() &&
+            m_selectionIndex == index &&
+            m_selectionTarget == target &&
+            m_selectionCommentId == commentId &&
+            m_selectionReplyId == replyId;
+}
+
+int PostCommentDelegate::selectionStart() const
+{
+    return qMin(m_selectionAnchor, m_selectionCursor);
+}
+
+int PostCommentDelegate::selectionEnd() const
+{
+    return qMax(m_selectionAnchor, m_selectionCursor);
 }
 
 void PostCommentDelegate::trimCaches() const

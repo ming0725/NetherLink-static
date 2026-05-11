@@ -7,8 +7,8 @@
 class AiChatMessageListModel;
 class AiChatMessageListView;
 class AiChatFloatingInputBar;
-class QLabel;
-class QTimer;
+class AiChatSessionController;
+class PaintedLabel;
 
 class AiChatConversationWidget : public QWidget
 {
@@ -16,6 +16,7 @@ class AiChatConversationWidget : public QWidget
 
 public:
     explicit AiChatConversationWidget(QWidget* parent = nullptr);
+    void setController(AiChatSessionController* controller);
 
 public slots:
     void openConversation(const AiChatListEntry& entry);
@@ -27,31 +28,37 @@ protected:
 
 private slots:
     void onSendText(const QString& text);
-    void advanceAiReplyStream();
+    void onStopStreamingRequested();
+    void onAiReplyStarted(const QString& conversationId);
+    void onAiReplyMessageAdded(const AiChatMessage& message);
+    void onAiReplyMessageUpdated(const QString& conversationId,
+                                 const QString& messageId,
+                                 const QString& text);
+    void onAiReplyFinished(const QString& conversationId, const QString& messageId);
+    void onAiReplyCanceled(const QString& conversationId, const QString& messageId);
 
 private:
     void updateLayout();
     void updateBottomSpace();
     void updateHeader();
-    void appendAiReply(const QString& prompt);
-    QString randomReplyText(const QString& prompt) const;
-    void finishActiveAiReplyStream();
+    void cancelActiveAiReplyStream();
+    bool hasActiveAiReplyStream() const;
 
+    AiChatSessionController* m_controller = nullptr;
     AiChatMessageListView* m_messageView = nullptr;
     AiChatMessageListModel* m_messageModel = nullptr;
     AiChatFloatingInputBar* m_inputBar = nullptr;
-    QLabel* m_titleLabel = nullptr;
+    PaintedLabel* m_titleLabel = nullptr;
     QWidget* m_headerDivider = nullptr;
     QWidget* m_bottomGapGradientOverlay = nullptr;
-    QLabel* m_emptyLabel = nullptr;
-    QTimer* m_streamTimer = nullptr;
+    PaintedLabel* m_emptyLabel = nullptr;
     AiChatListEntry m_currentConversation;
-    QString m_streamConversationId;
-    QString m_streamMessageId;
-    QString m_streamReplyText;
-    int m_streamOffset = 0;
 
     static constexpr int kHeaderHeight = 62;
+    static constexpr int kHeaderTitleHeight = 28;
+    static constexpr int kHeaderTitleLeft = 20;
+    static constexpr int kHeaderTitleRight = 18;
+    static constexpr int kHeaderTitleBottomMargin = 10;
     static constexpr int kInputBarHeight = 195;
     static constexpr int kInputBarSideMargin = 20;
     static constexpr int kInputBarBottomMargin = 18;

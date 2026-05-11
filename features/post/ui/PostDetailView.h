@@ -2,7 +2,6 @@
 
 #include <QDateTime>
 #include <QMetaObject>
-#include <QPointer>
 #include <QPixmap>
 #include <QRect>
 #include <QSize>
@@ -68,7 +67,6 @@ private:
     void applySummaryState(const PostSummary& summary, bool resetDetailContent);
     void syncUiFromState();
     void syncEngagementUi();
-    void updateDetailTextHeight();
     void loadInitialComments();
     void loadMoreComments();
     void maybeLoadMoreComments();
@@ -94,11 +92,6 @@ private:
     PostCommentDelegate* m_commentDelegate;
     PostSessionController* m_controller = nullptr;
     QMetaObject::Connection m_commentsLoadedConnection;
-    QPointer<QWidget> m_detailTextWidget;
-    QLabel* m_titleLabel;
-    QLabel* m_contentLabel;
-    QLabel* m_postDateLabel;
-    QWidget* m_postDivider;
     QPushButton* m_likeBtn;
     QLabel* m_likeCount;
     QPushButton* m_commentBtn;

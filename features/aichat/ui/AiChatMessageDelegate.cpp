@@ -5,6 +5,8 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QRegularExpression>
+#include <QTextBlock>
+#include <QTextBlockFormat>
 #include <QTextBoundaryFinder>
 #include <QTextCharFormat>
 #include <QTextCursor>
@@ -37,7 +39,7 @@ QColor linkTextColor(bool dark, bool isFromUser)
         return QColor(0xbfe9ff);
     }
 
-    return dark ? QColor(0x6a, 0xb7, 0xff) : QColor(0x1b, 0x6e, 0xd6);
+    return dark ? QColor(0x6ab7ff) : QColor(0x1b6ed6);
 }
 
 QString trimmedUrlText(const QString& text)
@@ -65,8 +67,23 @@ QString trimmedUrlText(const QString& text)
 
 QString documentTextForLayout(QString text)
 {
-    text.replace(QLatin1Char('\n'), QChar::LineSeparator);
+    text.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
+    text.replace(QLatin1Char('\r'), QLatin1Char('\n'));
     return text;
+}
+
+void allowWrappedPreformattedBlocks(QTextDocument& document)
+{
+    for (QTextBlock block = document.begin(); block.isValid(); block = block.next()) {
+        QTextBlockFormat blockFormat = block.blockFormat();
+        if (!blockFormat.nonBreakableLines()) {
+            continue;
+        }
+
+        blockFormat.setNonBreakableLines(false);
+        QTextCursor cursor(block);
+        cursor.setBlockFormat(blockFormat);
+    }
 }
 
 QString textLayoutCacheKey(const QString& text, const QFont& font, int textWidth)
@@ -332,6 +349,10 @@ void AiChatMessageDelegate::paint(QPainter* painter,
                                   const QStyleOptionViewItem& option,
                                   const QModelIndex& index) const
 {
+    if (index.data(AiChatMessageListModel::IsBottomSpaceRole).toBool()) {
+        return;
+    }
+
     const QString text = index.data(AiChatMessageListModel::TextRole).toString();
     if (text.isEmpty()) {
         return;
@@ -346,6 +367,11 @@ void AiChatMessageDelegate::paint(QPainter* painter,
     const QColor bubbleColor = isFromUser
             ? (dark ? QColor(0x1e, 0x86, 0xdf) : ThemeManager::instance().color(ThemeColor::Accent))
             : (dark ? QColor(0x2d, 0x31, 0x38) : ThemeManager::instance().color(ThemeColor::PanelBackground));
+    const bool bubbleSelected = m_bubbleSelectionIndex == index;
+    const QColor effectiveBubbleColor = bubbleSelected
+            ? (isFromUser ? bubbleColor.darker(118)
+                          : (dark ? QColor(0x25, 0x29, 0x30) : QColor(0xea, 0xea, 0xea)))
+            : bubbleColor;
     const QColor textColor = isFromUser
             ? Qt::white
             : ThemeManager::instance().color(ThemeColor::PrimaryText);
@@ -356,7 +382,7 @@ void AiChatMessageDelegate::paint(QPainter* painter,
     const LayoutMetrics metrics = layoutMetrics(option, index);
     QPainterPath bubblePath;
     bubblePath.addRoundedRect(metrics.bubbleRect, kBubbleRadius, kBubbleRadius);
-    painter->fillPath(bubblePath, bubbleColor);
+    painter->fillPath(bubblePath, effectiveBubbleColor);
 
     const QTextDocument& textDocument = cachedTextDocument(text,
                                                            messageFont(),
@@ -381,6 +407,7 @@ void AiChatMessageDelegate::paint(QPainter* painter,
 
     painter->save();
     painter->translate(metrics.textRect.topLeft());
+    painter->setClipRect(QRect(QPoint(0, 0), metrics.textRect.size()));
     textDocument.documentLayout()->draw(painter, paintContext);
     painter->restore();
 
@@ -390,6 +417,11 @@ void AiChatMessageDelegate::paint(QPainter* painter,
 QSize AiChatMessageDelegate::sizeHint(const QStyleOptionViewItem& option,
                                       const QModelIndex& index) const
 {
+    if (index.data(AiChatMessageListModel::IsBottomSpaceRole).toBool()) {
+        return QSize(option.rect.width(),
+                     qMax(0, index.data(AiChatMessageListModel::BottomSpaceHeightRole).toInt()));
+    }
+
     const QString text = index.data(AiChatMessageListModel::TextRole).toString();
     if (text.isEmpty()) {
         return QSize(option.rect.width(), 0);
@@ -403,6 +435,10 @@ bool AiChatMessageDelegate::bubbleHitTest(const QStyleOptionViewItem& option,
                                           const QModelIndex& index,
                                           const QPoint& viewportPos) const
 {
+    if (index.data(AiChatMessageListModel::IsBottomSpaceRole).toBool()) {
+        return false;
+    }
+
     const LayoutMetrics metrics = layoutMetrics(option, index);
     QPainterPath bubblePath;
     bubblePath.addRoundedRect(metrics.bubbleRect, kBubbleRadius, kBubbleRadius);
@@ -414,6 +450,10 @@ int AiChatMessageDelegate::characterIndexAt(const QStyleOptionViewItem& option,
                                             const QPoint& viewportPos,
                                             bool allowLineWhitespace) const
 {
+    if (index.data(AiChatMessageListModel::IsBottomSpaceRole).toBool()) {
+        return -1;
+    }
+
     const QString text = index.data(AiChatMessageListModel::TextRole).toString();
     if (text.isEmpty()) {
         return -1;
@@ -458,24 +498,52 @@ int AiChatMessageDelegate::characterIndexAt(const QStyleOptionViewItem& option,
         return -1;
     }
 
-    return qBound(0, cursor, text.size());
+    return qBound(0, cursor, textDocument.toPlainText().size());
 }
 
 QString AiChatMessageDelegate::urlAt(const QStyleOptionViewItem& option,
                                      const QModelIndex& index,
                                      const QPoint& viewportPos) const
 {
+    if (index.data(AiChatMessageListModel::IsBottomSpaceRole).toBool()) {
+        return {};
+    }
+
     const int cursor = characterIndexAt(option, index, viewportPos);
     if (cursor < 0) {
         return {};
     }
 
     const QString text = index.data(AiChatMessageListModel::TextRole).toString();
-    const QVector<TextRange> urls = cachedUrlRanges(text);
-    for (const TextRange& url : urls) {
-        const int end = url.start + url.length;
-        if (cursor >= url.start && cursor <= end) {
-            return url.text;
+    const LayoutMetrics metrics = layoutMetrics(option, index);
+    if (!metrics.textRect.contains(viewportPos)) {
+        return {};
+    }
+
+    const bool isFromUser = index.data(AiChatMessageListModel::IsFromUserRole).toBool();
+    const bool dark = ThemeManager::instance().isDark();
+    const QColor textColor = isFromUser
+            ? Qt::white
+            : ThemeManager::instance().color(ThemeColor::PrimaryText);
+    const QTextDocument& textDocument = cachedTextDocument(text,
+                                                           messageFont(),
+                                                           metrics.textRect.width(),
+                                                           textColor,
+                                                           isFromUser,
+                                                           dark);
+    const QString anchor = textDocument.documentLayout()->anchorAt(viewportPos - metrics.textRect.topLeft());
+    if (!anchor.isEmpty()) {
+        return anchor;
+    }
+
+    const QString rendered = renderedPlainText(text);
+    if (rendered == text) {
+        const QVector<TextRange> urls = cachedUrlRanges(text);
+        for (const TextRange& url : urls) {
+            const int end = url.start + url.length;
+            if (cursor >= url.start && cursor <= end) {
+                return url.text;
+            }
         }
     }
 
@@ -491,7 +559,7 @@ bool AiChatMessageDelegate::selectWordAt(const QStyleOptionViewItem& option,
         return false;
     }
 
-    const QString text = index.data(AiChatMessageListModel::TextRole).toString();
+    const QString text = renderedPlainText(index.data(AiChatMessageListModel::TextRole).toString());
     const WordRange range = wordRangeAt(text, cursor);
     if (!range.isValid()) {
         return false;
@@ -504,7 +572,8 @@ bool AiChatMessageDelegate::selectWordAt(const QStyleOptionViewItem& option,
 void AiChatMessageDelegate::setSelection(const QModelIndex& index, int anchor, int cursor)
 {
     m_selectionIndex = QPersistentModelIndex(index);
-    const int textLength = index.data(AiChatMessageListModel::TextRole).toString().size();
+    m_bubbleSelectionIndex = QPersistentModelIndex();
+    const int textLength = renderedPlainText(index.data(AiChatMessageListModel::TextRole).toString()).size();
     m_selectionAnchor = qBound(0, anchor, textLength);
     m_selectionCursor = qBound(0, cursor, textLength);
 }
@@ -516,10 +585,26 @@ void AiChatMessageDelegate::clearSelection()
     m_selectionCursor = -1;
 }
 
+void AiChatMessageDelegate::setBubbleSelection(const QModelIndex& index)
+{
+    clearSelection();
+    m_bubbleSelectionIndex = QPersistentModelIndex(index);
+}
+
+void AiChatMessageDelegate::clearBubbleSelection()
+{
+    m_bubbleSelectionIndex = QPersistentModelIndex();
+}
+
 bool AiChatMessageDelegate::hasSelection() const
 {
     return m_selectionIndex.isValid() && m_selectionAnchor >= 0 &&
             m_selectionCursor >= 0 && m_selectionAnchor != m_selectionCursor;
+}
+
+bool AiChatMessageDelegate::hasBubbleSelection() const
+{
+    return m_bubbleSelectionIndex.isValid();
 }
 
 bool AiChatMessageDelegate::selectionContains(const QModelIndex& index, int cursor) const
@@ -537,8 +622,17 @@ QString AiChatMessageDelegate::selectedText() const
         return {};
     }
 
-    const QString text = m_selectionIndex.data(AiChatMessageListModel::TextRole).toString();
+    const QString text = renderedPlainText(m_selectionIndex.data(AiChatMessageListModel::TextRole).toString());
     return text.mid(selectionStart(), selectionEnd() - selectionStart());
+}
+
+QString AiChatMessageDelegate::renderedText(const QModelIndex& index) const
+{
+    if (!index.isValid()) {
+        return {};
+    }
+
+    return renderedPlainText(index.data(AiChatMessageListModel::TextRole).toString());
 }
 
 QPersistentModelIndex AiChatMessageDelegate::selectionIndex() const
@@ -585,7 +679,13 @@ void AiChatMessageDelegate::configureTextDocument(QTextDocument& document,
     QTextOption textOption;
     textOption.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
     document.setDefaultTextOption(textOption);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    document.setMarkdown(documentTextForLayout(text));
+    allowWrappedPreformattedBlocks(document);
+#else
     document.setPlainText(documentTextForLayout(text));
+#endif
+    document.setDefaultTextOption(textOption);
     document.setTextWidth(qMax(1, textWidth));
 
     QTextCursor cursor(&document);
@@ -595,16 +695,28 @@ void AiChatMessageDelegate::configureTextDocument(QTextDocument& document,
     cursor.mergeCharFormat(textFormat);
 
     const QColor urlColor = linkTextColor(dark, isFromUser);
-    const QVector<TextRange> urls = cachedUrlRanges(text);
-    for (const TextRange& url : urls) {
-        QTextCharFormat linkFormat;
-        linkFormat.setForeground(urlColor);
-        linkFormat.setUnderlineStyle(QTextCharFormat::SingleUnderline);
+    QTextCharFormat linkFormat;
+    linkFormat.setForeground(urlColor);
+    linkFormat.setUnderlineStyle(QTextCharFormat::SingleUnderline);
 
-        cursor.clearSelection();
-        cursor.setPosition(url.start);
-        cursor.setPosition(url.start + url.length, QTextCursor::KeepAnchor);
-        cursor.mergeCharFormat(linkFormat);
+    const int characterCount = qMax(0, document.characterCount() - 1);
+    for (int position = 0; position < characterCount; ++position) {
+        QTextCursor charCursor(&document);
+        charCursor.setPosition(position);
+        charCursor.setPosition(position + 1, QTextCursor::KeepAnchor);
+        if (charCursor.charFormat().isAnchor()) {
+            charCursor.mergeCharFormat(linkFormat);
+        }
+    }
+
+    if (document.toPlainText() == text) {
+        const QVector<TextRange> urls = cachedUrlRanges(text);
+        for (const TextRange& url : urls) {
+            cursor.clearSelection();
+            cursor.setPosition(url.start);
+            cursor.setPosition(url.start + url.length, QTextCursor::KeepAnchor);
+            cursor.mergeCharFormat(linkFormat);
+        }
     }
 }
 
@@ -618,15 +730,13 @@ QSize AiChatMessageDelegate::textDocumentSize(const QString& text,
     }
 
     QTextDocument textDocument;
-    textDocument.setUndoRedoEnabled(false);
-    textDocument.setDocumentMargin(0);
-    textDocument.setDefaultFont(font);
-
-    QTextOption textOption;
-    textOption.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-    textDocument.setDefaultTextOption(textOption);
-    textDocument.setPlainText(documentTextForLayout(text));
-    textDocument.setTextWidth(qMax(1, maxTextWidth));
+    configureTextDocument(textDocument,
+                          text,
+                          font,
+                          maxTextWidth,
+                          Qt::black,
+                          false,
+                          false);
 
     const int width = qMin(qCeil(textDocument.idealWidth()), maxTextWidth);
     const int height = qCeil(textDocument.size().height());
@@ -699,6 +809,17 @@ QVector<AiChatMessageDelegate::TextRange> AiChatMessageDelegate::urlRanges(const
         ranges.push_back(range);
     }
     return ranges;
+}
+
+QString AiChatMessageDelegate::renderedPlainText(const QString& text) const
+{
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    QTextDocument document;
+    document.setMarkdown(documentTextForLayout(text));
+    return document.toPlainText();
+#else
+    return documentTextForLayout(text);
+#endif
 }
 
 QFont AiChatMessageDelegate::messageFont() const

@@ -36,8 +36,10 @@ private:
     QStyleOptionViewItem viewOptionForIndex(const QModelIndex& index) const;
     int characterIndexForDrag(const QModelIndex& index, const QPoint& pos) const;
     void copySelectionToClipboard();
+    void copyBubbleToClipboard(const QModelIndex& index);
     void selectAllTextInActiveBubble();
     void showSelectionMenu(const QPoint& globalPos);
+    void showBubbleMenu(const QPoint& globalPos, const QModelIndex& index);
     void showUrlMenu(const QPoint& globalPos, const QString& url);
     void openUrl(const QString& url);
 

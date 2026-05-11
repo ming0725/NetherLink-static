@@ -1,4 +1,5 @@
 #include "AiChatApplication.h"
+#include "features/aichat/ui/AiChatSessionController.h"
 #include "shared/ui/TransparentSplitter.h"
 #include "shared/theme/ThemeManager.h"
 #include <QPainter>
@@ -7,9 +8,12 @@ AiChatApplication::AiChatApplication(QWidget* parent)
     : QWidget(parent)
 {
     m_leftPane    = new LeftPane(this);
+    m_controller  = new AiChatSessionController(this);
 
     // 2) 右侧 AI 对话页
     m_conversationWidget = new AiChatConversationWidget(this);
+    m_leftPane->setController(m_controller);
+    m_conversationWidget->setController(m_controller);
 
     // 3) 分割器：将左、右面板加入
     m_splitter    = new TransparentSplitter(Qt::Horizontal, this);

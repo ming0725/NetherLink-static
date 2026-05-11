@@ -862,11 +862,6 @@ void syncBar(QWidget* widget,
              double opacity)
 {
     const Appearance current = appearance();
-    NSLog(@"[NetherLink][PostBarBridge] syncBar widget=%p appearance=%d visible=%d opacity=%.3f",
-          widget,
-          static_cast<int>(current),
-          widget ? widget->isVisible() : false,
-          opacity);
     if (!widget || current == Appearance::Unsupported || !widget->isVisible()) {
         clearBar(widget);
         return;
@@ -920,7 +915,6 @@ void syncBar(QWidget* widget,
 
 void clearBar(QWidget* widget)
 {
-    NSLog(@"[NetherLink][PostBarBridge] clearBar widget=%p", widget);
     NSView* hostView = topLevelQtViewForWidget(widget, false);
     if (hostView) {
         clearButtons(hostView);

@@ -3,6 +3,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QClipboard>
+#include <QColor>
 #include <QDesktopServices>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -12,6 +13,7 @@
 #include <QUrl>
 
 #include "AiChatMessageDelegate.h"
+#include "features/aichat/model/AiChatMessageListModel.h"
 #include "shared/ui/StyledActionMenu.h"
 
 namespace {
@@ -60,17 +62,24 @@ void AiChatMessageListView::scrollToBottom()
 
 void AiChatMessageListView::clearTextSelection()
 {
-    if (!m_delegate->hasSelection() && !m_delegate->selectionIndex().isValid()) {
+    if (!m_delegate->hasSelection() &&
+            !m_delegate->selectionIndex().isValid() &&
+            !m_delegate->hasBubbleSelection()) {
         return;
     }
 
     m_delegate->clearSelection();
+    m_delegate->clearBubbleSelection();
     viewport()->update();
 }
 
 void AiChatMessageListView::setBottomViewportMargin(int margin)
 {
-    setViewportMargins(0, 0, 0, qMax(0, margin));
+    if (auto* messageModel = qobject_cast<AiChatMessageListModel*>(model())) {
+        messageModel->setBottomSpaceHeight(qMax(0, margin));
+        doItemsLayout();
+        updateGeometries();
+    }
     updateOverlayScrollBar();
 }
 
@@ -99,6 +108,8 @@ void AiChatMessageListView::mousePressEvent(QMouseEvent* event)
             const QStyleOptionViewItem option = viewOptionForIndex(index);
             const QString url = m_delegate->urlAt(option, index, event->pos());
             if (!url.isEmpty()) {
+                m_delegate->clearBubbleSelection();
+                viewport()->update();
                 showUrlMenu(mouseGlobalPosition(event), url);
                 event->accept();
                 return;
@@ -110,7 +121,19 @@ void AiChatMessageListView::mousePressEvent(QMouseEvent* event)
                 event->accept();
                 return;
             }
+
+            if (m_delegate->bubbleHitTest(option, index, event->pos())) {
+                setFocus(Qt::MouseFocusReason);
+                m_activeBubbleIndex = QPersistentModelIndex(index);
+                m_delegate->setBubbleSelection(index);
+                viewport()->update();
+                showBubbleMenu(mouseGlobalPosition(event), index);
+                event->accept();
+                return;
+            }
         }
+
+        clearTextSelection();
     }
 
     if (event->button() == Qt::LeftButton) {
@@ -128,6 +151,8 @@ void AiChatMessageListView::mousePressEvent(QMouseEvent* event)
 
             const QString url = m_delegate->urlAt(option, index, event->pos());
             if (!url.isEmpty()) {
+                m_delegate->clearBubbleSelection();
+                viewport()->update();
                 m_pressedUrlIndex = QPersistentModelIndex(index);
                 m_pressedUrlPos = event->pos();
                 m_pressedUrl = url;
@@ -137,6 +162,7 @@ void AiChatMessageListView::mousePressEvent(QMouseEvent* event)
 
             const int cursor = m_delegate->characterIndexAt(option, index, event->pos());
             if (cursor >= 0) {
+                m_delegate->clearBubbleSelection();
                 m_dragging = true;
                 m_dragIndex = QPersistentModelIndex(index);
                 m_dragAnchor = cursor;
@@ -297,7 +323,7 @@ int AiChatMessageListView::characterIndexForDrag(const QModelIndex& index, const
     }
 
     const QRect itemRect = visualRect(index);
-    const QString text = index.data(Qt::DisplayRole).toString();
+    const QString text = m_delegate->renderedText(index);
     if (pos.y() <= itemRect.top()) {
         return 0;
     }
@@ -317,13 +343,23 @@ void AiChatMessageListView::copySelectionToClipboard()
     QApplication::clipboard()->setText(selectedText);
 }
 
+void AiChatMessageListView::copyBubbleToClipboard(const QModelIndex& index)
+{
+    const QString text = m_delegate->renderedText(index);
+    if (text.isEmpty()) {
+        return;
+    }
+
+    QApplication::clipboard()->setText(text);
+}
+
 void AiChatMessageListView::selectAllTextInActiveBubble()
 {
     if (!m_activeBubbleIndex.isValid()) {
         return;
     }
 
-    const QString text = m_activeBubbleIndex.data(Qt::DisplayRole).toString();
+    const QString text = m_delegate->renderedText(m_activeBubbleIndex);
     if (text.isEmpty()) {
         return;
     }
@@ -341,9 +377,28 @@ void AiChatMessageListView::showSelectionMenu(const QPoint& globalPos)
         copySelectionToClipboard();
     });
 
-    menu->addAction(QStringLiteral("搜索引用"));
-
     connect(menu, &QMenu::aboutToHide, menu, [menu]() {
+        menu->deleteLater();
+    });
+
+    menu->popupWhenMouseReleased(globalPos);
+}
+
+void AiChatMessageListView::showBubbleMenu(const QPoint& globalPos, const QModelIndex& index)
+{
+    auto* menu = new StyledActionMenu(this);
+    const QPersistentModelIndex persistentIndex(index);
+
+    QAction* copyAction = menu->addAction(QStringLiteral("复制"));
+    connect(copyAction, &QAction::triggered, this, [this, persistentIndex]() {
+        if (persistentIndex.isValid()) {
+            copyBubbleToClipboard(persistentIndex);
+        }
+    });
+
+    connect(menu, &QMenu::aboutToHide, menu, [this, menu]() {
+        m_delegate->clearBubbleSelection();
+        viewport()->update();
         menu->deleteLater();
     });
 

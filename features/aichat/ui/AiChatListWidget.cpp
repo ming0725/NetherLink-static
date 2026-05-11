@@ -1,21 +1,36 @@
 #include "AiChatListWidget.h"
 
 #include <QApplication>
+#include <QAction>
 #include <QCursor>
 #include <QInputDialog>
 #include <QItemSelectionModel>
 #include <QLineEdit>
-#include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPersistentModelIndex>
 #include <QScrollBar>
 #include <QStyleOptionViewItem>
 #include <QTimer>
 
-#include "features/aichat/data/AiChatRepository.h"
 #include "AiChatListDelegate.h"
 #include "features/aichat/model/AiChatListModel.h"
+#include "features/aichat/ui/AiChatSessionController.h"
 #include "shared/theme/ThemeManager.h"
+#include "shared/ui/StyledActionMenu.h"
+
+namespace {
+
+QPoint mouseGlobalPosition(QMouseEvent* event)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    return event->globalPosition().toPoint();
+#else
+    return event->globalPos();
+#endif
+}
+
+} // namespace
 
 AiChatListWidget::AiChatListWidget(QWidget* parent)
     : OverlayScrollListView(parent)
@@ -56,6 +71,33 @@ AiChatListWidget::AiChatListWidget(QWidget* parent)
     updateStickyHeader();
 }
 
+void AiChatListWidget::setController(AiChatSessionController* controller)
+{
+    if (m_controller == controller) {
+        return;
+    }
+
+    if (m_controller) {
+        disconnect(m_controller, nullptr, this, nullptr);
+    }
+
+    m_controller = controller;
+    if (!m_controller) {
+        m_model->setEntries({});
+        m_initialized = false;
+        return;
+    }
+
+    connect(m_controller, &AiChatSessionController::conversationsChanged, this, [this]() {
+        if (!m_initialized) {
+            return;
+        }
+
+        const QString selectedConversationId = currentIndex().data(AiChatListModel::ConversationIdRole).toString();
+        reloadEntries(selectedConversationId);
+    });
+}
+
 void AiChatListWidget::ensureInitialized()
 {
     if (m_initialized) {
@@ -69,7 +111,11 @@ void AiChatListWidget::ensureInitialized()
 
 void AiChatListWidget::createNewConversation()
 {
-    const QString conversationId = AiChatRepository::instance().createAiChatConversation(QStringLiteral("新对话"));
+    if (!m_controller) {
+        return;
+    }
+
+    const QString conversationId = m_controller->createConversation(QStringLiteral("新对话"));
     if (conversationId.isEmpty()) {
         return;
     }
@@ -120,11 +166,11 @@ void AiChatListWidget::reloadEntries(const QString& selectedConversationId)
 
 void AiChatListWidget::loadMoreEntries()
 {
-    if (!m_hasMore) {
+    if (!m_controller || !m_hasMore) {
         return;
     }
 
-    QVector<AiChatListEntry> entries = AiChatRepository::instance().requestAiChatList({
+    QVector<AiChatListEntry> entries = m_controller->loadConversations({
             m_nextOffset,
             kPageSize + 1
     });
@@ -150,10 +196,23 @@ void AiChatListWidget::mousePressEvent(QMouseEvent* event)
         if (index.isValid()) {
             QStyleOptionViewItem option = viewOptionForIndex(index);
             if (m_delegate->moreButtonRect(option, index).contains(event->pos())) {
-                showItemMenu(index);
+                showItemMenu(index, viewport()->mapToGlobal(m_delegate->moreButtonRect(option, index).bottomLeft()));
                 event->accept();
                 return;
             }
+        }
+    }
+
+    if (event->button() == Qt::RightButton) {
+        const QModelIndex index = indexAt(event->pos());
+        if (index.isValid()) {
+            if (selectionModel()) {
+                selectionModel()->setCurrentIndex(index,
+                                                  QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+            }
+            showItemMenu(index, mouseGlobalPosition(event));
+            event->accept();
+            return;
         }
     }
 
@@ -277,25 +336,35 @@ QStyleOptionViewItem AiChatListWidget::viewOptionForIndex(const QModelIndex& ind
     return option;
 }
 
-void AiChatListWidget::showItemMenu(const QModelIndex& index)
+void AiChatListWidget::showItemMenu(const QModelIndex& index, const QPoint& globalPos)
 {
     if (!index.isValid()) {
         return;
     }
 
-    QStyleOptionViewItem option = viewOptionForIndex(index);
-    const QRect buttonRect = m_delegate->moreButtonRect(option, index);
+    auto* menu = new StyledActionMenu(this);
+    const QPersistentModelIndex persistentIndex(index);
 
-    QMenu menu(this);
-    QAction* renameAction = menu.addAction(QStringLiteral("重命名"));
-    QAction* deleteAction = menu.addAction(QStringLiteral("删除"));
+    QAction* renameAction = menu->addAction(QStringLiteral("重命名"));
+    connect(renameAction, &QAction::triggered, this, [this, persistentIndex]() {
+        if (persistentIndex.isValid()) {
+            renameItem(persistentIndex);
+        }
+    });
 
-    QAction* selectedAction = menu.exec(viewport()->mapToGlobal(buttonRect.bottomLeft()));
-    if (selectedAction == renameAction) {
-        renameItem(index);
-    } else if (selectedAction == deleteAction) {
-        deleteItem(index);
-    }
+    QAction* deleteAction = menu->addAction(QStringLiteral("删除"));
+    StyledActionMenu::setActionColors(deleteAction,
+                                      QColor(235, 87, 87),
+                                      QColor(255, 255, 255),
+                                      QColor(235, 87, 87));
+    connect(deleteAction, &QAction::triggered, this, [this, persistentIndex]() {
+        if (persistentIndex.isValid()) {
+            deleteItem(persistentIndex);
+        }
+    });
+
+    connect(menu, &QMenu::aboutToHide, menu, &QObject::deleteLater);
+    menu->popupWhenMouseReleased(globalPos);
 }
 
 void AiChatListWidget::renameItem(const QModelIndex& index)
@@ -316,7 +385,7 @@ void AiChatListWidget::renameItem(const QModelIndex& index)
         return;
     }
 
-    if (AiChatRepository::instance().renameAiChatConversation(entry.conversationId, newTitle)) {
+    if (m_controller && m_controller->renameConversation(entry.conversationId, newTitle)) {
         reloadEntries(entry.conversationId);
     }
 }
@@ -341,7 +410,7 @@ void AiChatListWidget::deleteItem(const QModelIndex& index)
         }
     }
 
-    if (!AiChatRepository::instance().removeAiChatConversation(removedId)) {
+    if (!m_controller || !m_controller->deleteConversation(removedId)) {
         return;
     }
 

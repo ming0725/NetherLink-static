@@ -42,6 +42,7 @@ MessageApplication::LeftPane::LeftPane(QWidget* parent)
         menu->setItemHoverColor(QColor(238, 238, 238));
         menu->addAction(QStringLiteral("添加好友"));
         menu->addAction(QStringLiteral("添加群聊"));
+        menu->addSeparator();
         menu->addAction(QStringLiteral("创建群聊"));
 
         connect(menu, &QMenu::aboutToHide, this, [this, menu]() {

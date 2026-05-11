@@ -1,5 +1,6 @@
 #include "AiChatFloatingInputBar.h"
 
+#include <QAbstractButton>
 #include <QEvent>
 #include <QGraphicsDropShadowEffect>
 #include <QKeyEvent>
@@ -7,14 +8,53 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPalette>
+#include <QPixmap>
 #include <QResizeEvent>
 #include <QTextCursor>
-#include <QTextDocument>
 #include <QTextOption>
 
 #include "shared/theme/ThemeManager.h"
+#include "shared/ui/TransparentTextEdit.h"
 
 namespace {
+
+constexpr int kLightPanelAlpha = 100;
+constexpr int kDarkPanelAlpha = 150;
+
+class IconOnlyButton : public QAbstractButton
+{
+public:
+    explicit IconOnlyButton(QWidget* parent = nullptr)
+        : QAbstractButton(parent)
+    {
+        setCursor(Qt::PointingHandCursor);
+        setFocusPolicy(Qt::NoFocus);
+    }
+
+    void setIconPixmap(const QPixmap& pixmap)
+    {
+        m_pixmap = pixmap;
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent* event) override
+    {
+        Q_UNUSED(event);
+        if (m_pixmap.isNull()) {
+            return;
+        }
+
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
+        const int side = qMin(width(), height());
+        const QRect target((width() - side) / 2, (height() - side) / 2, side, side);
+        painter.drawPixmap(target, m_pixmap);
+    }
+
+private:
+    QPixmap m_pixmap;
+};
 
 QString submittedText(QString text)
 {
@@ -27,10 +67,12 @@ QString submittedText(QString text)
 
 AiChatFloatingInputBar::AiChatFloatingInputBar(QWidget* parent)
     : QWidget(parent)
-    , m_inputEdit(new QTextEdit(this))
+    , m_inputEdit(new TransparentTextEdit(this))
+    , m_actionButton(new IconOnlyButton(this))
 {
     setAutoFillBackground(false);
     setAttribute(Qt::WA_TranslucentBackground);
+    setAttribute(Qt::WA_NoSystemBackground);
     setWindowFlags(Qt::FramelessWindowHint);
     setFocusPolicy(Qt::StrongFocus);
 
@@ -42,11 +84,17 @@ AiChatFloatingInputBar::AiChatFloatingInputBar(QWidget* parent)
     m_inputEdit->setLineWrapMode(QTextEdit::WidgetWidth);
     m_inputEdit->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
     m_inputEdit->setMinimumHeight(60);
-    m_inputEdit->document()->setDocumentMargin(0);
+    m_inputEdit->setViewportPadding(kInputTextHorizontalPadding,
+                                    kInputTextTopPadding,
+                                    kInputTextHorizontalPadding,
+                                    kInputTextBottomPadding);
     m_inputEdit->viewport()->setCursor(Qt::IBeamCursor);
     m_inputEdit->installEventFilter(this);
     m_inputEdit->viewport()->installEventFilter(this);
     setFocusProxy(m_inputEdit);
+
+    connect(m_actionButton, &QAbstractButton::clicked,
+            this, &AiChatFloatingInputBar::onActionButtonClicked);
 
     QFont font = m_inputEdit->font();
     font.setPixelSize(14);
@@ -64,6 +112,7 @@ AiChatFloatingInputBar::AiChatFloatingInputBar(QWidget* parent)
             this, &AiChatFloatingInputBar::applyTheme);
 
     applyTheme();
+    updateActionButtonIcon();
     updateInputGeometry();
 }
 
@@ -71,6 +120,16 @@ void AiChatFloatingInputBar::focusInput()
 {
     m_inputEdit->setFocus();
     m_inputEdit->moveCursor(QTextCursor::End);
+}
+
+void AiChatFloatingInputBar::setStreaming(bool streaming)
+{
+    if (m_streaming == streaming) {
+        return;
+    }
+
+    m_streaming = streaming;
+    updateActionButtonIcon();
 }
 
 bool AiChatFloatingInputBar::eventFilter(QObject* watched, QEvent* event)
@@ -117,7 +176,7 @@ void AiChatFloatingInputBar::paintEvent(QPaintEvent* event)
     path.addRoundedRect(rect(), kCornerRadius, kCornerRadius);
 
     QColor background = ThemeManager::instance().color(ThemeColor::PanelBackground);
-    background.setAlpha(ThemeManager::instance().isDark() ? 190 : 100);
+    background.setAlpha(ThemeManager::instance().isDark() ? kDarkPanelAlpha : kLightPanelAlpha);
     painter.fillPath(path, background);
 }
 
@@ -138,25 +197,25 @@ void AiChatFloatingInputBar::applyTheme()
     palette.setColor(QPalette::HighlightedText, Qt::white);
     m_inputEdit->setPalette(palette);
 
-    m_inputEdit->setStyleSheet(QStringLiteral(
-            "QTextEdit {"
-            "   border: none;"
-            "   background: transparent;"
-            "   padding: %1px %2px %3px %2px;"
-            "}"
-            "QScrollBar:vertical {"
-            "   border: none;"
-            "   background: transparent;"
-            "}"
-    ).arg(kInputTextTopPadding)
-     .arg(kInputTextHorizontalPadding)
-     .arg(kInputTextBottomPadding));
-
     update();
+}
+
+void AiChatFloatingInputBar::onActionButtonClicked()
+{
+    if (m_streaming) {
+        emit stopStreamingRequested();
+        return;
+    }
+
+    sendCurrentText();
 }
 
 void AiChatFloatingInputBar::sendCurrentText()
 {
+    if (m_streaming) {
+        return;
+    }
+
     const QString text = submittedText(m_inputEdit->toPlainText());
     if (text.isEmpty()) {
         return;
@@ -167,10 +226,25 @@ void AiChatFloatingInputBar::sendCurrentText()
     focusInput();
 }
 
+void AiChatFloatingInputBar::updateActionButtonIcon()
+{
+    const QString iconPath = m_streaming
+            ? QStringLiteral(":/resources/icon/offline.png")
+            : QStringLiteral(":/resources/icon/book_and_pen.png");
+
+    if (auto* iconButton = dynamic_cast<IconOnlyButton*>(m_actionButton)) {
+        iconButton->setIconPixmap(QPixmap(iconPath));
+    }
+}
+
 void AiChatFloatingInputBar::updateInputGeometry()
 {
     m_inputEdit->setGeometry(kInputLeftMargin,
                              kInputTopMargin,
                              qMax(0, width() - kInputLeftMargin - kInputRightPadding),
                              qMax(0, height() - kInputTopMargin - kInputBottomMargin));
+    m_actionButton->setGeometry(qMax(0, width() - kActionButtonRightMargin - kActionButtonSize),
+                                qMax(0, height() - kActionButtonBottomMargin - kActionButtonSize),
+                                kActionButtonSize,
+                                kActionButtonSize);
 }

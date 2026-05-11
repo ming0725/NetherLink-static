@@ -8,7 +8,6 @@
 #include <QPushButton>
 #include <QScrollBar>
 #include <QTimer>
-#include <QVBoxLayout>
 #include <QVariantAnimation>
 
 #include "features/post/model/PostDetailListModel.h"
@@ -113,26 +112,6 @@ protected:
 private:
     bool m_hovered = false;
     bool m_pressed = false;
-};
-
-class ShortDivider final : public QWidget
-{
-public:
-    explicit ShortDivider(QWidget* parent = nullptr)
-        : QWidget(parent)
-    {
-        setFixedHeight(12);
-    }
-
-protected:
-    void paintEvent(QPaintEvent*) override
-    {
-        QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing);
-        painter.setPen(QPen(ThemeManager::instance().color(ThemeColor::Divider), 1));
-        const int y = height() / 2;
-        painter.drawLine(0, y, width() , y);
-    }
 };
 
 void setWidgetTextColor(QWidget* widget, const QColor& color)
@@ -256,53 +235,6 @@ void PostDetailView::setupUI()
     disableContextMenu(m_contentList);
     disableContextMenu(m_contentList->viewport());
 
-    m_detailTextWidget = new QWidget;
-    m_detailTextWidget->setContextMenuPolicy(Qt::NoContextMenu);
-    m_detailTextWidget->setAutoFillBackground(false);
-    auto* detailLayout = new QVBoxLayout(m_detailTextWidget);
-    detailLayout->setContentsMargins(20, 20, 20, 16);
-    detailLayout->setSpacing(16);
-
-    m_titleLabel = new QLabel(m_detailTextWidget);
-    disableContextMenu(m_titleLabel);
-    m_titleLabel->setWordWrap(true);
-    m_titleLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    QFont titleFont;
-    titleFont.setStyleStrategy(QFont::PreferAntialias);
-    titleFont.setPointSize(16);
-    titleFont.setBold(true);
-    m_titleLabel->setFont(titleFont);
-    setWidgetTextColor(m_titleLabel, ThemeManager::instance().color(ThemeColor::PrimaryText));
-    detailLayout->addWidget(m_titleLabel);
-
-    m_contentLabel = new QLabel(m_detailTextWidget);
-    disableContextMenu(m_contentLabel);
-    m_contentLabel->setWordWrap(true);
-    m_contentLabel->setTextFormat(Qt::PlainText);
-    m_contentLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-    m_contentLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    QFont contentFont;
-    contentFont.setStyleStrategy(QFont::PreferAntialias);
-    contentFont.setPointSize(13);
-    m_contentLabel->setFont(contentFont);
-    setWidgetTextColor(m_contentLabel, ThemeManager::instance().color(ThemeColor::SecondaryText));
-    detailLayout->addWidget(m_contentLabel);
-
-    m_postDateLabel = new QLabel(m_detailTextWidget);
-    disableContextMenu(m_postDateLabel);
-    m_postDateLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    QFont postDateFont;
-    postDateFont.setStyleStrategy(QFont::PreferAntialias);
-    postDateFont.setPointSize(11);
-    m_postDateLabel->setFont(postDateFont);
-    setWidgetTextColor(m_postDateLabel, ThemeManager::instance().color(ThemeColor::TertiaryText));
-    detailLayout->addWidget(m_postDateLabel);
-
-    m_postDivider = new ShortDivider(m_detailTextWidget);
-    disableContextMenu(m_postDivider);
-    detailLayout->addWidget(m_postDivider);
-
-    m_contentList->setIndexWidget(m_detailModel->index(0, 0), m_detailTextWidget);
     connect(m_detailModel, &QAbstractItemModel::dataChanged,
             this, [this](const QModelIndex& topLeft,
                          const QModelIndex& bottomRight,
@@ -310,7 +242,7 @@ void PostDetailView::setupUI()
         if (m_contentList) {
             const bool needsLayout = roles.isEmpty()
                     || topLeft.row() == 0
-                    || roles.contains(PostDetailListModel::DetailHeightRole)
+                    || roles.contains(PostDetailListModel::PostBodyRevisionRole)
                     || roles.contains(PostDetailListModel::CommentLayoutRole)
                     || roles.contains(PostDetailListModel::CommentEngagementRole);
             if (needsLayout) {
@@ -360,6 +292,12 @@ void PostDetailView::setupUI()
 
     connect(m_likeBtn, &QPushButton::clicked, this, [this]() {
         emit likeClicked(!m_state.isLiked);
+    });
+    connect(m_commentBtn, &QPushButton::clicked, this, [this]() {
+        if (!m_replyTarget.commentId.isEmpty()) {
+            clearReplyTarget();
+        }
+        m_commentLineEdit->setFocus();
     });
     connect(m_contentList, &PostDetailListView::commentLikeRequested, this, [this](const QString& commentId, bool liked) {
         if ((m_controller && m_controller->setCommentLiked(commentId, liked))
@@ -518,15 +456,12 @@ void PostDetailView::updateLayout()
     x += 40;
     m_commentCount->setGeometry(x - 10, btnY, 50, 32);
     m_contentList->setGeometry(0, topH, rightW, h - topH - bottomH);
-    updateDetailTextHeight();
+    m_contentList->doItemsLayout();
 }
 
 void PostDetailView::applyTheme()
 {
     setWidgetTextColor(m_authorName, ThemeManager::instance().color(ThemeColor::PrimaryText));
-    setWidgetTextColor(m_titleLabel, ThemeManager::instance().color(ThemeColor::PrimaryText));
-    setWidgetTextColor(m_contentLabel, ThemeManager::instance().color(ThemeColor::SecondaryText));
-    setWidgetTextColor(m_postDateLabel, ThemeManager::instance().color(ThemeColor::TertiaryText));
     setWidgetTextColor(m_likeCount, ThemeManager::instance().color(ThemeColor::SecondaryText));
     setWidgetTextColor(m_commentCount, ThemeManager::instance().color(ThemeColor::SecondaryText));
     if (auto* followButton = qobject_cast<StatefulPushButton*>(m_followBtn)) {
@@ -571,7 +506,6 @@ void PostDetailView::setPostData(const PostDetailData& data)
     }
     m_state.fullImageOpacity = 0.0;
 
-    syncUiFromState();
     if (postChanged) {
         clearReplyTarget();
         m_commentsRequestId.clear();
@@ -580,6 +514,7 @@ void PostDetailView::setPostData(const PostDetailData& data)
         m_pendingLoadMoreCheck = false;
         m_detailModel->resetForPost(m_state.postId);
     }
+    syncUiFromState();
     loadInitialComments();
 
     auto* imageFade = new QVariantAnimation(this);
@@ -641,14 +576,12 @@ void PostDetailView::syncUiFromState()
     m_authorName->setText(m_state.authorName);
     m_authorAvatar->setPixmap(ImageService::instance().circularAvatar(m_state.authorAvatarPath, 32));
     m_followBtn->setText(m_state.isFollowed ? "已关注" : "关注");
-    m_titleLabel->setText(m_state.title);
-    m_contentLabel->setText(m_state.content);
     const QString contentDateText = postDateText(m_state.contentCreatedAt);
-    m_postDateLabel->setText(contentDateText);
-    m_postDateLabel->setVisible(!contentDateText.isEmpty());
+    if (m_detailModel) {
+        m_detailModel->setPostBody(m_state.title, m_state.content, contentDateText);
+    }
     syncEngagementUi();
     updateLayout();
-    updateDetailTextHeight();
     update();
 }
 
@@ -660,24 +593,6 @@ void PostDetailView::syncEngagementUi()
                                                 : ":/resources/icon/heart.png")));
     m_likeCount->setText(QString::number(m_state.likeCount));
     m_commentCount->setText(QString::number(m_state.commentCount));
-}
-
-void PostDetailView::updateDetailTextHeight()
-{
-    if (!m_detailTextWidget || !m_detailModel || !m_contentList) {
-        return;
-    }
-
-    const int width = qMax(1, m_contentList->viewport()->width());
-    m_detailTextWidget->setFixedWidth(width);
-    if (auto* layout = m_detailTextWidget->layout()) {
-        layout->invalidate();
-        layout->activate();
-    }
-    const int height = qMax(1, m_detailTextWidget->sizeHint().height());
-    m_detailTextWidget->setFixedHeight(height);
-    m_detailModel->setDetailHeight(height);
-    m_contentList->doItemsLayout();
 }
 
 void PostDetailView::loadInitialComments()

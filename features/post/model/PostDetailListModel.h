@@ -13,18 +13,21 @@ class PostDetailListModel : public QAbstractListModel
 
 public:
     enum ItemType {
-        DetailItem,
+        PostBodyItem,
         CommentItem
     };
 
     enum Role {
         ItemTypeRole = Qt::UserRole + 1,
-        DetailHeightRole,
         CommentIdRole,
         CommentRole,
         CommentRevisionRole,
         CommentEngagementRole,
-        CommentLayoutRole
+        CommentLayoutRole,
+        PostTitleTextRole,
+        PostBodyTextRole,
+        PostBodyDateTextRole,
+        PostBodyRevisionRole
     };
 
     explicit PostDetailListModel(QObject* parent = nullptr);
@@ -34,13 +37,12 @@ public:
     Qt::ItemFlags flags(const QModelIndex& index) const override;
 
     void resetForPost(const QString& postId);
-    void setDetailHeight(int height);
+    void setPostBody(QString title, QString text, QString dateText);
     void setComments(QVector<PostComment> comments, bool hasMore);
     void appendComments(const QVector<PostComment>& comments, bool hasMore);
     bool hasMoreComments() const;
     int commentCount() const;
 
-    bool isDetailIndex(const QModelIndex& index) const;
     PostComment commentAt(const QModelIndex& index) const;
     const PostComment* commentAtIndex(const QModelIndex& index) const;
     PostComment* commentById(const QString& commentId);
@@ -70,6 +72,9 @@ private:
     QSet<QString> m_expandedComments;
     QSet<QString> m_expandedReplies;
     QMap<QString, int> m_visibleReplyCounts;
-    int m_detailHeight = 1;
+    QString m_postTitleText;
+    QString m_postBodyText;
+    QString m_postBodyDateText;
+    int m_postBodyRevision = 0;
     bool m_hasMoreComments = false;
 };

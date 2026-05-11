@@ -14,6 +14,13 @@ QString normalizedMessageText(QString text)
     return text.trimmed();
 }
 
+QString normalizedAiMessageText(QString text)
+{
+    text.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
+    text.replace(QLatin1Char('\r'), QLatin1Char('\n'));
+    return text;
+}
+
 } // namespace
 
 AiChatRepository::AiChatRepository(QObject* parent)
@@ -91,7 +98,7 @@ QString AiChatRepository::createAiChatConversation(const QString& title, const Q
             {
                     QStringLiteral("ai-message-%1").arg(m_nextMessageId++),
                     conversationId,
-                    QStringLiteral("你好，我是 AI 助手。可以直接在下方输入内容开始对话。"),
+                    QStringLiteral("**你好，我是 AI 助手。**\n\n可以直接在下方输入内容开始对话。"),
                     false,
                     time
             }
@@ -104,8 +111,8 @@ AiChatMessage AiChatRepository::addAiChatMessage(const QString& conversationId,
                                                  bool isFromUser,
                                                  const QDateTime& time)
 {
-    const QString messageText = normalizedMessageText(text);
-    if (conversationId.isEmpty() || messageText.isEmpty() || !time.isValid()) {
+    const QString messageText = isFromUser ? normalizedMessageText(text) : normalizedAiMessageText(text);
+    if (conversationId.isEmpty() || (isFromUser && messageText.isEmpty()) || !time.isValid()) {
         return {};
     }
 
@@ -137,8 +144,8 @@ bool AiChatRepository::updateAiChatMessageText(const QString& conversationId,
                                                const QString& text,
                                                const QDateTime& time)
 {
-    const QString trimmedText = text.trimmed();
-    if (conversationId.isEmpty() || messageId.isEmpty() || trimmedText.isEmpty() || !time.isValid()) {
+    const QString messageText = normalizedAiMessageText(text);
+    if (conversationId.isEmpty() || messageId.isEmpty() || !time.isValid()) {
         return false;
     }
 
@@ -150,7 +157,7 @@ bool AiChatRepository::updateAiChatMessageText(const QString& conversationId,
 
     for (AiChatMessage& message : messagesIt.value()) {
         if (message.messageId == messageId) {
-            message.text = trimmedText;
+            message.text = messageText;
             message.time = time;
             for (AiChatListEntry& entry : m_entries) {
                 if (entry.conversationId == conversationId) {
@@ -210,10 +217,10 @@ void AiChatRepository::appendInitialMessages(const AiChatListEntry& entry, int s
         QStringLiteral("整理一下今天的调试结论。")
     };
     const QStringList replies = {
-        QStringLiteral("可以。先确认数据边界，再把绘制、交互和持久化分开处理。列表层保持虚拟化，delegate 只负责可见项绘制。"),
-        QStringLiteral("主要风险在于滚动性能和文字选择状态。建议把选择状态保存在 view/delegate 中，不写回消息数据，避免刷新时污染模型。"),
-        QStringLiteral("如果已经有基于 QListView 的滚动容器，可以继续复用。新增类只承接 AI 气泡、字符级命中测试和复制逻辑。"),
-        QStringLiteral("结论：右侧消息区域应以模型驱动，输入框复用现有组件；后续接真实 AI 接口时只替换 repository 层。")
+        QStringLiteral("可以。建议按这个顺序处理：\n\n- 先确认 **数据边界**\n- 再拆开绘制、交互和持久化\n- 列表层保持虚拟化，`delegate` 只负责可见项绘制。主要风险有两点：\n\n1. 滚动性能\n2. 文字选择状态\n\n选择状态建议保存在 `view/delegate` 中，不写回消息数据，避免刷新时污染模型。主要风险有两点：\n\n1. 滚动性能\n2. 文字选择状态\n\n选择状态建议保存在 `view/delegate` 中，不写回消息数据，避免刷新时污染模型。"),
+        QStringLiteral("主要风险有两点：\n\n1. 滚动性能\n2. 文字选择状态\n\n选择状态建议保存在 `view/delegate` 中，不写回消息数据，避免刷新时污染模型。主要风险有两点：\n\n1. 滚动性能\n2. 文字选择状态\n\n选择状态建议保存在 `view/delegate` 中，不写回消息数据，避免刷新时污染模型。主要风险有两点：\n\n1. 滚动性能\n2. 文字选择状态\n\n选择状态建议保存在 `view/delegate` 中，不写回消息数据，避免刷新时污染模型。"),
+        QStringLiteral("如果已经有基于 `QListView` 的滚动容器，可以继续复用。\n\n新增类只承接：\n\n- AI 气泡绘制\n- 字符级命中测试\n- 复制逻辑。主要风险有两点：\n\n1. 滚动性能\n2. 文字选择状态\n\n选择状态建议保存在 `view/delegate` 中，不写回消息数据，避免刷新时污染模型。主要风险有两点：\n\n1. 滚动性能\n2. 文字选择状态\n\n选择状态建议保存在 `view/delegate` 中，不写回消息数据，避免刷新时污染模型。"),
+        QStringLiteral("**结论：**右侧消息区域应以模型驱动。\n\n输入框复用现有组件；后续接真实 AI 接口时，只替换 `repository` 层即可。主要风险有两点：\n\n1. 滚动性能\n2. 文字选择状态\n\n选择状态建议保存在 `view/delegate` 中，不写回消息数据，避免刷新时污染模型。主要风险有两点：\n\n1. 滚动性能\n2. 文字选择状态\n\n选择状态建议保存在 `view/delegate` 中，不写回消息数据，避免刷新时污染模型。")
     };
 
     QVector<AiChatMessage>& messages = m_messages[entry.conversationId];

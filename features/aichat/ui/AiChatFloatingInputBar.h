@@ -1,9 +1,10 @@
 #pragma once
 
-#include <QTextEdit>
 #include <QWidget>
 
+class QAbstractButton;
 class QMouseEvent;
+class TransparentTextEdit;
 
 class AiChatFloatingInputBar : public QWidget
 {
@@ -13,9 +14,11 @@ public:
     explicit AiChatFloatingInputBar(QWidget* parent = nullptr);
 
     void focusInput();
+    void setStreaming(bool streaming);
 
 signals:
     void sendText(const QString& text);
+    void stopStreamingRequested();
     void inputFocused();
 
 protected:
@@ -26,17 +29,24 @@ protected:
 
 private:
     void applyTheme();
+    void onActionButtonClicked();
     void sendCurrentText();
+    void updateActionButtonIcon();
     void updateInputGeometry();
 
-    QTextEdit* m_inputEdit = nullptr;
+    TransparentTextEdit* m_inputEdit = nullptr;
+    QAbstractButton* m_actionButton = nullptr;
+    bool m_streaming = false;
 
     static constexpr int kCornerRadius = 20;
     static constexpr int kInputLeftMargin = 10;
-    static constexpr int kInputRightPadding = 5;
+    static constexpr int kInputRightPadding = 54;
     static constexpr int kInputTopMargin = 18;
     static constexpr int kInputBottomMargin = 16;
     static constexpr int kInputTextTopPadding = 1;
     static constexpr int kInputTextHorizontalPadding = 5;
     static constexpr int kInputTextBottomPadding = 5;
+    static constexpr int kActionButtonSize = 34;
+    static constexpr int kActionButtonRightMargin = 14;
+    static constexpr int kActionButtonBottomMargin = 14;
 };

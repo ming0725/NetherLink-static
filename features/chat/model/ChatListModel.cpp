@@ -1,6 +1,5 @@
 #include "ChatListModel.h"
 #include <QDateTime>
-#include <QDebug>
 #include <QSize>
 
 Q_DECLARE_METATYPE(TimeHeader*)
@@ -86,7 +85,6 @@ void ChatListModel::addMessage(QSharedPointer<ChatMessage> message)
 {
     // 确保消息有有效的时间戳
     if (!message || !message->getTimestamp().isValid()) {
-        qDebug() << "Warning: Attempting to add message with invalid timestamp";
         return;
     }
 

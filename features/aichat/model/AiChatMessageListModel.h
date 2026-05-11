@@ -15,7 +15,9 @@ public:
         ConversationIdRole,
         TextRole,
         IsFromUserRole,
-        TimeRole
+        TimeRole,
+        IsBottomSpaceRole,
+        BottomSpaceHeightRole
     };
 
     explicit AiChatMessageListModel(QObject* parent = nullptr);
@@ -27,9 +29,12 @@ public:
     void setMessages(QVector<AiChatMessage> messages);
     void appendMessage(const AiChatMessage& message);
     bool updateMessageText(const QString& messageId, const QString& text);
+    bool isBottomSpace(int row) const;
+    void setBottomSpaceHeight(int height);
     AiChatMessage messageAt(const QModelIndex& index) const;
     void clear();
 
 private:
     QVector<AiChatMessage> m_messages;
+    int m_bottomSpaceHeight = 0;
 };

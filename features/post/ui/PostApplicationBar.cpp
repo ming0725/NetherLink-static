@@ -3,7 +3,6 @@
 
 #include <QFontMetrics>
 #include <QGraphicsDropShadowEffect>
-#include <QDebug>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QtGlobal>
@@ -143,12 +142,6 @@ void PostApplicationBar::refreshPlatformAppearance()
             != MacPostBarBridge::Appearance::Unsupported;
     const bool systemSuppressed = property(kSystemFloatingBarsSuppressedProperty).toBool();
 
-    qInfo() << "[PostApplicationBar] refresh"
-            << "shouldUseNative=" << shouldUseNative
-            << "usesNativeBar=" << m_usesNativeBar
-            << "suppressed=" << systemSuppressed
-            << "visible=" << isVisible();
-
     if (m_usesNativeBar && !shouldUseNative) {
         MacPostBarBridge::clearBar(this);
         m_usesNativeBar = false;
@@ -165,7 +158,6 @@ void PostApplicationBar::refreshPlatformAppearance()
     }
 
     if (!m_usesNativeBar && shouldUseNative && systemSuppressed) {
-        qInfo() << "[PostApplicationBar] defer native bridge while system overlay is visible";
         layoutItems();
         update();
         return;
@@ -392,7 +384,6 @@ void PostApplicationBar::syncPlatformBar()
     }
 
     if (property(kSystemFloatingBarsSuppressedProperty).toBool()) {
-        qInfo() << "[PostApplicationBar] clear native bridge while suppressed";
         MacPostBarBridge::clearBar(this);
         return;
     }

@@ -38,9 +38,13 @@ public:
                       const QPoint& viewportPos);
     void setSelection(const QModelIndex& index, int anchor, int cursor);
     void clearSelection();
+    void setBubbleSelection(const QModelIndex& index);
+    void clearBubbleSelection();
     bool hasSelection() const;
+    bool hasBubbleSelection() const;
     bool selectionContains(const QModelIndex& index, int cursor) const;
     QString selectedText() const;
+    QString renderedText(const QModelIndex& index) const;
     QPersistentModelIndex selectionIndex() const;
 
 private:
@@ -86,12 +90,14 @@ private:
                                             bool dark) const;
     QVector<TextRange> cachedUrlRanges(const QString& text) const;
     QVector<TextRange> urlRanges(const QString& text) const;
+    QString renderedPlainText(const QString& text) const;
     QFont messageFont() const;
     int maxBubbleWidth(int itemWidth) const;
     int selectionStart() const;
     int selectionEnd() const;
 
     QPersistentModelIndex m_selectionIndex;
+    QPersistentModelIndex m_bubbleSelectionIndex;
     int m_selectionAnchor = -1;
     int m_selectionCursor = -1;
     mutable QCache<QString, TextDocumentCacheEntry> m_textDocumentCache;

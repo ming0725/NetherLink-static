@@ -19,11 +19,16 @@ QVariant PostDetailListModel::data(const QModelIndex& index, int role) const
     if (index.row() == 0) {
         switch (role) {
         case Qt::DisplayRole:
-            return QString();
+        case PostBodyTextRole:
+            return m_postBodyText;
         case ItemTypeRole:
-            return DetailItem;
-        case DetailHeightRole:
-            return m_detailHeight;
+            return PostBodyItem;
+        case PostTitleTextRole:
+            return m_postTitleText;
+        case PostBodyDateTextRole:
+            return m_postBodyDateText;
+        case PostBodyRevisionRole:
+            return m_postBodyRevision;
         default:
             return {};
         }
@@ -66,19 +71,29 @@ void PostDetailListModel::resetForPost(const QString& postId)
     m_expandedReplies.clear();
     m_visibleReplyCounts.clear();
     m_hasMoreComments = false;
-    const QModelIndex detailIndex = index(0, 0);
-    emit dataChanged(detailIndex, detailIndex, {DetailHeightRole});
+    m_postTitleText.clear();
+    m_postBodyText.clear();
+    m_postBodyDateText.clear();
+    ++m_postBodyRevision;
+    const QModelIndex bodyIndex = index(0, 0);
+    emit dataChanged(bodyIndex, bodyIndex,
+                     {PostTitleTextRole, PostBodyTextRole, PostBodyDateTextRole, PostBodyRevisionRole});
 }
 
-void PostDetailListModel::setDetailHeight(int height)
+void PostDetailListModel::setPostBody(QString title, QString text, QString dateText)
 {
-    const int boundedHeight = qMax(1, height);
-    if (m_detailHeight == boundedHeight) {
+    if (m_postTitleText == title && m_postBodyText == text && m_postBodyDateText == dateText) {
         return;
     }
-    m_detailHeight = boundedHeight;
-    const QModelIndex detailIndex = index(0, 0);
-    emit dataChanged(detailIndex, detailIndex, {DetailHeightRole});
+
+    m_postTitleText = std::move(title);
+    m_postBodyText = std::move(text);
+    m_postBodyDateText = std::move(dateText);
+    ++m_postBodyRevision;
+    const QModelIndex bodyIndex = index(0, 0);
+    emit dataChanged(bodyIndex,
+                     bodyIndex,
+                     {PostTitleTextRole, PostBodyTextRole, PostBodyDateTextRole, PostBodyRevisionRole, CommentLayoutRole});
 }
 
 void PostDetailListModel::setComments(QVector<PostComment> comments, bool hasMore)
@@ -137,11 +152,6 @@ int PostDetailListModel::commentCount() const
     return m_comments.size();
 }
 
-bool PostDetailListModel::isDetailIndex(const QModelIndex& index) const
-{
-    return index.isValid() && index.row() == 0;
-}
-
 PostComment PostDetailListModel::commentAt(const QModelIndex& index) const
 {
     const PostComment* comment = commentAtIndex(index);
@@ -150,7 +160,7 @@ PostComment PostDetailListModel::commentAt(const QModelIndex& index) const
 
 const PostComment* PostDetailListModel::commentAtIndex(const QModelIndex& index) const
 {
-    if (!index.isValid() || index.row() <= 0 || index.row() > m_comments.size()) {
+    if (!index.isValid() || index.row() < 1 || index.row() >= rowCount()) {
         return {};
     }
     return &m_comments.at(index.row() - 1);
@@ -159,7 +169,7 @@ const PostComment* PostDetailListModel::commentAtIndex(const QModelIndex& index)
 PostComment* PostDetailListModel::commentById(const QString& commentId)
 {
     const int row = rowForCommentId(commentId);
-    if (row <= 0 || row > m_comments.size()) {
+    if (row < 1 || row >= rowCount()) {
         return nullptr;
     }
     return &m_comments[row - 1];
@@ -168,7 +178,7 @@ PostComment* PostDetailListModel::commentById(const QString& commentId)
 const PostComment* PostDetailListModel::commentById(const QString& commentId) const
 {
     const int row = rowForCommentId(commentId);
-    if (row <= 0 || row > m_comments.size()) {
+    if (row < 1 || row >= rowCount()) {
         return nullptr;
     }
     return &m_comments.at(row - 1);

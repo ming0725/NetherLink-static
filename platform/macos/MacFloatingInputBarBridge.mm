@@ -1695,11 +1695,6 @@ bool isSupported()
 void syncGlass(QWidget* widget, double opacity)
 {
     const auto current = currentAppearance();
-    NSLog(@"[NetherLink][FloatingInputBarBridge] syncGlass widget=%p appearance=%d visible=%d opacity=%.3f",
-          widget,
-          static_cast<int>(current),
-          widget ? widget->isVisible() : false,
-          opacity);
     if (!widget || current == ::Appearance::Unsupported || !widget->isVisible()) {
         clearInputBar(widget);
         return;
@@ -1758,11 +1753,6 @@ void syncInputBar(QWidget* widget,
                   double opacity)
 {
     const auto current = currentAppearance();
-    NSLog(@"[NetherLink][FloatingInputBarBridge] syncInputBar widget=%p appearance=%d visible=%d opacity=%.3f",
-          widget,
-          static_cast<int>(current),
-          widget ? widget->isVisible() : false,
-          opacity);
     if (!widget || current == ::Appearance::Unsupported || !widget->isVisible()) {
         clearInputBar(widget);
         return;
@@ -1844,7 +1834,6 @@ void focusInputBar(QWidget* widget)
 
 void clearInputBar(QWidget* widget)
 {
-    NSLog(@"[NetherLink][FloatingInputBarBridge] clearInputBar widget=%p", widget);
     NSView* hostView = topLevelQtViewForWidget(widget, false);
     if (hostView) {
         hideNativeTooltip();

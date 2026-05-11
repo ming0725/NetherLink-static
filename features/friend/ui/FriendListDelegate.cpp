@@ -33,15 +33,16 @@ const QFontMetrics& nameMetrics()
 
 void drawFriendDisplayName(QPainter* painter,
                            const QRect& rect,
-                           const QModelIndex& index,
+                           const QString& remark,
+                           const QString& nickName,
+                           const QString& displayName,
+                           const QColor& primaryText,
+                           const QColor& tertiaryText,
                            bool selected)
 {
-    const QString remark = index.data(FriendListModel::RemarkRole).toString();
-    const QString nickName = index.data(FriendListModel::NickNameRole).toString();
-    const QString displayName = index.data(FriendListModel::DisplayNameRole).toString();
-    const QColor primaryColor = selected ? Qt::white : ThemeManager::instance().color(ThemeColor::PrimaryText);
+    const QColor primaryColor = selected ? Qt::white : primaryText;
     const QColor secondaryColor = selected ? QColor(0xff, 0xff, 0xff, 165)
-                                           : ThemeManager::instance().color(ThemeColor::TertiaryText);
+                                           : tertiaryText;
 
     painter->setFont(nameFont());
     if (remark.isEmpty() || nickName.isEmpty()) {
@@ -73,6 +74,44 @@ void drawFriendDisplayName(QPainter* painter,
                                                    Qt::ElideRight,
                                                    qMax(0, rect.width() - usedRemarkWidth - gap)));
     }
+}
+
+QString cachedStatusText(UserStatus userStatus)
+{
+    static const QString online = QStringLiteral("在线");
+    static const QString offline = QStringLiteral("离线");
+    static const QString flying = QStringLiteral("飞行模式");
+    static const QString mining = QStringLiteral("挖矿中");
+
+    if (userStatus == Online) {
+        return online;
+    }
+    if (userStatus == Offline) {
+        return offline;
+    }
+    if (userStatus == Flying) {
+        return flying;
+    }
+    return mining;
+}
+
+QString cachedStatusIconPath(UserStatus userStatus)
+{
+    static const QString online = QStringLiteral(":/resources/icon/online.png");
+    static const QString offline = QStringLiteral(":/resources/icon/offline.png");
+    static const QString flying = QStringLiteral(":/resources/icon/flying.png");
+    static const QString mining = QStringLiteral(":/resources/icon/mining.png");
+
+    if (userStatus == Online) {
+        return online;
+    }
+    if (userStatus == Offline) {
+        return offline;
+    }
+    if (userStatus == Flying) {
+        return flying;
+    }
+    return mining;
 }
 
 const QFont& subtitleFont()
@@ -130,6 +169,9 @@ const QFontMetrics& groupCountMetrics()
 FriendListDelegate::FriendListDelegate(QObject* parent)
     : QStyledItemDelegate(parent)
 {
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
+        m_themePaintCache.valid = false;
+    });
 }
 
 void FriendListDelegate::paint(QPainter* painter,
@@ -140,12 +182,13 @@ void FriendListDelegate::paint(QPainter* painter,
     painter->setRenderHint(QPainter::TextAntialiasing, true);
     painter->setClipRect(option.rect);
 
+    const ThemePaintCache& theme = themePaintCache();
     const bool isNotice = index.data(FriendListModel::IsNoticeRole).toBool();
     if (isNotice) {
         const bool noticeSelected = index.data(FriendListModel::NoticeSelectedRole).toBool();
 
         // Background: panel by default
-        painter->fillRect(option.rect, ThemeManager::instance().color(ThemeColor::PanelBackground));
+        painter->fillRect(option.rect, theme.panelBackground);
 
         // Selected or hovered overlay: rounded rect (6px radius, margins 6/3/6/3)
         const bool hovered = option.state & QStyle::State_MouseOver;
@@ -153,8 +196,8 @@ void FriendListDelegate::paint(QPainter* painter,
 
         if (noticeSelected) {
             // Darker than hover: darken ListHover by a fixed delta
-            QColor hoverColor = ThemeManager::instance().color(ThemeColor::ListHover);
-            const int delta = ThemeManager::instance().isDark() ? 8 : 12;
+            const QColor hoverColor = theme.listHover;
+            const int delta = theme.dark ? 8 : 12;
             QColor selColor(qMax(0, hoverColor.red() - delta),
                             qMax(0, hoverColor.green() - delta),
                             qMax(0, hoverColor.blue() - delta));
@@ -166,17 +209,15 @@ void FriendListDelegate::paint(QPainter* painter,
         } else if (hovered) {
             painter->setRenderHint(QPainter::Antialiasing, true);
             painter->setRenderHint(QPainter::TextAntialiasing, true);
-            painter->setBrush(ThemeManager::instance().color(ThemeColor::ListHover));
+            painter->setBrush(theme.listHover);
             painter->setPen(Qt::NoPen);
             painter->drawRoundedRect(overlayRect, 6, 6);
         }
 
-        const QColor textColor = ThemeManager::instance().color(ThemeColor::PrimaryText);
-
         // Unread badge (left of arrow)
         const int unreadCount = index.data(FriendListModel::NoticeUnreadCountRole).toInt();
         const BadgeLayout badgeLayout = BadgeRenderer::layoutForUnreadCount(
-            unreadCount, false, noticeSelected, ThemeManager::instance().isDark());
+            unreadCount, false, noticeSelected, theme.dark);
 
         const int arrowCenterX = option.rect.right() - kGroupCountRightPadding;
         const int arrowCenterY = option.rect.center().y() + kNoticeArrowYOffset;
@@ -193,7 +234,7 @@ void FriendListDelegate::paint(QPainter* painter,
         }
 
         painter->setFont(groupFont());
-        painter->setPen(textColor);
+        painter->setPen(theme.primaryText);
         const QRect textRect(20, option.rect.top(),
                              qMax(0, rightLimit - 20), option.rect.height());
         painter->drawText(textRect,
@@ -202,8 +243,7 @@ void FriendListDelegate::paint(QPainter* painter,
                                                      Qt::ElideRight,
                                                      textRect.width()));
 
-        const QColor arrowColor = ThemeManager::instance().color(ThemeColor::SecondaryText);
-        QPen arrowPen(arrowColor, 1.3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+        QPen arrowPen(theme.secondaryText, 1.3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
         painter->setPen(arrowPen);
         painter->drawLine(QPointF(arrowCenterX - 2.0, arrowCenterY - 4.0),
                           QPointF(arrowCenterX + 2.0, arrowCenterY));
@@ -215,14 +255,14 @@ void FriendListDelegate::paint(QPainter* painter,
 
     const bool isGroup = index.data(FriendListModel::IsGroupRole).toBool();
     if (isGroup) {
-        painter->fillRect(option.rect, ThemeManager::instance().color(ThemeColor::PanelBackground));
+        painter->fillRect(option.rect, theme.panelBackground);
 
         const bool hovered = option.state & QStyle::State_MouseOver;
         if (hovered) {
             const QRect hoverRect = option.rect.adjusted(6, 3, -6, -3);
             painter->setRenderHint(QPainter::Antialiasing, true);
             painter->setRenderHint(QPainter::TextAntialiasing, true);
-            painter->setBrush(ThemeManager::instance().color(ThemeColor::ListHover));
+            painter->setBrush(theme.listHover);
             painter->setPen(Qt::NoPen);
             painter->drawRoundedRect(hoverRect, 6, 6);
         }
@@ -239,7 +279,7 @@ void FriendListDelegate::paint(QPainter* painter,
         painter->setRenderHint(QPainter::TextAntialiasing, true);
         painter->translate(arrowRect.center());
         painter->rotate(progress * 90.0);
-        QPen arrowPen(ThemeManager::instance().color(ThemeColor::TertiaryText),
+        QPen arrowPen(theme.tertiaryText,
                       1.5,
                       Qt::SolidLine,
                       Qt::RoundCap,
@@ -264,12 +304,12 @@ void FriendListDelegate::paint(QPainter* painter,
                               option.rect.height());
 
         painter->setFont(groupFont());
-        painter->setPen(ThemeManager::instance().color(ThemeColor::SecondaryText));
+        painter->setPen(theme.secondaryText);
         painter->drawText(titleRect,
                           Qt::AlignLeft | Qt::AlignVCenter,
                           groupMetrics().elidedText(title, Qt::ElideRight, titleRect.width()));
         painter->setFont(groupCountFont());
-        painter->setPen(ThemeManager::instance().color(ThemeColor::TertiaryText));
+        painter->setPen(theme.tertiaryText);
         painter->drawText(countRect, Qt::AlignRight | Qt::AlignVCenter, countText);
         painter->restore();
         return;
@@ -285,9 +325,9 @@ void FriendListDelegate::paint(QPainter* painter,
     const bool hovered = (option.state & QStyle::State_MouseOver) ||
             index.data(FriendListModel::ContextMenuActiveRole).toBool();
     const QColor backgroundColor = selected
-            ? ThemeManager::instance().color(ThemeColor::ListSelected)
-            : (hovered ? ThemeManager::instance().color(ThemeColor::ListHover)
-                       : ThemeManager::instance().color(ThemeColor::PanelBackground));
+            ? theme.listSelected
+            : (hovered ? theme.listHover
+                       : theme.panelBackground);
     painter->fillRect(option.rect, backgroundColor);
     painter->setOpacity(qMin(1.0, progress * 1.25));
 
@@ -298,18 +338,28 @@ void FriendListDelegate::paint(QPainter* painter,
                            kAvatarSize,
                            kAvatarSize);
     const qreal devicePixelRatio = painter->device()->devicePixelRatioF();
-    const QString avatarPath = index.data(FriendListModel::AvatarPathRole).toString();
-    QPixmap avatar = ImageService::instance().circularAvatarPreview(avatarPath,
+    const FriendPaintCache friendData = friendPaintCache(index);
+    const UserStatus status = static_cast<UserStatus>(friendData.status);
+    QPixmap avatar = ImageService::instance().circularAvatarPreview(friendData.avatarPath,
                                                                     kAvatarSize,
                                                                     devicePixelRatio);
-    const UserStatus status = static_cast<UserStatus>(index.data(FriendListModel::StatusRole).toInt());
+    if (selected && status == Offline) {
+        painter->save();
+        painter->setOpacity(1.0);
+        painter->setRenderHint(QPainter::Antialiasing, true);
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(theme.panelBackground);
+        painter->drawEllipse(avatarRect);
+        painter->restore();
+    }
+
     painter->save();
     if (status == Offline) {
         painter->setOpacity(painter->opacity() * 0.42);
     }
     if (avatar.isNull()) {
         painter->setPen(Qt::NoPen);
-        painter->setBrush(ThemeManager::instance().color(ThemeColor::ImagePlaceholder));
+        painter->setBrush(theme.imagePlaceholder);
         painter->drawEllipse(avatarRect);
     } else {
         painter->drawPixmap(avatarRect, avatar);
@@ -327,10 +377,14 @@ void FriendListDelegate::paint(QPainter* painter,
                          qMax(0, rightEdge - contentLeft),
                          nameHeight);
 
-    drawFriendDisplayName(painter, nameRect, index, selected);
-
-    const QString subtitle = QString("[%1] %2").arg(statusText(status),
-                                                    index.data(FriendListModel::SignatureRole).toString());
+    drawFriendDisplayName(painter,
+                          nameRect,
+                          friendData.remark,
+                          friendData.nickName,
+                          friendData.displayName,
+                          theme.primaryText,
+                          theme.tertiaryText,
+                          selected);
 
     const int subtitleHeight = subtitleMetrics().height();
     const int subtitleY = itemCenterY + kLineSpacing / 2 + 1;
@@ -339,7 +393,7 @@ void FriendListDelegate::paint(QPainter* painter,
                          subtitleY + 1,
                          kStatusIconSize + 2,
                          kStatusIconSize + 2);
-    const QPixmap statusIcon = ImageService::instance().scaled(statusIconPath(status),
+    const QPixmap statusIcon = ImageService::instance().scaled(friendData.statusIconPath,
                                                                QSize(kStatusIconSize, kStatusIconSize),
                                                                Qt::KeepAspectRatio,
                                                                devicePixelRatio);
@@ -352,14 +406,110 @@ void FriendListDelegate::paint(QPainter* painter,
                              subtitleHeight);
 
     painter->setFont(subtitleFont());
-    painter->setPen(selected ? Qt::white : ThemeManager::instance().color(ThemeColor::TertiaryText));
+    painter->setPen(selected ? Qt::white : theme.tertiaryText);
     painter->drawText(subtitleRect,
                       Qt::AlignLeft | Qt::AlignVCenter,
-                      subtitleMetrics().elidedText(subtitle,
+                      subtitleMetrics().elidedText(friendData.subtitle,
                                                    Qt::ElideRight,
                                                    subtitleRect.width()));
 
     painter->restore();
+}
+
+void FriendListDelegate::clearPaintCache()
+{
+    m_friendPaintCache.clear();
+    m_themePaintCache.valid = false;
+}
+
+void FriendListDelegate::invalidatePaintCache(const QModelIndex& topLeft,
+                                              const QModelIndex& bottomRight,
+                                              const QVector<int>& roles)
+{
+    if (!topLeft.isValid() || !bottomRight.isValid() || topLeft.model() != bottomRight.model()) {
+        return;
+    }
+
+    if (!roles.isEmpty()) {
+        bool affectsFriendPaint = false;
+        for (const int role : roles) {
+            switch (role) {
+            case Qt::DisplayRole:
+            case FriendListModel::DisplayNameRole:
+            case FriendListModel::AvatarPathRole:
+            case FriendListModel::StatusRole:
+            case FriendListModel::SignatureRole:
+            case FriendListModel::NickNameRole:
+            case FriendListModel::RemarkRole:
+                affectsFriendPaint = true;
+                break;
+            default:
+                break;
+            }
+            if (affectsFriendPaint) {
+                break;
+            }
+        }
+        if (!affectsFriendPaint) {
+            return;
+        }
+    }
+
+    for (int row = topLeft.row(); row <= bottomRight.row(); ++row) {
+        const QModelIndex index = topLeft.sibling(row, topLeft.column());
+        const QString userId = index.data(FriendListModel::UserIdRole).toString();
+        if (!userId.isEmpty()) {
+            m_friendPaintCache.remove(userId);
+        }
+    }
+}
+
+const FriendListDelegate::ThemePaintCache& FriendListDelegate::themePaintCache() const
+{
+    const bool dark = ThemeManager::instance().isDark();
+    if (m_themePaintCache.valid && m_themePaintCache.dark == dark) {
+        return m_themePaintCache;
+    }
+
+    m_themePaintCache.valid = true;
+    m_themePaintCache.dark = dark;
+    m_themePaintCache.panelBackground = ThemeManager::instance().color(ThemeColor::PanelBackground);
+    m_themePaintCache.listHover = ThemeManager::instance().color(ThemeColor::ListHover);
+    m_themePaintCache.listSelected = ThemeManager::instance().color(ThemeColor::ListSelected);
+    m_themePaintCache.primaryText = ThemeManager::instance().color(ThemeColor::PrimaryText);
+    m_themePaintCache.secondaryText = ThemeManager::instance().color(ThemeColor::SecondaryText);
+    m_themePaintCache.tertiaryText = ThemeManager::instance().color(ThemeColor::TertiaryText);
+    m_themePaintCache.imagePlaceholder = ThemeManager::instance().color(ThemeColor::ImagePlaceholder);
+    return m_themePaintCache;
+}
+
+FriendListDelegate::FriendPaintCache FriendListDelegate::friendPaintCache(const QModelIndex& index) const
+{
+    const QString userId = index.data(FriendListModel::UserIdRole).toString();
+    if (!userId.isEmpty()) {
+        const auto cached = m_friendPaintCache.constFind(userId);
+        if (cached != m_friendPaintCache.cend()) {
+            return cached.value();
+        }
+    }
+
+    FriendPaintCache data;
+    data.userId = userId;
+    data.displayName = index.data(FriendListModel::DisplayNameRole).toString();
+    data.avatarPath = index.data(FriendListModel::AvatarPathRole).toString();
+    data.status = index.data(FriendListModel::StatusRole).toInt();
+    const QString signature = index.data(FriendListModel::SignatureRole).toString();
+    data.nickName = index.data(FriendListModel::NickNameRole).toString();
+    data.remark = index.data(FriendListModel::RemarkRole).toString();
+
+    const UserStatus status = static_cast<UserStatus>(data.status);
+    data.subtitle = QStringLiteral("[%1] %2").arg(cachedStatusText(status), signature);
+    data.statusIconPath = cachedStatusIconPath(status);
+
+    if (!data.userId.isEmpty()) {
+        m_friendPaintCache.insert(data.userId, data);
+    }
+    return data;
 }
 
 QSize FriendListDelegate::sizeHint(const QStyleOptionViewItem& option,

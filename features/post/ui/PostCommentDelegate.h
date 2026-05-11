@@ -2,6 +2,7 @@
 
 #include <QStyledItemDelegate>
 #include <QHash>
+#include <QPersistentModelIndex>
 #include <QString>
 #include <QVector>
 
@@ -21,11 +22,40 @@ public:
         LoadMoreRepliesAction
     };
 
+    enum TextTargetType {
+        NoTextTarget,
+        PostTitleText,
+        PostContentText,
+        CommentAuthorText,
+        CommentContentText,
+        ReplyAuthorText,
+        ReplyContentText
+    };
+
     struct HitAction {
         Action action = NoAction;
         QString commentId;
         QString replyId;
         bool nextLiked = false;
+    };
+
+    struct TextHit {
+        TextTargetType target = NoTextTarget;
+        QString commentId;
+        QString replyId;
+        QString text;
+        int cursor = -1;
+
+        bool isValid() const { return target != NoTextTarget && cursor >= 0; }
+    };
+
+    struct InteractionTarget {
+        QString commentId;
+        QString replyId;
+        QString text;
+        bool isReply = false;
+
+        bool isValid() const { return !commentId.isEmpty(); }
     };
 
     explicit PostCommentDelegate(QObject* parent = nullptr);
@@ -38,28 +68,54 @@ public:
     HitAction actionAt(const QStyleOptionViewItem& option,
                        const QModelIndex& index,
                        const QPoint& point) const;
+    TextHit textHitAt(const QStyleOptionViewItem& option,
+                      const QModelIndex& index,
+                      const QPoint& point,
+                      bool allowLineWhitespace = false) const;
+    bool authorHitAt(const QStyleOptionViewItem& option,
+                     const QModelIndex& index,
+                     const QPoint& point) const;
+    InteractionTarget interactionTargetAt(const QStyleOptionViewItem& option,
+                                          const QModelIndex& index,
+                                          const QPoint& point) const;
+    bool selectWordAt(const QStyleOptionViewItem& option,
+                      const QModelIndex& index,
+                      const QPoint& point);
+    void setSelection(const QModelIndex& index,
+                      TextTargetType target,
+                      const QString& commentId,
+                      const QString& replyId,
+                      int anchor,
+                      int cursor);
+    void clearSelection();
+    bool hasSelection() const;
+    bool selectionContains(const QModelIndex& index,
+                           TextTargetType target,
+                           const QString& commentId,
+                           const QString& replyId,
+                           int cursor) const;
+    QString selectedText() const;
+    QPersistentModelIndex selectionIndex() const;
+    TextTargetType selectionTarget() const;
+    QString selectionCommentId() const;
+    QString selectionReplyId() const;
+    void selectAll(const QModelIndex& index,
+                   TextTargetType target,
+                   const QString& commentId,
+                   const QString& replyId);
+    int textLengthForTarget(const QModelIndex& index,
+                            TextTargetType target,
+                            const QString& commentId,
+                            const QString& replyId) const;
     void clearCaches();
 
 private:
     struct TextMeasure {
-        struct Segment {
-            int start = 0;
-            int length = 0;
-            int x = 0;
-            bool highlighted = false;
-        };
-
-        struct Line {
-            int y = 0;
-            int baselineY = 0;
-            int height = 0;
-            QVector<Segment> segments;
-        };
-
         int fullHeight = 1;
         int collapsedHeight = 1;
         bool canExpand = false;
-        QVector<Line> lines;
+        int highlightedStart = -1;
+        int highlightedLength = 0;
     };
 
     struct ReplyLayout {
@@ -106,10 +162,47 @@ private:
     void drawMeasuredText(QPainter* painter,
                           const QString& text,
                           const QRect& rect,
-                          const TextMeasure& measure) const;
+                          const TextMeasure& measure,
+                          TextTargetType target,
+                          const QString& commentId,
+                          const QString& replyId,
+                          const QFont& font) const;
+    void drawSingleLineText(QPainter* painter,
+                            const QString& text,
+                            const QRect& rect,
+                            TextTargetType target,
+                            const QString& commentId,
+                            const QString& replyId,
+                            const QFont& font) const;
+    int singleLineCharacterIndexAt(const QString& text,
+                                   const QFont& font,
+                                   const QRect& rect,
+                                   const QPoint& point,
+                                   bool allowLineWhitespace) const;
+    int measuredCharacterIndexAt(const QString& text,
+                                 const QFont& font,
+                                 const QRect& rect,
+                                 const QPoint& point,
+                                 bool allowLineWhitespace) const;
+    QString textForTarget(const QModelIndex& index,
+                          TextTargetType target,
+                          const QString& commentId,
+                          const QString& replyId) const;
+    bool selectionMatches(const QModelIndex& index,
+                          TextTargetType target,
+                          const QString& commentId,
+                          const QString& replyId) const;
+    int selectionStart() const;
+    int selectionEnd() const;
     void trimCaches() const;
     int availableWidth(const QStyleOptionViewItem& option) const;
 
+    QPersistentModelIndex m_selectionIndex;
+    TextTargetType m_selectionTarget = NoTextTarget;
+    QString m_selectionCommentId;
+    QString m_selectionReplyId;
+    int m_selectionAnchor = -1;
+    int m_selectionCursor = -1;
     mutable QHash<QString, Layout> m_layoutCache;
     mutable QHash<QString, TextMeasure> m_textMeasureCache;
 };

@@ -2,10 +2,11 @@
 #define FLOATINGINPUTBAR_H
 
 #include <QWidget>
-#include <QTextEdit>
 #include <QLabel>
 
 #include "shared/ui/CustomTooltip.h"
+
+class TransparentTextEdit;
 
 class FloatingInputBar : public QWidget
 {
@@ -52,7 +53,7 @@ private:
     void updateQtFallbackGeometry();
     void updateSendButtonPosition();
 private:
-    QTextEdit *m_inputEdit = nullptr;
+    TransparentTextEdit *m_inputEdit = nullptr;
     QLabel *m_emojiLabel = nullptr;
     QLabel *m_imageLabel = nullptr;
     QLabel *m_screenshotLabel = nullptr;

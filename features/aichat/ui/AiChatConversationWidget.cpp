@@ -1,18 +1,17 @@
 #include "AiChatConversationWidget.h"
 
-#include <QLabel>
 #include <QLinearGradient>
+#include <QModelIndex>
 #include <QPainter>
-#include <QRandomGenerator>
 #include <QResizeEvent>
-#include <QStringList>
 #include <QTimer>
 
-#include "features/aichat/data/AiChatRepository.h"
 #include "features/aichat/model/AiChatMessageListModel.h"
 #include "features/aichat/ui/AiChatFloatingInputBar.h"
 #include "features/aichat/ui/AiChatMessageListView.h"
+#include "features/aichat/ui/AiChatSessionController.h"
 #include "shared/theme/ThemeManager.h"
+#include "shared/ui/PaintedLabel.h"
 
 namespace {
 
@@ -79,14 +78,12 @@ AiChatConversationWidget::AiChatConversationWidget(QWidget* parent)
     , m_messageView(new AiChatMessageListView(this))
     , m_messageModel(new AiChatMessageListModel(this))
     , m_inputBar(new AiChatFloatingInputBar(this))
-    , m_titleLabel(new QLabel(this))
+    , m_titleLabel(new PaintedLabel(this))
     , m_headerDivider(new ThemeDivider(this))
     , m_bottomGapGradientOverlay(new BottomGapGradientOverlay(this))
-    , m_emptyLabel(new QLabel(QStringLiteral("选择或新建一个 AI 对话"), this))
-    , m_streamTimer(new QTimer(this))
+    , m_emptyLabel(new PaintedLabel(QStringLiteral("选择或新建一个 AI 对话"), this))
 {
     m_messageView->setModel(m_messageModel);
-    m_streamTimer->setInterval(24);
     m_titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     m_emptyLabel->setAlignment(Qt::AlignCenter);
     m_emptyLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -101,10 +98,10 @@ AiChatConversationWidget::AiChatConversationWidget(QWidget* parent)
 
     connect(m_inputBar, &AiChatFloatingInputBar::sendText,
             this, &AiChatConversationWidget::onSendText);
+    connect(m_inputBar, &AiChatFloatingInputBar::stopStreamingRequested,
+            this, &AiChatConversationWidget::onStopStreamingRequested);
     connect(m_inputBar, &AiChatFloatingInputBar::inputFocused,
             m_messageView, &AiChatMessageListView::clearTextSelection);
-    connect(m_streamTimer, &QTimer::timeout,
-            this, &AiChatConversationWidget::advanceAiReplyStream);
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
         updateHeader();
         update();
@@ -116,6 +113,34 @@ AiChatConversationWidget::AiChatConversationWidget(QWidget* parent)
     closeConversation();
 }
 
+void AiChatConversationWidget::setController(AiChatSessionController* controller)
+{
+    if (m_controller == controller) {
+        return;
+    }
+
+    if (m_controller) {
+        disconnect(m_controller, nullptr, this, nullptr);
+    }
+
+    m_controller = controller;
+    if (!m_controller) {
+        closeConversation();
+        return;
+    }
+
+    connect(m_controller, &AiChatSessionController::aiReplyStarted,
+            this, &AiChatConversationWidget::onAiReplyStarted);
+    connect(m_controller, &AiChatSessionController::aiReplyMessageAdded,
+            this, &AiChatConversationWidget::onAiReplyMessageAdded);
+    connect(m_controller, &AiChatSessionController::aiReplyMessageUpdated,
+            this, &AiChatConversationWidget::onAiReplyMessageUpdated);
+    connect(m_controller, &AiChatSessionController::aiReplyFinished,
+            this, &AiChatConversationWidget::onAiReplyFinished);
+    connect(m_controller, &AiChatSessionController::aiReplyCanceled,
+            this, &AiChatConversationWidget::onAiReplyCanceled);
+}
+
 void AiChatConversationWidget::openConversation(const AiChatListEntry& entry)
 {
     if (entry.conversationId.isEmpty()) {
@@ -123,9 +148,9 @@ void AiChatConversationWidget::openConversation(const AiChatListEntry& entry)
         return;
     }
 
-    finishActiveAiReplyStream();
+    cancelActiveAiReplyStream();
     m_currentConversation = entry;
-    m_messageModel->setMessages(AiChatRepository::instance().requestAiChatMessages(entry.conversationId));
+    m_messageModel->setMessages(m_controller ? m_controller->loadMessages(entry.conversationId) : QVector<AiChatMessage>{});
     m_messageView->clearTextSelection();
     m_messageView->show();
     m_inputBar->show();
@@ -142,7 +167,7 @@ void AiChatConversationWidget::openConversation(const AiChatListEntry& entry)
 
 void AiChatConversationWidget::closeConversation()
 {
-    finishActiveAiReplyStream();
+    cancelActiveAiReplyStream();
     m_currentConversation = {};
     m_messageModel->clear();
     m_messageView->clearTextSelection();
@@ -167,14 +192,11 @@ void AiChatConversationWidget::resizeEvent(QResizeEvent* event)
 
 void AiChatConversationWidget::onSendText(const QString& text)
 {
-    if (m_currentConversation.conversationId.isEmpty()) {
+    if (!m_controller || m_currentConversation.conversationId.isEmpty() || hasActiveAiReplyStream()) {
         return;
     }
 
-    const AiChatMessage message = AiChatRepository::instance().addAiChatMessage(
-            m_currentConversation.conversationId,
-            text,
-            true);
+    const AiChatMessage message = m_controller->submitUserMessage(m_currentConversation.conversationId, text);
     if (message.messageId.isEmpty()) {
         return;
     }
@@ -182,13 +204,20 @@ void AiChatConversationWidget::onSendText(const QString& text)
     m_messageModel->appendMessage(message);
     m_messageView->clearTextSelection();
     m_messageView->scrollToBottom();
-    finishActiveAiReplyStream();
-    appendAiReply(text);
+}
+
+void AiChatConversationWidget::onStopStreamingRequested()
+{
+    cancelActiveAiReplyStream();
 }
 
 void AiChatConversationWidget::updateLayout()
 {
-    m_titleLabel->setGeometry(20, 0, qMax(0, width() - 40), kHeaderHeight);
+    const int titleY = kHeaderHeight - kHeaderTitleBottomMargin - kHeaderTitleHeight;
+    m_titleLabel->setGeometry(kHeaderTitleLeft,
+                              titleY,
+                              qMax(0, width() - kHeaderTitleLeft - kHeaderTitleRight),
+                              kHeaderTitleHeight);
     m_headerDivider->setGeometry(0, kHeaderHeight, width(), 1);
     m_messageView->setGeometry(0, kHeaderHeight + 1, width(), qMax(0, height() - kHeaderHeight - 1));
     m_emptyLabel->setGeometry(0, kHeaderHeight + 1, width(), qMax(0, height() - kHeaderHeight - 1));
@@ -217,21 +246,7 @@ void AiChatConversationWidget::updateBottomSpace()
     const int safeBottomSpace = inputBarOverlapHeight + kListBottomPadding;
 
     m_messageView->setBottomViewportMargin(safeBottomSpace);
-
-    if (inputBarOverlapHeight > 0 && m_inputBar->isVisible()) {
-        const int gradientTop = inputBarRect.top();
-        const int overlayTop = qMax(messageViewRect.top(),
-                                    gradientTop - kBottomGradientFadeHeight);
-        const int overlayBottom = messageViewRect.bottom();
-        m_bottomGapGradientOverlay->setGeometry(messageViewRect.left(),
-                                                overlayTop,
-                                                messageViewRect.width(),
-                                                qMax(0, overlayBottom - overlayTop + 1));
-        m_bottomGapGradientOverlay->show();
-        m_bottomGapGradientOverlay->raise();
-    } else {
-        m_bottomGapGradientOverlay->hide();
-    }
+    m_bottomGapGradientOverlay->hide();
 
     m_inputBar->raise();
 }
@@ -240,103 +255,63 @@ void AiChatConversationWidget::updateHeader()
 {
     const bool hasConversation = !m_currentConversation.conversationId.isEmpty();
     m_titleLabel->setText(hasConversation ? m_currentConversation.title : QStringLiteral("AI 对话"));
-    m_titleLabel->setStyleSheet(QStringLiteral("color: %1; background: transparent;")
-                                .arg(ThemeManager::instance().color(ThemeColor::PrimaryText).name()));
-    m_emptyLabel->setStyleSheet(QStringLiteral("color: %1; background: transparent;")
-                                .arg(ThemeManager::instance().color(ThemeColor::SecondaryText).name()));
+    m_titleLabel->setTextColor(ThemeManager::instance().color(ThemeColor::PrimaryText));
+    m_emptyLabel->setTextColor(ThemeManager::instance().color(ThemeColor::SecondaryText));
 }
 
-void AiChatConversationWidget::appendAiReply(const QString& prompt)
+void AiChatConversationWidget::onAiReplyStarted(const QString& conversationId)
 {
-    if (m_currentConversation.conversationId.isEmpty()) {
-        return;
+    if (m_currentConversation.conversationId == conversationId) {
+        m_inputBar->setStreaming(true);
     }
-
-    m_streamReplyText = randomReplyText(prompt);
-    m_streamConversationId = m_currentConversation.conversationId;
-    m_streamOffset = qMin(4, m_streamReplyText.size());
-
-    const AiChatMessage message = AiChatRepository::instance().addAiChatMessage(
-            m_streamConversationId,
-            m_streamReplyText.left(m_streamOffset),
-            false);
-    if (message.messageId.isEmpty()) {
-        m_streamConversationId.clear();
-        m_streamReplyText.clear();
-        m_streamOffset = 0;
-        return;
-    }
-
-    m_streamMessageId = message.messageId;
-    m_messageModel->appendMessage(message);
-    m_messageView->scrollToBottom();
-    m_streamTimer->start();
 }
 
-void AiChatConversationWidget::advanceAiReplyStream()
+void AiChatConversationWidget::onAiReplyMessageAdded(const AiChatMessage& message)
 {
-    if (m_streamConversationId.isEmpty() || m_streamMessageId.isEmpty() || m_streamReplyText.isEmpty()) {
-        m_streamTimer->stop();
+    if (m_currentConversation.conversationId == message.conversationId) {
+        m_messageModel->appendMessage(message);
+        m_messageView->scrollToBottom();
         return;
     }
+}
 
-    if (m_streamOffset >= m_streamReplyText.size()) {
-        finishActiveAiReplyStream();
-        return;
-    }
-
-    const int chunkSize = QRandomGenerator::global()->bounded(2, 7);
-    m_streamOffset = qMin(m_streamOffset + chunkSize, m_streamReplyText.size());
-    const QString visibleText = m_streamReplyText.left(m_streamOffset);
-    AiChatRepository::instance().updateAiChatMessageText(m_streamConversationId,
-                                                         m_streamMessageId,
-                                                         visibleText);
-
-    if (m_currentConversation.conversationId == m_streamConversationId) {
-        m_messageModel->updateMessageText(m_streamMessageId, visibleText);
+void AiChatConversationWidget::onAiReplyMessageUpdated(const QString& conversationId,
+                                                       const QString& messageId,
+                                                       const QString& text)
+{
+    if (m_currentConversation.conversationId == conversationId) {
+        m_messageModel->updateMessageText(messageId, text);
         m_messageView->scrollToBottom();
     }
+}
 
-    if (m_streamOffset >= m_streamReplyText.size()) {
-        finishActiveAiReplyStream();
+void AiChatConversationWidget::onAiReplyFinished(const QString& conversationId, const QString& messageId)
+{
+    Q_UNUSED(messageId);
+    if (m_currentConversation.conversationId == conversationId) {
+        m_inputBar->setStreaming(false);
     }
 }
 
-QString AiChatConversationWidget::randomReplyText(const QString& prompt) const
+void AiChatConversationWidget::onAiReplyCanceled(const QString& conversationId, const QString& messageId)
 {
-    const QString promptPreview = prompt.simplified().left(80);
-    const QStringList replies = {
-        QStringLiteral("我先按本地演示模式回复，不接任何真实模型。你刚才输入的是：%1。\n\n为了方便测试滚动、换行、长文本气泡、字符命中、复制选择和底部悬浮输入栏遮挡关系，这条内容会刻意写得比较长。它会分成很多小段逐步出现，模拟真实 AI 回复的流式传输。你可以在回复还没结束的时候滚动列表、拖拽选中文本、复制其中一段，或者继续输入下一条消息，观察列表是否能保持在底部并且输入栏不被其它控件挡住。")
-                .arg(promptPreview),
-        QStringLiteral("这是一个随机命中的测试回复。当前不会调用任何智能能力，只会从几段固定文本里挑选一段，然后通过计时器一点一点追加到同一个 AI 气泡里。\n\n输入摘要：%1。\n\n这段文本特意包含多行内容和较长的中文句子，用来检查 QTextLayout 的换行、气泡高度刷新、滚动条最大值变化、以及列表 viewport bottom margin 是否正确。如果视觉上看到气泡逐字增长，就说明流式刷新链路已经跑通。")
-                .arg(promptPreview),
-        QStringLiteral("收到。这里返回一段足够长的假数据，重点是模拟端到端交互：用户按回车发送，消息立即进入列表；AI 气泡随后创建，并以短间隔持续扩展文本。\n\n你可以把这段当作压力样例：%1。后续接真实平台方案时，只需要把固定文本来源替换为接口 token 回调，保留当前模型更新、仓库更新和视图滚动逻辑即可。")
-                .arg(promptPreview),
-        QStringLiteral("本轮回复用于验证 AI 对话和日常聊天分离后的输入体验。AI 输入栏只保留文本输入区域，没有表情、图片、截图、历史、发送图标等日常聊天按钮；鼠标在输入文本区域会显示文本选取样式。\n\n关于你的输入：%1。\n\n这条回复会继续拉长一些，方便检查长回复在浅色、深色主题下的背景、文字颜色、选择高亮和悬浮输入栏上方的安全间距。")
-                .arg(promptPreview)
-    };
-
-    return replies.at(QRandomGenerator::global()->bounded(replies.size()));
+    Q_UNUSED(messageId);
+    if (m_currentConversation.conversationId == conversationId || m_currentConversation.conversationId.isEmpty()) {
+        m_inputBar->setStreaming(false);
+    }
 }
 
-void AiChatConversationWidget::finishActiveAiReplyStream()
+void AiChatConversationWidget::cancelActiveAiReplyStream()
 {
-    if (m_streamTimer->isActive()) {
-        m_streamTimer->stop();
+    if (m_controller) {
+        m_controller->cancelActiveAiReplyStream();
     }
-
-    if (!m_streamConversationId.isEmpty() && !m_streamMessageId.isEmpty() && !m_streamReplyText.isEmpty()) {
-        AiChatRepository::instance().updateAiChatMessageText(m_streamConversationId,
-                                                             m_streamMessageId,
-                                                             m_streamReplyText);
-        if (m_currentConversation.conversationId == m_streamConversationId) {
-            m_messageModel->updateMessageText(m_streamMessageId, m_streamReplyText);
-            m_messageView->scrollToBottom();
-        }
+    if (m_inputBar) {
+        m_inputBar->setStreaming(false);
     }
+}
 
-    m_streamConversationId.clear();
-    m_streamMessageId.clear();
-    m_streamReplyText.clear();
-    m_streamOffset = 0;
+bool AiChatConversationWidget::hasActiveAiReplyStream() const
+{
+    return m_controller && m_controller->hasActiveAiReplyStream();
 }

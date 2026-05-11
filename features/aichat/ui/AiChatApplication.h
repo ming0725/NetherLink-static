@@ -9,6 +9,8 @@
 #include <QPainter>
 #include <QPaintEvent>
 
+class AiChatSessionController;
+
 class AiChatApplication : public QWidget {
     Q_OBJECT
 public:
@@ -42,6 +44,7 @@ private:
             });
         }
         AiChatListWidget* aiChatList() const { return m_aiChatList; }
+        void setController(AiChatSessionController* controller) { m_aiChatList->setController(controller); }
     protected:
         void paintEvent(QPaintEvent* event) override {
             QPainter painter(this);
@@ -87,6 +90,7 @@ private:
         const int newButtonHeight = 30;
     };
     LeftPane*     m_leftPane;
+    AiChatSessionController* m_controller;
     AiChatConversationWidget* m_conversationWidget;
     QSplitter*    m_splitter;
 };

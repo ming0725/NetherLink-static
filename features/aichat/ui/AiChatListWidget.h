@@ -8,6 +8,7 @@
 
 class AiChatListDelegate;
 class AiChatListModel;
+class AiChatSessionController;
 class QMouseEvent;
 class QPaintEvent;
 class QModelIndex;
@@ -18,6 +19,7 @@ class AiChatListWidget : public OverlayScrollListView
 
 public:
     explicit AiChatListWidget(QWidget* parent = nullptr);
+    void setController(AiChatSessionController* controller);
     void ensureInitialized();
     void createNewConversation();
 
@@ -45,11 +47,12 @@ private:
 
     StickyHeaderState calculateStickyHeaderState() const;
     QStyleOptionViewItem viewOptionForIndex(const QModelIndex& index) const;
-    void showItemMenu(const QModelIndex& index);
+    void showItemMenu(const QModelIndex& index, const QPoint& globalPos);
     void renameItem(const QModelIndex& index);
     void deleteItem(const QModelIndex& index);
     void drawStickyHeader() const;
 
+    AiChatSessionController* m_controller = nullptr;
     AiChatListModel* m_model;
     AiChatListDelegate* m_delegate;
     QString m_stickyTitle;

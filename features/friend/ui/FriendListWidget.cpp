@@ -85,13 +85,25 @@ FriendListWidget::FriendListWidget(QWidget* parent)
         loadMoreForVisibleGroup();
     });
     connect(m_model, &QAbstractItemModel::modelReset,
-            this, [this]() { updateStickyHeader(); });
+            this, [this]() {
+                m_delegate->clearPaintCache();
+                updateStickyHeader();
+            });
     connect(m_model, &QAbstractItemModel::rowsInserted,
-            this, [this](const QModelIndex&, int, int) { updateStickyHeader(); });
+            this, [this](const QModelIndex&, int, int) {
+                m_delegate->clearPaintCache();
+                updateStickyHeader();
+            });
     connect(m_model, &QAbstractItemModel::rowsRemoved,
-            this, [this](const QModelIndex&, int, int) { updateStickyHeader(); });
+            this, [this](const QModelIndex&, int, int) {
+                m_delegate->clearPaintCache();
+                updateStickyHeader();
+            });
     connect(m_model, &QAbstractItemModel::dataChanged,
-            this, [this](const QModelIndex&, const QModelIndex&, const QVector<int>&) {
+            this, [this](const QModelIndex& topLeft,
+                         const QModelIndex& bottomRight,
+                         const QVector<int>& roles) {
+                m_delegate->invalidatePaintCache(topLeft, bottomRight, roles);
                 updateStickyHeader();
             });
 }

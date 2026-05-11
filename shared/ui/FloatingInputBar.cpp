@@ -1,6 +1,7 @@
 #include "FloatingInputBar.h"
 #include "shared/services/ImageService.h"
 #include "shared/theme/ThemeManager.h"
+#include "shared/ui/TransparentTextEdit.h"
 
 #include <QEvent>
 #include <QFileDialog>
@@ -10,11 +11,9 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPalette>
-#include <QDebug>
 #include <QScrollBar>
 #include <QStandardPaths>
 #include <QTextCursor>
-#include <QTextDocument>
 #include <QTextOption>
 
 #ifdef Q_OS_MACOS
@@ -128,24 +127,16 @@ void FloatingInputBar::initQtFallbackUi()
         label->installEventFilter(this);
     }
 
-    m_inputEdit = new QTextEdit(this);
+    m_inputEdit = new TransparentTextEdit(this);
     m_inputEdit->setAcceptRichText(false);
     m_inputEdit->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_inputEdit->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_inputEdit->setMinimumHeight(60);
     m_inputEdit->setMaximumHeight(120);
-    m_inputEdit->document()->setDocumentMargin(0);
-    m_inputEdit->setStyleSheet(QStringLiteral(
-            "QTextEdit {"
-            "   border: none;"
-            "   padding: %1px %2px %3px %2px;"
-            "}"
-            "QScrollBar:vertical {"
-            "   border: none;"
-            "}"
-    ).arg(kQtMode3InputTextTopPadding)
-     .arg(kQtMode3InputTextHorizontalPadding)
-     .arg(kQtMode3InputTextBottomPadding));
+    m_inputEdit->setViewportPadding(kQtMode3InputTextHorizontalPadding,
+                                    kQtMode3InputTextTopPadding,
+                                    kQtMode3InputTextHorizontalPadding,
+                                    kQtMode3InputTextBottomPadding);
     m_inputEdit->installEventFilter(this);
     setFocusProxy(m_inputEdit);
 
@@ -201,12 +192,6 @@ void FloatingInputBar::refreshPlatformAppearance()
             != MacFloatingInputBarBridge::Appearance::Unsupported;
     const bool systemSuppressed = property(kSystemFloatingBarsSuppressedProperty).toBool();
 
-    qInfo() << "[FloatingInputBar] refresh"
-            << "shouldUseNative=" << shouldUseNative
-            << "usesNativeGlass=" << m_usesNativeGlass
-            << "suppressed=" << systemSuppressed
-            << "visible=" << isVisible();
-
     if (m_usesNativeGlass && !shouldUseNative) {
         MacFloatingInputBarBridge::clearInputBar(this);
         m_usesNativeGlass = false;
@@ -221,7 +206,6 @@ void FloatingInputBar::refreshPlatformAppearance()
     }
 
     if (!m_usesNativeGlass && shouldUseNative && systemSuppressed) {
-        qInfo() << "[FloatingInputBar] defer native bridge while system overlay is visible";
         updateQtFallbackGeometry();
         update();
         return;
@@ -539,7 +523,6 @@ void FloatingInputBar::syncPlatformInput()
 #ifdef Q_OS_MACOS
     if (m_usesNativeGlass) {
         if (property(kSystemFloatingBarsSuppressedProperty).toBool()) {
-            qInfo() << "[FloatingInputBar] clear native bridge while suppressed";
             MacFloatingInputBarBridge::clearInputBar(this);
             return;
         }
