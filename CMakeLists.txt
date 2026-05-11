@@ -86,7 +86,7 @@ if(UNIX AND NOT APPLE)
 endif()
 
 if(APPLE)
-    target_link_libraries(NetherLink-static PRIVATE "-framework QuartzCore")
+    target_link_libraries(NetherLink-static PRIVATE "-framework QuartzCore" "-framework CoreFoundation")
 endif()
 
 if(WIN32)

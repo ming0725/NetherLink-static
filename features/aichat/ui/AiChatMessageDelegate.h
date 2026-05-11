@@ -1,12 +1,13 @@
 #pragma once
 
+#include <QCache>
 #include <QPersistentModelIndex>
 #include <QString>
 #include <QStyledItemDelegate>
+#include <QTextDocument>
 #include <QVector>
 
 class QColor;
-class QTextDocument;
 
 class AiChatMessageDelegate : public QStyledItemDelegate
 {
@@ -32,6 +33,9 @@ public:
                   const QModelIndex& index,
                   const QPoint& viewportPos) const;
 
+    bool selectWordAt(const QStyleOptionViewItem& option,
+                      const QModelIndex& index,
+                      const QPoint& viewportPos);
     void setSelection(const QModelIndex& index, int anchor, int cursor);
     void clearSelection();
     bool hasSelection() const;
@@ -52,6 +56,18 @@ private:
         QString text;
     };
 
+    struct TextDocumentCacheEntry {
+        QTextDocument document;
+    };
+
+    struct TextSizeCacheEntry {
+        QSize size;
+    };
+
+    struct UrlRangesCacheEntry {
+        QVector<TextRange> ranges;
+    };
+
     LayoutMetrics layoutMetrics(const QStyleOptionViewItem& option,
                                 const QModelIndex& index) const;
     void configureTextDocument(QTextDocument& document,
@@ -62,6 +78,13 @@ private:
                                bool isFromUser,
                                bool dark) const;
     QSize textDocumentSize(const QString& text, const QFont& font, int maxTextWidth) const;
+    const QTextDocument& cachedTextDocument(const QString& text,
+                                            const QFont& font,
+                                            int textWidth,
+                                            const QColor& textColor,
+                                            bool isFromUser,
+                                            bool dark) const;
+    QVector<TextRange> cachedUrlRanges(const QString& text) const;
     QVector<TextRange> urlRanges(const QString& text) const;
     QFont messageFont() const;
     int maxBubbleWidth(int itemWidth) const;
@@ -71,6 +94,9 @@ private:
     QPersistentModelIndex m_selectionIndex;
     int m_selectionAnchor = -1;
     int m_selectionCursor = -1;
+    mutable QCache<QString, TextDocumentCacheEntry> m_textDocumentCache;
+    mutable QCache<QString, TextSizeCacheEntry> m_textSizeCache;
+    mutable QCache<QString, UrlRangesCacheEntry> m_urlRangesCache;
 
     static constexpr int kVerticalMargin = 8;
     static constexpr int kHorizontalMargin = 24;

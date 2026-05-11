@@ -3,6 +3,7 @@
 
 #include <QFontMetrics>
 #include <QGraphicsDropShadowEffect>
+#include <QDebug>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QtGlobal>
@@ -10,6 +11,12 @@
 #ifdef Q_OS_MACOS
 #include "platform/macos/MacPostBarBridge_p.h"
 #endif
+
+namespace {
+
+constexpr auto kSystemFloatingBarsSuppressedProperty = "systemFloatingBarsSuppressed";
+
+} // namespace
 
 PostApplicationBar::PostApplicationBar(QWidget* parent)
     : QWidget(parent)
@@ -134,6 +141,13 @@ void PostApplicationBar::refreshPlatformAppearance()
 #ifdef Q_OS_MACOS
     const bool shouldUseNative = MacPostBarBridge::appearance()
             != MacPostBarBridge::Appearance::Unsupported;
+    const bool systemSuppressed = property(kSystemFloatingBarsSuppressedProperty).toBool();
+
+    qInfo() << "[PostApplicationBar] refresh"
+            << "shouldUseNative=" << shouldUseNative
+            << "usesNativeBar=" << m_usesNativeBar
+            << "suppressed=" << systemSuppressed
+            << "visible=" << isVisible();
 
     if (m_usesNativeBar && !shouldUseNative) {
         MacPostBarBridge::clearBar(this);
@@ -150,10 +164,16 @@ void PostApplicationBar::refreshPlatformAppearance()
         return;
     }
 
+    if (!m_usesNativeBar && shouldUseNative && systemSuppressed) {
+        qInfo() << "[PostApplicationBar] defer native bridge while system overlay is visible";
+        layoutItems();
+        update();
+        return;
+    }
+
     if (!m_usesNativeBar && shouldUseNative) {
-        if (QGraphicsEffect* effect = graphicsEffect()) {
+        if (graphicsEffect()) {
             setGraphicsEffect(nullptr);
-            delete effect;
         }
         m_usesNativeBar = true;
         syncPlatformBar();
@@ -368,6 +388,12 @@ void PostApplicationBar::syncPlatformBar()
 {
 #ifdef Q_OS_MACOS
     if (!m_usesNativeBar) {
+        return;
+    }
+
+    if (property(kSystemFloatingBarsSuppressedProperty).toBool()) {
+        qInfo() << "[PostApplicationBar] clear native bridge while suppressed";
+        MacPostBarBridge::clearBar(this);
         return;
     }
 

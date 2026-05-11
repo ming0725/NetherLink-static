@@ -6,8 +6,13 @@
 #include "shared/services/ImageService.h"
 #include "shared/theme/ThemeManager.h"
 #include "shared/ui/GlobalNotification.h"
+#include <QAbstractTextDocumentLayout>
 #include <QPainter>
-#include <QTextLayout>
+#include <QRegularExpression>
+#include <QTextBoundaryFinder>
+#include <QTextCharFormat>
+#include <QTextCursor>
+#include <QTextDocument>
 #include <QTextOption>
 #include <QFontMetrics>
 #include <QApplication>
@@ -17,8 +22,23 @@
 #include <QPersistentModelIndex>
 #include <QMenu>
 #include <QKeyEvent>
+#include <QtMath>
+
+#if defined(Q_OS_DARWIN)
+#include <CoreFoundation/CoreFoundation.h>
+#endif
 
 namespace {
+
+struct WordRange {
+    int start = -1;
+    int end = -1;
+
+    bool isValid() const
+    {
+        return start >= 0 && end > start;
+    }
+};
 
 QColor groupRoleBackgroundColor(GroupRole role)
 {
@@ -37,11 +57,301 @@ void showCopyNotification(QObject* owner)
     GlobalNotification::showSuccess(widget, QStringLiteral("复制成功"));
 }
 
+QColor linkTextColor(bool dark, bool isFromMe)
+{
+    if (isFromMe) {
+        return QColor(0xbf, 0xe9, 0xff);
+    }
+
+    return dark ? QColor(0x6a, 0xb7, 0xff) : QColor(0x1b, 0x6e, 0xd6);
+}
+
+QString trimmedUrlText(const QString& text)
+{
+    QString url = text;
+    while (!url.isEmpty()) {
+        const QChar last = url.back();
+        if (last == QLatin1Char('.') || last == QLatin1Char(',') ||
+                last == QLatin1Char(';') || last == QLatin1Char(':') ||
+                last == QLatin1Char('!') || last == QLatin1Char('?') ||
+                last == QLatin1Char(')') || last == QLatin1Char(']') ||
+                last == QLatin1Char('}') || last == QLatin1Char('"') ||
+                last == QLatin1Char('\'') || last == QChar(0x3002) ||
+                last == QChar(0xff0c) || last == QChar(0xff1b) ||
+                last == QChar(0xff1a) || last == QChar(0xff01) ||
+                last == QChar(0xff1f) || last == QChar(0xff09) ||
+                last == QChar(0x3011) || last == QChar(0x300b)) {
+            url.chop(1);
+            continue;
+        }
+        break;
+    }
+    return url;
+}
+
+QString documentTextForLayout(QString text)
+{
+    text.replace(QLatin1Char('\n'), QChar::LineSeparator);
+    return text;
+}
+
+QString textLayoutCacheKey(const QString& text, const QFont& font, int textWidth)
+{
+    QString key = font.toString();
+    key.reserve(key.size() + text.size() + 24);
+    key += QLatin1Char('\x1f');
+    key += QString::number(qMax(1, textWidth));
+    key += QLatin1Char('\x1f');
+    key += text;
+    return key;
+}
+
+QString textDocumentCacheKey(const QString& text,
+                             const QFont& font,
+                             int textWidth,
+                             const QColor& textColor,
+                             bool isFromMe,
+                             bool dark)
+{
+    QString key = textLayoutCacheKey(text, font, textWidth);
+    key += QLatin1Char('\x1f');
+    key += QString::number(textColor.rgba());
+    key += QLatin1Char('\x1f');
+    key += isFromMe ? QLatin1Char('1') : QLatin1Char('0');
+    key += QLatin1Char('\x1f');
+    key += dark ? QLatin1Char('1') : QLatin1Char('0');
+    return key;
+}
+
+int textCacheCost(const QString& text)
+{
+    return qBound(1, text.size() / 512 + 1, 16);
+}
+
+bool isAsciiWordChar(QChar ch)
+{
+    const ushort code = ch.unicode();
+    return (code >= 'a' && code <= 'z') ||
+            (code >= 'A' && code <= 'Z') ||
+            (code >= '0' && code <= '9') ||
+            code == '_' ||
+            code == '\'';
+}
+
+bool isCjkChar(QChar ch)
+{
+    const ushort code = ch.unicode();
+    return (code >= 0x3400 && code <= 0x4dbf) ||
+            (code >= 0x4e00 && code <= 0x9fff) ||
+            (code >= 0xf900 && code <= 0xfaff);
+}
+
+bool isSelectableWordChar(QChar ch)
+{
+    return ch.isLetterOrNumber() || ch == QLatin1Char('_') || isCjkChar(ch);
+}
+
+bool containsSelectableWordChar(const QString& text, int start, int end)
+{
+    for (int i = start; i < end; ++i) {
+        if (isSelectableWordChar(text.at(i))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+int characterIndexForWordSelection(const QString& text, int cursor)
+{
+    if (text.isEmpty()) {
+        return -1;
+    }
+
+    const int forward = qBound(0, cursor, text.size() - 1);
+    if (isSelectableWordChar(text.at(forward)) || isAsciiWordChar(text.at(forward))) {
+        return forward;
+    }
+
+    if (cursor > 0) {
+        const int backward = qMin(cursor - 1, text.size() - 1);
+        if (isSelectableWordChar(text.at(backward)) || isAsciiWordChar(text.at(backward))) {
+            return backward;
+        }
+    }
+
+    return -1;
+}
+
+WordRange asciiWordRangeAt(const QString& text, int character)
+{
+    if (character < 0 || character >= text.size() || !isAsciiWordChar(text.at(character))) {
+        return {};
+    }
+
+    int start = character;
+    while (start > 0 && isAsciiWordChar(text.at(start - 1))) {
+        --start;
+    }
+
+    int end = character + 1;
+    while (end < text.size() && isAsciiWordChar(text.at(end))) {
+        ++end;
+    }
+
+    while (start < end && text.at(start) == QLatin1Char('\'')) {
+        ++start;
+    }
+    while (end > start && text.at(end - 1) == QLatin1Char('\'')) {
+        --end;
+    }
+
+    return {start, end};
+}
+
+WordRange unicodeWordRangeAt(const QString& text, int character)
+{
+    QTextBoundaryFinder finder(QTextBoundaryFinder::Word, text);
+    finder.toStart();
+
+    int start = 0;
+    while (true) {
+        int end = finder.toNextBoundary();
+        if (end < 0) {
+            break;
+        }
+
+        if (character >= start && character < end) {
+            while (start < end && !isSelectableWordChar(text.at(start))) {
+                ++start;
+            }
+            while (end > start && !isSelectableWordChar(text.at(end - 1))) {
+                --end;
+            }
+
+            if (character >= start && character < end &&
+                    containsSelectableWordChar(text, start, end)) {
+                return {start, end};
+            }
+            break;
+        }
+
+        start = end;
+    }
+
+    return {};
+}
+
+WordRange systemCjkWordRangeAt(const QString& text, int character)
+{
+#if defined(Q_OS_DARWIN)
+    if (character < 0 || character >= text.size() || !isCjkChar(text.at(character))) {
+        return {};
+    }
+
+    CFStringRef cfText = CFStringCreateWithCharacters(kCFAllocatorDefault,
+                                                      reinterpret_cast<const UniChar*>(text.constData()),
+                                                      text.size());
+    if (!cfText) {
+        return {};
+    }
+
+    CFLocaleRef locale = CFLocaleCreate(kCFAllocatorDefault, CFSTR("zh_CN"));
+    CFStringTokenizerRef tokenizer = CFStringTokenizerCreate(kCFAllocatorDefault,
+                                                            cfText,
+                                                            CFRangeMake(0, text.size()),
+                                                            kCFStringTokenizerUnitWord,
+                                                            locale);
+
+    WordRange range;
+    if (tokenizer) {
+        const CFStringTokenizerTokenType tokenType =
+                CFStringTokenizerGoToTokenAtIndex(tokenizer, character);
+        if (tokenType != kCFStringTokenizerTokenNone) {
+            const CFRange tokenRange = CFStringTokenizerGetCurrentTokenRange(tokenizer);
+            const int start = static_cast<int>(tokenRange.location);
+            const int end = start + static_cast<int>(tokenRange.length);
+            if (tokenRange.location != kCFNotFound &&
+                    start >= 0 && end <= text.size() &&
+                    character >= start && character < end &&
+                    containsSelectableWordChar(text, start, end)) {
+                range = {start, end};
+            }
+        }
+    }
+
+    if (tokenizer) {
+        CFRelease(tokenizer);
+    }
+    if (locale) {
+        CFRelease(locale);
+    }
+    CFRelease(cfText);
+
+    return range;
+#else
+    Q_UNUSED(text)
+    Q_UNUSED(character)
+    return {};
+#endif
+}
+
+WordRange fallbackCjkWordRangeAt(const QString& text, int character)
+{
+    if (character < 0 || character >= text.size() || !isCjkChar(text.at(character))) {
+        return {};
+    }
+
+    if (character > 0 && isCjkChar(text.at(character - 1))) {
+        return {character - 1, character + 1};
+    }
+
+    if (character + 1 < text.size() && isCjkChar(text.at(character + 1))) {
+        return {character, character + 2};
+    }
+
+    return {character, character + 1};
+}
+
+WordRange wordRangeAt(const QString& text, int cursor)
+{
+    const int character = characterIndexForWordSelection(text, cursor);
+    if (character < 0) {
+        return {};
+    }
+
+    const WordRange asciiRange = asciiWordRangeAt(text, character);
+    if (asciiRange.isValid()) {
+        return asciiRange;
+    }
+
+    if (isCjkChar(text.at(character))) {
+        const WordRange systemCjkRange = systemCjkWordRangeAt(text, character);
+        if (systemCjkRange.isValid()) {
+            return systemCjkRange;
+        }
+
+        const WordRange fallbackCjkRange = fallbackCjkWordRangeAt(text, character);
+        if (fallbackCjkRange.isValid()) {
+            return fallbackCjkRange;
+        }
+    }
+
+    const WordRange unicodeRange = unicodeWordRangeAt(text, character);
+    if (unicodeRange.isValid() && unicodeRange.end - unicodeRange.start > 1) {
+        return unicodeRange;
+    }
+
+    return unicodeRange;
+}
+
 } // namespace
 
 ChatItemDelegate::ChatItemDelegate(QObject* parent)
     : QStyledItemDelegate(parent)
 {
+    m_textDocumentCache.setMaxCost(96);
+    m_textSizeCache.setMaxCost(256);
+    m_urlRangesCache.setMaxCost(256);
 }
 
 void ChatItemDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
@@ -95,7 +405,7 @@ void ChatItemDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opti
             bubbleRect.moveTop(bubbleRect.top() + NAME_HEIGHT + GROUP_INFO_GAP);
         }
         // 绘制气泡
-        drawBubble(painter, bubbleRect, isFromMe, message, message->getIsSelected());
+        drawBubble(painter, bubbleRect, isFromMe, message, message->getIsSelected(), index);
     }
     painter->restore();
 }
@@ -167,8 +477,172 @@ bool ChatItemDelegate::bubbleHitTest(const QStyleOptionViewItem& option,
     return bubblePath.contains(viewportPos);
 }
 
+int ChatItemDelegate::characterIndexAt(const QStyleOptionViewItem& option,
+                                       const QModelIndex& index,
+                                       const QPoint& viewportPos,
+                                       bool allowLineWhitespace) const
+{
+    const ChatMessage* message = index.data(Qt::UserRole).value<ChatMessage*>();
+    if (!message || message->getType() != MessageType::Text) {
+        return -1;
+    }
+
+    const QString text = message->getContent();
+    if (text.isEmpty()) {
+        return -1;
+    }
+
+    const int maxBubbleWidth = calculateMaxBubbleWidth(option.rect);
+    QRect bubbleRect = calculateBubbleRect(option.rect, message, maxBubbleWidth, message->isFromMe());
+    if (message->isInGroupChat()) {
+        bubbleRect.moveTop(bubbleRect.top() + NAME_HEIGHT + GROUP_INFO_GAP);
+    }
+
+    const QRect textRect = calculateTextRect(bubbleRect);
+    const QRect hitRect = allowLineWhitespace
+            ? bubbleRect.adjusted(-2, -2, 2, 2)
+            : textRect;
+    if (!hitRect.contains(viewportPos)) {
+        return -1;
+    }
+
+    const bool dark = ThemeManager::instance().isDark();
+    const QColor textColor = message->isFromMe()
+            ? Qt::white
+            : ThemeManager::instance().color(ThemeColor::PrimaryText);
+    const QTextDocument& textDocument = cachedTextDocument(text,
+                                                           messageFont(),
+                                                           textRect.width(),
+                                                           textColor,
+                                                           message->isFromMe(),
+                                                           dark);
+
+    const QPointF local = viewportPos - textRect.topLeft();
+    const qreal height = textDocument.size().height();
+
+    if (local.y() < 0) {
+        return allowLineWhitespace ? 0 : -1;
+    }
+    if (local.y() == 0) {
+        return 0;
+    }
+    if (local.y() >= height) {
+        return allowLineWhitespace ? text.size() : -1;
+    }
+
+    const Qt::HitTestAccuracy accuracy = allowLineWhitespace ? Qt::FuzzyHit : Qt::ExactHit;
+    const int cursor = textDocument.documentLayout()->hitTest(local, accuracy);
+    if (cursor < 0) {
+        return -1;
+    }
+
+    return qBound(0, cursor, text.size());
+}
+
+QString ChatItemDelegate::urlAt(const QStyleOptionViewItem& option,
+                                const QModelIndex& index,
+                                const QPoint& viewportPos) const
+{
+    const int cursor = characterIndexAt(option, index, viewportPos);
+    if (cursor < 0) {
+        return {};
+    }
+
+    const ChatMessage* message = index.data(Qt::UserRole).value<ChatMessage*>();
+    if (!message || message->getType() != MessageType::Text) {
+        return {};
+    }
+
+    const QVector<TextRange> urls = cachedUrlRanges(message->getContent());
+    for (const TextRange& url : urls) {
+        const int end = url.start + url.length;
+        if (cursor >= url.start && cursor <= end) {
+            return url.text;
+        }
+    }
+
+    return {};
+}
+
+bool ChatItemDelegate::selectWordAt(const QStyleOptionViewItem& option,
+                                    const QModelIndex& index,
+                                    const QPoint& viewportPos)
+{
+    const int cursor = characterIndexAt(option, index, viewportPos);
+    if (cursor < 0) {
+        return false;
+    }
+
+    const ChatMessage* message = index.data(Qt::UserRole).value<ChatMessage*>();
+    if (!message || message->getType() != MessageType::Text) {
+        return false;
+    }
+
+    const WordRange range = wordRangeAt(message->getContent(), cursor);
+    if (!range.isValid()) {
+        return false;
+    }
+
+    setSelection(index, range.start, range.end);
+    return hasSelection();
+}
+
+void ChatItemDelegate::setSelection(const QModelIndex& index, int anchor, int cursor)
+{
+    m_selectionIndex = QPersistentModelIndex(index);
+    const ChatMessage* message = index.data(Qt::UserRole).value<ChatMessage*>();
+    const int textLength = message && message->getType() == MessageType::Text
+            ? message->getContent().size()
+            : 0;
+    m_selectionAnchor = qBound(0, anchor, textLength);
+    m_selectionCursor = qBound(0, cursor, textLength);
+}
+
+void ChatItemDelegate::clearSelection()
+{
+    m_selectionIndex = QPersistentModelIndex();
+    m_selectionAnchor = -1;
+    m_selectionCursor = -1;
+}
+
+bool ChatItemDelegate::hasSelection() const
+{
+    return m_selectionIndex.isValid() && m_selectionAnchor >= 0 &&
+            m_selectionCursor >= 0 && m_selectionAnchor != m_selectionCursor;
+}
+
+bool ChatItemDelegate::selectionContains(const QModelIndex& index, int cursor) const
+{
+    if (!hasSelection() || m_selectionIndex != index || cursor < 0) {
+        return false;
+    }
+
+    return cursor >= selectionStart() && cursor <= selectionEnd();
+}
+
+QString ChatItemDelegate::selectedText() const
+{
+    if (!hasSelection()) {
+        return {};
+    }
+
+    const ChatMessage* message = m_selectionIndex.data(Qt::UserRole).value<ChatMessage*>();
+    if (!message || message->getType() != MessageType::Text) {
+        return {};
+    }
+
+    const QString text = message->getContent();
+    return text.mid(selectionStart(), selectionEnd() - selectionStart());
+}
+
+QPersistentModelIndex ChatItemDelegate::selectionIndex() const
+{
+    return m_selectionIndex;
+}
+
 void ChatItemDelegate::drawBubble(QPainter* painter, const QRect& rect,
-                                 bool isFromMe, const ChatMessage* message, bool isSelected) const
+                                  bool isFromMe, const ChatMessage* message, bool isSelected,
+                                  const QModelIndex& index) const
 {
     if (message->getType() == MessageType::Image) {
         const ImageMessage* imgMsg = static_cast<const ImageMessage*>(message);
@@ -203,7 +677,7 @@ void ChatItemDelegate::drawBubble(QPainter* painter, const QRect& rect,
 
     // 根据消息类型绘制内容
     if (message->getType() == MessageType::Text) {
-        drawTextMessage(painter, rect, message->getContent(), isFromMe, isSelected);
+        drawTextMessage(painter, rect, message->getContent(), isFromMe, index);
     }
 }
 
@@ -222,49 +696,42 @@ void ChatItemDelegate::drawAvatar(QPainter* painter, const QRect& rect,
 }
 
 void ChatItemDelegate::drawTextMessage(QPainter* painter, const QRect& rect,
-                                     const QString& text, bool isFromMe, bool isSelected) const
+                                       const QString& text, bool isFromMe,
+                                       const QModelIndex& index) const
 {
-    QRect textRect = rect.adjusted(BUBBLE_PADDING, BUBBLE_PADDING,
-                                 -BUBBLE_PADDING, -BUBBLE_PADDING);
+    const QRect textRect = calculateTextRect(rect);
+    const bool dark = ThemeManager::instance().isDark();
+    const QColor textColor = isFromMe
+            ? Qt::white
+            : ThemeManager::instance().color(ThemeColor::PrimaryText);
+    const QColor selectionColor = isFromMe
+            ? QColor(255, 255, 255, 88)
+            : (dark ? QColor(0x4c, 0x82, 0xc5, 150) : QColor(0x8b, 0xb7, 0xff, 130));
 
-    QTextOption option;
-    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-    option.setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    const QTextDocument& textDocument = cachedTextDocument(text,
+                                                           messageFont(),
+                                                           textRect.width(),
+                                                           textColor,
+                                                           isFromMe,
+                                                           dark);
 
-    QColor textColor;
-    if (isFromMe) {
-        textColor = isSelected ? Qt::white : Qt::white;
-    } else {
-        textColor = ThemeManager::instance().color(ThemeColor::PrimaryText);
+    QAbstractTextDocumentLayout::PaintContext paintContext;
+    if (m_selectionIndex == index && hasSelection()) {
+        QTextCharFormat selectionFormat;
+        selectionFormat.setBackground(selectionColor);
+        selectionFormat.setForeground(textColor);
+
+        QAbstractTextDocumentLayout::Selection selection;
+        selection.cursor = QTextCursor(const_cast<QTextDocument*>(&textDocument));
+        selection.cursor.setPosition(selectionStart());
+        selection.cursor.setPosition(selectionEnd(), QTextCursor::KeepAnchor);
+        selection.format = selectionFormat;
+        paintContext.selections.push_back(selection);
     }
-    painter->setPen(textColor);
 
-    // 设置更大的字体
-    QFont messageFont = QApplication::font();
-    messageFont.setPixelSize(14);  // 设置字体大小为14像素
-    painter->setFont(messageFont);
-
-    QTextLayout textLayout(text, messageFont);
-    textLayout.setTextOption(option);
-
-    // 计算文本布局
-    qreal height = 0;
-    textLayout.beginLayout();
-    forever {
-        QTextLine line = textLayout.createLine();
-        if (!line.isValid())
-            break;
-
-        line.setLineWidth(textRect.width());
-        line.setPosition(QPointF(0, height));
-        height += line.height();
-    }
-    textLayout.endLayout();
-
-    // 绘制文本
     painter->save();
     painter->translate(textRect.left(), textRect.top());
-    textLayout.draw(painter, QPointF(0, 0));
+    textDocument.documentLayout()->draw(painter, paintContext);
     painter->restore();
 }
 
@@ -435,36 +902,14 @@ QSize ChatItemDelegate::sizeHint(const QStyleOptionViewItem& option,
     } else if (message) {
         const int maxBubbleWidth = calculateMaxBubbleWidth(option.rect);
 
-        // 使用更大的字体
-        QFont messageFont = QApplication::font();
-        messageFont.setPixelSize(14);
-        QFontMetrics fm(messageFont);
-
         int bubbleHeight = 0;
         const int groupInfoHeight = message->isInGroupChat() ? (NAME_HEIGHT + GROUP_INFO_GAP) : 0;
 
         if (message->getType() == MessageType::Text) {
-            QString text = message->getContent();
-
-            QTextLayout textLayout(text, messageFont);
-            QTextOption textOption;
-            textOption.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-            textLayout.setTextOption(textOption);
-
-            qreal textHeight = 0;
-            textLayout.beginLayout();
-            forever {
-                QTextLine line = textLayout.createLine();
-                if (!line.isValid())
-                    break;
-
-                line.setLineWidth(maxBubbleWidth - 2 * BUBBLE_PADDING);
-                line.setPosition(QPointF(0, textHeight));
-                textHeight += line.height();
-            }
-            textLayout.endLayout();
-
-            bubbleHeight = qCeil(textHeight) + 2 * BUBBLE_PADDING;
+            const QSize textSize = textDocumentSize(message->getContent(),
+                                                    messageFont(),
+                                                    maxBubbleWidth - 2 * BUBBLE_PADDING);
+            bubbleHeight = textSize.height() + 2 * BUBBLE_PADDING;
         } else if (message->getType() == MessageType::Image) {
             const ImageMessage* imgMsg = static_cast<const ImageMessage*>(message);
             const QSize sourceSize = ImageService::instance().sourceSize(imgMsg->getImageSource());
@@ -488,39 +933,15 @@ QRect ChatItemDelegate::calculateBubbleRect(const QRect& contentRect,
                                           const ChatMessage* message,
                                           int maxWidth, bool isFromMe) const
 {
-    // 使用更大的字体
-    QFont messageFont = QApplication::font();
-    messageFont.setPixelSize(14);
-    QFontMetrics fm(messageFont);
-
     int bubbleWidth = 0;
     int bubbleHeight = 0;
 
     if (message->getType() == MessageType::Text) {
-        // 使用QTextLayout计算实际文本高度
-        QString text = message->getContent();
-        QTextLayout textLayout(text, messageFont);
-        QTextOption textOption;
-        textOption.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-        textLayout.setTextOption(textOption);
-
-        qreal textHeight = 0;
-        qreal textWidth = 0;
-        textLayout.beginLayout();
-        forever {
-            QTextLine line = textLayout.createLine();
-            if (!line.isValid())
-                break;
-
-            line.setLineWidth(maxWidth - 2 * BUBBLE_PADDING);
-            line.setPosition(QPointF(0, textHeight));
-            textHeight += line.height();
-            textWidth = qMax(textWidth, line.naturalTextWidth());
-        }
-        textLayout.endLayout();
-
-        bubbleWidth = qCeil(textWidth) + 2 * BUBBLE_PADDING;
-        bubbleHeight = qCeil(textHeight) + 2 * BUBBLE_PADDING;
+        const QSize textSize = textDocumentSize(message->getContent(),
+                                                messageFont(),
+                                                maxWidth - 2 * BUBBLE_PADDING);
+        bubbleWidth = textSize.width() + 2 * BUBBLE_PADDING;
+        bubbleHeight = textSize.height() + 2 * BUBBLE_PADDING;
     } else if (message->getType() == MessageType::Image) {
         const ImageMessage* imgMsg = static_cast<const ImageMessage*>(message);
         const QSize sourceSize = ImageService::instance().sourceSize(imgMsg->getImageSource());
@@ -559,6 +980,159 @@ int ChatItemDelegate::calculateMaxBubbleWidth(const QRect& contentRect) const
             - BUBBLE_MARGIN
             - 12;
     return qMax(120, qMin(static_cast<int>(contentRect.width() * 0.7), availableWidth));
+}
+
+QRect ChatItemDelegate::calculateTextRect(const QRect& bubbleRect) const
+{
+    return bubbleRect.adjusted(BUBBLE_PADDING, BUBBLE_PADDING,
+                               -BUBBLE_PADDING, -BUBBLE_PADDING);
+}
+
+QFont ChatItemDelegate::messageFont() const
+{
+    QFont font = QApplication::font();
+    font.setPixelSize(14);
+    return font;
+}
+
+QSize ChatItemDelegate::textDocumentSize(const QString& text,
+                                         const QFont& font,
+                                         int maxTextWidth) const
+{
+    const QString key = textLayoutCacheKey(text, font, maxTextWidth);
+    if (const TextSizeCacheEntry* entry = m_textSizeCache.object(key)) {
+        return entry->size;
+    }
+
+    QTextDocument textDocument;
+    textDocument.setUndoRedoEnabled(false);
+    textDocument.setDocumentMargin(0);
+    textDocument.setDefaultFont(font);
+
+    QTextOption textOption;
+    textOption.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    textDocument.setDefaultTextOption(textOption);
+    textDocument.setPlainText(documentTextForLayout(text));
+    textDocument.setTextWidth(qMax(1, maxTextWidth));
+
+    const int width = qMin(qCeil(textDocument.idealWidth()), maxTextWidth);
+    const int height = qCeil(textDocument.size().height());
+    const QSize size(qCeil(width), qCeil(height));
+
+    auto* entry = new TextSizeCacheEntry;
+    entry->size = size;
+    m_textSizeCache.insert(key, entry, textCacheCost(text));
+    return size;
+}
+
+const QTextDocument& ChatItemDelegate::cachedTextDocument(const QString& text,
+                                                          const QFont& font,
+                                                          int textWidth,
+                                                          const QColor& textColor,
+                                                          bool isFromMe,
+                                                          bool dark) const
+{
+    const QString key = textDocumentCacheKey(text, font, textWidth, textColor, isFromMe, dark);
+    if (const TextDocumentCacheEntry* entry = m_textDocumentCache.object(key)) {
+        return entry->document;
+    }
+
+    auto* entry = new TextDocumentCacheEntry;
+    configureTextDocument(entry->document,
+                          text,
+                          font,
+                          textWidth,
+                          textColor,
+                          isFromMe,
+                          dark);
+    m_textDocumentCache.insert(key, entry, textCacheCost(text));
+    return m_textDocumentCache.object(key)->document;
+}
+
+QVector<ChatItemDelegate::TextRange> ChatItemDelegate::cachedUrlRanges(const QString& text) const
+{
+    if (const UrlRangesCacheEntry* entry = m_urlRangesCache.object(text)) {
+        return entry->ranges;
+    }
+
+    auto* entry = new UrlRangesCacheEntry;
+    entry->ranges = urlRanges(text);
+    const QVector<TextRange> ranges = entry->ranges;
+    m_urlRangesCache.insert(text, entry, textCacheCost(text));
+    return ranges;
+}
+
+void ChatItemDelegate::configureTextDocument(QTextDocument& document,
+                                             const QString& text,
+                                             const QFont& font,
+                                             int textWidth,
+                                             const QColor& textColor,
+                                             bool isFromMe,
+                                             bool dark) const
+{
+    document.setUndoRedoEnabled(false);
+    document.setDocumentMargin(0);
+    document.setDefaultFont(font);
+
+    QTextOption textOption;
+    textOption.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    document.setDefaultTextOption(textOption);
+    document.setPlainText(documentTextForLayout(text));
+    document.setTextWidth(qMax(1, textWidth));
+
+    QTextCursor cursor(&document);
+    cursor.select(QTextCursor::Document);
+    QTextCharFormat textFormat;
+    textFormat.setForeground(textColor);
+    cursor.mergeCharFormat(textFormat);
+
+    const QColor urlColor = linkTextColor(dark, isFromMe);
+    const QVector<TextRange> urls = cachedUrlRanges(text);
+    for (const TextRange& url : urls) {
+        QTextCharFormat linkFormat;
+        linkFormat.setForeground(urlColor);
+        linkFormat.setUnderlineStyle(QTextCharFormat::SingleUnderline);
+
+        cursor.clearSelection();
+        cursor.setPosition(url.start);
+        cursor.setPosition(url.start + url.length, QTextCursor::KeepAnchor);
+        cursor.mergeCharFormat(linkFormat);
+    }
+}
+
+QVector<ChatItemDelegate::TextRange> ChatItemDelegate::urlRanges(const QString& text) const
+{
+    static const QRegularExpression urlRegex(
+            QStringLiteral(R"(\b((?:https?://|www\.)[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+))"),
+            QRegularExpression::CaseInsensitiveOption);
+
+    QVector<TextRange> ranges;
+    QRegularExpressionMatchIterator it = urlRegex.globalMatch(text);
+    while (it.hasNext()) {
+        const QRegularExpressionMatch match = it.next();
+        const QString rawUrl = match.captured(1);
+        const QString url = trimmedUrlText(rawUrl);
+        if (url.isEmpty()) {
+            continue;
+        }
+
+        TextRange range;
+        range.start = match.capturedStart(1);
+        range.length = url.size();
+        range.text = url;
+        ranges.push_back(range);
+    }
+    return ranges;
+}
+
+int ChatItemDelegate::selectionStart() const
+{
+    return qMin(m_selectionAnchor, m_selectionCursor);
+}
+
+int ChatItemDelegate::selectionEnd() const
+{
+    return qMax(m_selectionAnchor, m_selectionCursor);
 }
 
 void ChatItemDelegate::showContextMenu(const QPoint& pos, const QModelIndex& index,

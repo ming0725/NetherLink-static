@@ -249,21 +249,40 @@ PostApplication::PostApplication(QWidget* parent)
 
 void PostApplication::setSystemFloatingBarsSuppressed(bool suppressed)
 {
-    if (!m_bar || !m_bar->usesNativeBar() || m_systemFloatingBarsSuppressed == suppressed) {
+    if (!m_bar) {
+        return;
+    }
+
+    m_bar->setProperty("systemFloatingBarsSuppressed", suppressed);
+
+    if (m_systemFloatingBarsSuppressed == suppressed) {
+        if (suppressed && m_bar->usesNativeBar() && !m_bar->isHidden()) {
+            m_barVisibleBeforeSystemSuppression = true;
+            m_barOpacityBeforeSystemSuppression = m_bar->visualOpacity();
+            m_bar->hide();
+        }
         return;
     }
 
     m_systemFloatingBarsSuppressed = suppressed;
     if (suppressed) {
-        m_barVisibleBeforeSystemSuppression = !m_bar->isHidden();
-        m_barOpacityBeforeSystemSuppression = m_bar->visualOpacity();
-        m_bar->hide();
+        if (m_bar->usesNativeBar()) {
+            m_barVisibleBeforeSystemSuppression = !m_bar->isHidden();
+            m_barOpacityBeforeSystemSuppression = m_bar->visualOpacity();
+            m_bar->hide();
+        } else {
+            m_barVisibleBeforeSystemSuppression = false;
+            m_barOpacityBeforeSystemSuppression = 1.0;
+        }
         return;
     }
 
     if (m_barVisibleBeforeSystemSuppression && !hasModalLayerActive()) {
         m_bar->setVisualOpacity(m_barOpacityBeforeSystemSuppression);
+        m_bar->refreshPlatformAppearance();
         m_bar->show();
+    } else if (!m_bar->isHidden()) {
+        m_bar->refreshPlatformAppearance();
     }
     m_barVisibleBeforeSystemSuppression = false;
     m_barOpacityBeforeSystemSuppression = 1.0;

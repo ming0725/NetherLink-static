@@ -324,6 +324,46 @@ NSMutableArray<NSButton*>* buttonsFor(NSView* qtView)
             : nil;
 }
 
+void prepareButtonForRemoval(NSButton* button)
+{
+    if (!button) {
+        return;
+    }
+
+    button.target = nil;
+    button.action = nil;
+}
+
+void clearButtons(NSView* qtView)
+{
+    if (!qtView) {
+        return;
+    }
+
+    NSMutableArray<NSButton*>* buttons = buttonsFor(qtView);
+    for (NSButton* button in buttons) {
+        prepareButtonForRemoval(button);
+        [button removeFromSuperview];
+    }
+
+    objc_setAssociatedObject(qtView, kButtonsAssociationKey, nil, OBJC_ASSOCIATION_ASSIGN);
+}
+
+void clearSelectionView(NSView* qtView)
+{
+    if (!qtView) {
+        return;
+    }
+
+    NSView* selectionView = selectionViewFor(qtView);
+    if (selectionView) {
+        [selectionView.layer removeAllAnimations];
+        [selectionView removeFromSuperview];
+    }
+
+    objc_setAssociatedObject(qtView, kSelectionAssociationKey, nil, OBJC_ASSOCIATION_ASSIGN);
+}
+
 void configureHostView(NSView* qtView)
 {
     if (!qtView) {
@@ -677,6 +717,7 @@ NSMutableArray<NSButton*>* ensureButtons(NSView* qtView,
     NSMutableArray<NSButton*>* buttons = buttonsFor(qtView);
     if (!buttons || buttons.count != labels.size()) {
         for (NSButton* button in buttons) {
+            prepareButtonForRemoval(button);
             [button removeFromSuperview];
         }
 
@@ -821,6 +862,11 @@ void syncBar(QWidget* widget,
              double opacity)
 {
     const Appearance current = appearance();
+    NSLog(@"[NetherLink][PostBarBridge] syncBar widget=%p appearance=%d visible=%d opacity=%.3f",
+          widget,
+          static_cast<int>(current),
+          widget ? widget->isVisible() : false,
+          opacity);
     if (!widget || current == Appearance::Unsupported || !widget->isVisible()) {
         clearBar(widget);
         return;
@@ -874,13 +920,18 @@ void syncBar(QWidget* widget,
 
 void clearBar(QWidget* widget)
 {
+    NSLog(@"[NetherLink][PostBarBridge] clearBar widget=%p", widget);
     NSView* hostView = topLevelQtViewForWidget(widget, false);
-    NSView* container = containerForView(hostView);
-    if (container) {
-        [container removeFromSuperview];
-    }
-
     if (hostView) {
+        clearButtons(hostView);
+        clearSelectionView(hostView);
+
+        NLPostBarTarget* target = targetForView(hostView);
+        if (target) {
+            target.owner = nullptr;
+        }
+
+        NSView* container = containerForView(hostView);
         NSView* shadowHost = shadowHostForView(hostView);
         if (shadowHost) {
             [shadowHost removeFromSuperview];
@@ -891,10 +942,12 @@ void clearBar(QWidget* widget)
             [contentView removeFromSuperview];
         }
 
+        if (container) {
+            [container removeFromSuperview];
+        }
+
         objc_setAssociatedObject(hostView, kContentAssociationKey, nil, OBJC_ASSOCIATION_ASSIGN);
         objc_setAssociatedObject(hostView, kShadowHostAssociationKey, nil, OBJC_ASSOCIATION_ASSIGN);
-        objc_setAssociatedObject(hostView, kButtonsAssociationKey, nil, OBJC_ASSOCIATION_ASSIGN);
-        objc_setAssociatedObject(hostView, kSelectionAssociationKey, nil, OBJC_ASSOCIATION_ASSIGN);
         objc_setAssociatedObject(hostView, kTargetAssociationKey, nil, OBJC_ASSOCIATION_ASSIGN);
         objc_setAssociatedObject(hostView, kContainerAssociationKey, nil, OBJC_ASSOCIATION_ASSIGN);
     }

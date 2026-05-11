@@ -1079,6 +1079,7 @@ void ChatArea::clearConversation(bool closeInfoPanel)
     }
     chatModel->clear();
     chatModel->clearSelection();
+    chatView->clearTextSelection();
     m_state = {};
     nameLabel->clear();
     statusIcon->hide();
@@ -1161,6 +1162,9 @@ void ChatArea::clearMessageSelection()
     if (chatModel) {
         chatModel->clearSelection();
     }
+    if (chatView) {
+        chatView->clearTextSelection();
+    }
 }
 
 void ChatArea::handleGlobalMousePress(const QPoint& globalPos)
@@ -1215,7 +1219,20 @@ void ChatArea::handleGlobalMousePress(const QPoint& globalPos)
 
 void ChatArea::setSystemFloatingBarsSuppressed(bool suppressed)
 {
-    if (!inputBar || m_systemFloatingBarsSuppressed == suppressed) {
+    if (!inputBar) {
+        return;
+    }
+
+    inputBar->setProperty("systemFloatingBarsSuppressed", suppressed);
+
+    if (m_systemFloatingBarsSuppressed == suppressed) {
+        if (suppressed && inputBar->usesNativeGlass() && !inputBar->isHidden()) {
+            m_inputBarVisibleBeforeSystemSuppression = true;
+            inputBar->hide();
+            if (bottomGapGradientOverlay) {
+                bottomGapGradientOverlay->hide();
+            }
+        }
         return;
     }
 
@@ -1235,9 +1252,14 @@ void ChatArea::setSystemFloatingBarsSuppressed(bool suppressed)
 
     if (m_inputBarVisibleBeforeSystemSuppression) {
         updateInputBarPosition();
+        inputBar->refreshPlatformAppearance();
         inputBar->show();
         inputBar->raise();
         updateNewMessageNotifierPosition();
+    } else if (!inputBar->isHidden()) {
+        updateInputBarPosition();
+        inputBar->refreshPlatformAppearance();
+        inputBar->raise();
     }
     m_inputBarVisibleBeforeSystemSuppression = false;
 }

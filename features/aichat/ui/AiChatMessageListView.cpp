@@ -160,6 +160,35 @@ void AiChatMessageListView::mousePressEvent(QMouseEvent* event)
     OverlayScrollListView::mousePressEvent(event);
 }
 
+void AiChatMessageListView::mouseDoubleClickEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton) {
+        m_dragging = false;
+        m_dragIndex = QPersistentModelIndex();
+        m_dragAnchor = -1;
+        m_pressedUrlIndex = QPersistentModelIndex();
+        m_pressedUrl.clear();
+
+        const QModelIndex index = indexAt(event->pos());
+        if (index.isValid()) {
+            const QStyleOptionViewItem option = viewOptionForIndex(index);
+            if (m_delegate->bubbleHitTest(option, index, event->pos())) {
+                setFocus(Qt::MouseFocusReason);
+                m_activeBubbleIndex = QPersistentModelIndex(index);
+
+                if (m_delegate->urlAt(option, index, event->pos()).isEmpty() &&
+                        m_delegate->selectWordAt(option, index, event->pos())) {
+                    viewport()->update();
+                    event->accept();
+                    return;
+                }
+            }
+        }
+    }
+
+    OverlayScrollListView::mouseDoubleClickEvent(event);
+}
+
 void AiChatMessageListView::mouseMoveEvent(QMouseEvent* event)
 {
     if (m_dragging && m_dragIndex.isValid()) {

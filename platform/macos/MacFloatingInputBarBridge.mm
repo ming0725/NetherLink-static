@@ -114,6 +114,11 @@ NSTextField* sharedTooltipLabel()
 
 void showNativeTooltipForButton(NSButton* button, NSString* text)
 {
+    Q_UNUSED(button);
+    Q_UNUSED(text);
+    return;
+
+#if 0
     if (!button || text.length == 0 || !button.window) {
         return;
     }
@@ -148,6 +153,7 @@ void showNativeTooltipForButton(NSButton* button, NSString* text)
 
     [panel setFrame:NSMakeRect(panelX, panelY, panelWidth, panelHeight) display:NO];
     [panel orderFront:nil];
+#endif
 }
 
 void hideNativeTooltip()
@@ -787,6 +793,37 @@ NLFloatingInputShortcutTextView* inputTextViewForView(NSView* qtView)
             : nil;
 }
 
+void resignInputFirstResponder(NLFloatingInputShortcutTextView* inputField)
+{
+    if (!inputField || !inputField.window) {
+        return;
+    }
+
+    NSResponder* firstResponder = inputField.window.firstResponder;
+    if (firstResponder == inputField) {
+        [inputField.window makeFirstResponder:nil];
+    }
+}
+
+void prepareButtonForRemoval(NLFloatingInputIconButton* button)
+{
+    if (!button) {
+        return;
+    }
+
+    button.target = nil;
+    button.action = nil;
+    button.hovering = NO;
+    [button refreshImage];
+
+    if (button.hoverTrackingArea) {
+        if ([button.trackingAreas containsObject:button.hoverTrackingArea]) {
+            [button removeTrackingArea:button.hoverTrackingArea];
+        }
+        button.hoverTrackingArea = nil;
+    }
+}
+
 void configureHostView(NSView* qtView)
 {
     if (!qtView) {
@@ -1258,28 +1295,35 @@ void clearButtons(NSView* qtView)
         return;
     }
 
+    hideNativeTooltip();
+
     NLFloatingInputIconButton* emojiButton = emojiButtonForView(qtView);
     if (emojiButton) {
+        prepareButtonForRemoval(emojiButton);
         [emojiButton removeFromSuperview];
     }
 
     NLFloatingInputIconButton* imageButton = imageButtonForView(qtView);
     if (imageButton) {
+        prepareButtonForRemoval(imageButton);
         [imageButton removeFromSuperview];
     }
 
     NLFloatingInputIconButton* screenshotButton = screenshotButtonForView(qtView);
     if (screenshotButton) {
+        prepareButtonForRemoval(screenshotButton);
         [screenshotButton removeFromSuperview];
     }
 
     NLFloatingInputIconButton* historyButton = historyButtonForView(qtView);
     if (historyButton) {
+        prepareButtonForRemoval(historyButton);
         [historyButton removeFromSuperview];
     }
 
     NLFloatingInputIconButton* sendButton = sendButtonForView(qtView);
     if (sendButton) {
+        prepareButtonForRemoval(sendButton);
         [sendButton removeFromSuperview];
     }
 
@@ -1296,8 +1340,15 @@ void clearInputField(NSView* qtView)
         return;
     }
 
+    NLFloatingInputShortcutTextView* inputField = inputTextViewForView(qtView);
+    resignInputFirstResponder(inputField);
+    if (inputField) {
+        inputField.shortcutTarget = nil;
+    }
+
     NSScrollView* inputScroll = inputScrollForView(qtView);
     if (inputScroll) {
+        inputScroll.documentView = nil;
         [inputScroll removeFromSuperview];
     }
 
@@ -1644,6 +1695,11 @@ bool isSupported()
 void syncGlass(QWidget* widget, double opacity)
 {
     const auto current = currentAppearance();
+    NSLog(@"[NetherLink][FloatingInputBarBridge] syncGlass widget=%p appearance=%d visible=%d opacity=%.3f",
+          widget,
+          static_cast<int>(current),
+          widget ? widget->isVisible() : false,
+          opacity);
     if (!widget || current == ::Appearance::Unsupported || !widget->isVisible()) {
         clearInputBar(widget);
         return;
@@ -1702,6 +1758,11 @@ void syncInputBar(QWidget* widget,
                   double opacity)
 {
     const auto current = currentAppearance();
+    NSLog(@"[NetherLink][FloatingInputBarBridge] syncInputBar widget=%p appearance=%d visible=%d opacity=%.3f",
+          widget,
+          static_cast<int>(current),
+          widget ? widget->isVisible() : false,
+          opacity);
     if (!widget || current == ::Appearance::Unsupported || !widget->isVisible()) {
         clearInputBar(widget);
         return;
@@ -1783,13 +1844,21 @@ void focusInputBar(QWidget* widget)
 
 void clearInputBar(QWidget* widget)
 {
+    NSLog(@"[NetherLink][FloatingInputBarBridge] clearInputBar widget=%p", widget);
     NSView* hostView = topLevelQtViewForWidget(widget, false);
-    NSView* container = containerForView(hostView);
-    if (container) {
-        [container removeFromSuperview];
-    }
-
     if (hostView) {
+        hideNativeTooltip();
+        clearInputField(hostView);
+        clearButtons(hostView);
+        clearInactiveGlassChrome(hostView);
+
+        NLFloatingInputBarTarget* target = targetForView(hostView);
+        if (target) {
+            target.owner = nullptr;
+            target.hostView = nil;
+        }
+
+        NSView* container = containerForView(hostView);
         NSView* shadowHost = shadowHostForView(hostView);
         if (shadowHost) {
             [shadowHost removeFromSuperview];
@@ -1800,9 +1869,10 @@ void clearInputBar(QWidget* widget)
             [contentView removeFromSuperview];
         }
 
-        clearInputField(hostView);
-        clearButtons(hostView);
-        clearInactiveGlassChrome(hostView);
+        if (container) {
+            [container removeFromSuperview];
+        }
+
         objc_setAssociatedObject(hostView, kContentAssociationKey, nil, OBJC_ASSOCIATION_ASSIGN);
         objc_setAssociatedObject(hostView, kShadowHostAssociationKey, nil, OBJC_ASSOCIATION_ASSIGN);
         objc_setAssociatedObject(hostView, kTargetAssociationKey, nil, OBJC_ASSOCIATION_ASSIGN);

@@ -1,9 +1,16 @@
 #ifndef CHATITEMDELEGATE_H
 #define CHATITEMDELEGATE_H
 
+#include <QCache>
+#include <QPersistentModelIndex>
 #include <QStyledItemDelegate>
+#include <QTextDocument>
+#include <QVector>
+
 #include "shared/types/ChatMessage.h"
 #include "shared/ui/StyledActionMenu.h"
+
+class QColor;
 
 class ChatItemDelegate : public QStyledItemDelegate
 {
@@ -20,11 +27,46 @@ public:
     bool bubbleHitTest(const QStyleOptionViewItem& option,
                        const QModelIndex& index,
                        const QPoint& viewportPos) const;
+    int characterIndexAt(const QStyleOptionViewItem& option,
+                         const QModelIndex& index,
+                         const QPoint& viewportPos,
+                         bool allowLineWhitespace = false) const;
+    QString urlAt(const QStyleOptionViewItem& option,
+                  const QModelIndex& index,
+                  const QPoint& viewportPos) const;
+
+    bool selectWordAt(const QStyleOptionViewItem& option,
+                      const QModelIndex& index,
+                      const QPoint& viewportPos);
+    void setSelection(const QModelIndex& index, int anchor, int cursor);
+    void clearSelection();
+    bool hasSelection() const;
+    bool selectionContains(const QModelIndex& index, int cursor) const;
+    QString selectedText() const;
+    QPersistentModelIndex selectionIndex() const;
 
 signals:
     void deleteRequested(int row);
 
 private:
+    struct TextRange {
+        int start = -1;
+        int length = 0;
+        QString text;
+    };
+
+    struct TextDocumentCacheEntry {
+        QTextDocument document;
+    };
+
+    struct TextSizeCacheEntry {
+        QSize size;
+    };
+
+    struct UrlRangesCacheEntry {
+        QVector<TextRange> ranges;
+    };
+
     static constexpr int AVATAR_SIZE = 40;
     static constexpr int BUBBLE_MARGIN = 10;
     static constexpr int BUBBLE_PADDING = 12;
@@ -47,9 +89,11 @@ private:
     static constexpr int TIME_HEADER_FONT_SIZE = 11;  // 时间标识字体大小
     
     void drawBubble(QPainter* painter, const QRect& rect,
-                    bool isFromMe, const ChatMessage* message, bool isSelected) const;
+                    bool isFromMe, const ChatMessage* message, bool isSelected,
+                    const QModelIndex& index) const;
     void drawTextMessage(QPainter* painter, const QRect& rect,
-                        const QString& text, bool isFromMe, bool isSelected) const;
+                         const QString& text, bool isFromMe,
+                         const QModelIndex& index) const;
     void drawImageMessage(QPainter* painter, const QRect& rect,
                          const QString& imageSource, bool isSelected) const;
     void drawAvatar(QPainter* painter, const QRect& rect,
@@ -69,8 +113,35 @@ private:
     int calculateMaxBubbleWidth(const QRect& contentRect) const;
     QRect calculateTimeHeaderRect(const QRect& contentRect,
                                 const QString& text) const;
+    QRect calculateTextRect(const QRect& bubbleRect) const;
+    QFont messageFont() const;
+    QSize textDocumentSize(const QString& text, const QFont& font, int maxTextWidth) const;
+    const QTextDocument& cachedTextDocument(const QString& text,
+                                            const QFont& font,
+                                            int textWidth,
+                                            const QColor& textColor,
+                                            bool isFromMe,
+                                            bool dark) const;
+    QVector<TextRange> cachedUrlRanges(const QString& text) const;
+    void configureTextDocument(QTextDocument& document,
+                               const QString& text,
+                               const QFont& font,
+                               int textWidth,
+                               const QColor& textColor,
+                               bool isFromMe,
+                               bool dark) const;
+    QVector<TextRange> urlRanges(const QString& text) const;
+    int selectionStart() const;
+    int selectionEnd() const;
                              
     void showContextMenu(const QPoint& pos, const QModelIndex& index,
                         const ChatMessage* message) const;
+
+    QPersistentModelIndex m_selectionIndex;
+    int m_selectionAnchor = -1;
+    int m_selectionCursor = -1;
+    mutable QCache<QString, TextDocumentCacheEntry> m_textDocumentCache;
+    mutable QCache<QString, TextSizeCacheEntry> m_textSizeCache;
+    mutable QCache<QString, UrlRangesCacheEntry> m_urlRangesCache;
 };
 #endif // CHATITEMDELEGATE_H 

@@ -10,6 +10,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPalette>
+#include <QDebug>
 #include <QScrollBar>
 #include <QStandardPaths>
 #include <QTextCursor>
@@ -30,6 +31,7 @@ constexpr int kQtMode3InputTextBottomPadding = 5;
 constexpr int kQtMode3InputRightPadding = 5;
 constexpr int kQtMode3InputBottomMargin = 10;
 constexpr int kQtMode3InputMaxHeight = 120;
+constexpr auto kSystemFloatingBarsSuppressedProperty = "systemFloatingBarsSuppressed";
 constexpr auto kNormalIconProperty = "normalIcon";
 constexpr auto kHoveredIconProperty = "hoveredIcon";
 
@@ -197,6 +199,13 @@ void FloatingInputBar::refreshPlatformAppearance()
 #ifdef Q_OS_MACOS
     const bool shouldUseNative = MacFloatingInputBarBridge::appearance()
             != MacFloatingInputBarBridge::Appearance::Unsupported;
+    const bool systemSuppressed = property(kSystemFloatingBarsSuppressedProperty).toBool();
+
+    qInfo() << "[FloatingInputBar] refresh"
+            << "shouldUseNative=" << shouldUseNative
+            << "usesNativeGlass=" << m_usesNativeGlass
+            << "suppressed=" << systemSuppressed
+            << "visible=" << isVisible();
 
     if (m_usesNativeGlass && !shouldUseNative) {
         MacFloatingInputBarBridge::clearInputBar(this);
@@ -207,6 +216,13 @@ void FloatingInputBar::refreshPlatformAppearance()
         }
         updateQtFallbackGeometry();
         updateGeometry();
+        update();
+        return;
+    }
+
+    if (!m_usesNativeGlass && shouldUseNative && systemSuppressed) {
+        qInfo() << "[FloatingInputBar] defer native bridge while system overlay is visible";
+        updateQtFallbackGeometry();
         update();
         return;
     }
@@ -522,6 +538,12 @@ void FloatingInputBar::syncPlatformInput()
 {
 #ifdef Q_OS_MACOS
     if (m_usesNativeGlass) {
+        if (property(kSystemFloatingBarsSuppressedProperty).toBool()) {
+            qInfo() << "[FloatingInputBar] clear native bridge while suppressed";
+            MacFloatingInputBarBridge::clearInputBar(this);
+            return;
+        }
+
         if (m_usesNativeInput) {
             MacFloatingInputBarBridge::syncInputBar(this, QString(), m_visualOpacity);
         } else {
