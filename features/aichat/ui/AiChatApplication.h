@@ -1,6 +1,7 @@
 #pragma once
 #include "AiChatListWidget.h"
 #include "features/aichat/ui/AiChatConversationWidget.h"
+#include "shared/services/ImageService.h"
 #include "shared/ui/StatefulPushButton.h"
 #include "shared/theme/ThemeManager.h"
 #include <QSplitter>
@@ -30,8 +31,7 @@ private:
             setMinimumWidth(200);
             setMaximumWidth(400);
             // 设置图标
-            QPixmap pixmap(":/resources/icon/aichat.png");
-            m_iconLabel->setPixmap(pixmap);
+            m_iconLabel->setPixmap(ImageService::instance().pixmap(QStringLiteral(":/resources/icon/aichat.png")));
             m_iconLabel->setScaledContents(true); // 自动缩放
             // 设置按钮
             m_newConversationButton->setFixedSize(newButtonWidth, newButtonHeight);
@@ -54,10 +54,10 @@ private:
         void resizeEvent(QResizeEvent* ev) override {
             QWidget::resizeEvent(ev);
             int y = topMargin;
-            QPixmap originalPixmap(":/resources/icon/aichat.png");
             QSize iconTargetSize(iconSize, iconSize);
-            if (!originalPixmap.isNull()) {
-                QSize scaledSize = originalPixmap.size();
+            const QSize sourceSize = ImageService::instance().sourceSize(QStringLiteral(":/resources/icon/aichat.png"));
+            if (sourceSize.isValid()) {
+                QSize scaledSize = sourceSize;
                 scaledSize.scale(iconSize, iconSize, Qt::KeepAspectRatio);
                 iconTargetSize = scaledSize;
             }

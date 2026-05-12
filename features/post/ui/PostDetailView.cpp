@@ -27,6 +27,17 @@ constexpr int kMinSidePanelWidth = 340;
 constexpr int kMinImageWidth = 220;
 constexpr int kFallbackImageWidth = 3;
 constexpr int kFallbackImageHeight = 4;
+const QString kCommentIconSource = QStringLiteral(":/resources/icon/selected_message.png");
+
+QString likeIconSource(bool liked)
+{
+    if (liked) {
+        return QStringLiteral(":/resources/icon/full_heart.png");
+    }
+    return ThemeManager::instance().isDark()
+            ? QStringLiteral(":/resources/icon/empty_heart_darkmode.png")
+            : QStringLiteral(":/resources/icon/heart.png");
+}
 
 QSize normalizedImageSize(const QSize& size)
 {
@@ -53,6 +64,16 @@ public:
         setFocusPolicy(Qt::NoFocus);
         setFlat(true);
         setAttribute(Qt::WA_Hover);
+    }
+
+    void setIconSource(const QString& source)
+    {
+        if (m_iconSource == source) {
+            return;
+        }
+
+        m_iconSource = source;
+        update();
     }
 
 protected:
@@ -99,7 +120,10 @@ protected:
         }
 
         const QSize targetIconSize = iconSize().isValid() ? iconSize() : QSize(18, 18);
-        const QPixmap iconPixmap = icon().pixmap(targetIconSize);
+        const QPixmap iconPixmap = ImageService::instance().scaled(m_iconSource,
+                                                                   targetIconSize,
+                                                                   Qt::KeepAspectRatio,
+                                                                   painter.device()->devicePixelRatioF());
         if (!iconPixmap.isNull()) {
             const QRect target((width() - targetIconSize.width()) / 2,
                                (height() - targetIconSize.height()) / 2,
@@ -110,6 +134,7 @@ protected:
     }
 
 private:
+    QString m_iconSource;
     bool m_hovered = false;
     bool m_pressed = false;
 };
@@ -266,9 +291,7 @@ void PostDetailView::setupUI()
 
     m_likeBtn = new IconActionButton(m_panelContainer);
     disableContextMenu(m_likeBtn);
-    m_likeBtn->setIcon(QIcon(ThemeManager::instance().isDark()
-                             ? ":/resources/icon/empty_heart_darkmode.png"
-                             : ":/resources/icon/heart.png"));
+    static_cast<IconActionButton*>(m_likeBtn)->setIconSource(likeIconSource(m_state.isLiked));
     m_likeBtn->setIconSize(QSize(18, 18));
 
     m_likeCount = new QLabel("666", m_panelContainer);
@@ -277,7 +300,7 @@ void PostDetailView::setupUI()
 
     m_commentBtn = new IconActionButton(m_panelContainer);
     disableContextMenu(m_commentBtn);
-    m_commentBtn->setIcon(QIcon(":/resources/icon/selected_message.png"));
+    static_cast<IconActionButton*>(m_commentBtn)->setIconSource(kCommentIconSource);
     m_commentBtn->setIconSize(QSize(18, 18));
 
     m_commentCount = new QLabel("0", m_panelContainer);
@@ -587,10 +610,7 @@ void PostDetailView::syncUiFromState()
 
 void PostDetailView::syncEngagementUi()
 {
-    m_likeBtn->setIcon(QIcon(m_state.isLiked ? ":/resources/icon/full_heart.png"
-                                             : (ThemeManager::instance().isDark()
-                                                ? ":/resources/icon/empty_heart_darkmode.png"
-                                                : ":/resources/icon/heart.png")));
+    static_cast<IconActionButton*>(m_likeBtn)->setIconSource(likeIconSource(m_state.isLiked));
     m_likeCount->setText(QString::number(m_state.likeCount));
     m_commentCount->setText(QString::number(m_state.commentCount));
 }

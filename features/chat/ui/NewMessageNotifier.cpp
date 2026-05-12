@@ -19,6 +19,7 @@ constexpr int kHorizontalPadding = 10;
 constexpr int kIconSize = 20;
 constexpr int kIconTextGap = 6;
 constexpr int kCornerRadius = 15;
+const QString kIconSource = QStringLiteral(":/resources/icon/ender_pearl.png");
 
 } // namespace
 
@@ -35,8 +36,6 @@ NewMessageNotifier::NewMessageNotifier(QWidget *parent) : QWidget(parent)
     shadow->setOffset(0, 2);
     shadow->setColor(QColor(0, 0, 0, 54));
     setGraphicsEffect(shadow);
-
-    m_icon = ImageService::instance().pixmap(QStringLiteral(":/resources/icon/ender_pearl.png"));
 
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
         update();
@@ -75,11 +74,12 @@ void NewMessageNotifier::paintEvent(QPaintEvent *event)
                          (height() - kIconSize) / 2,
                          kIconSize,
                          kIconSize);
-    if (!m_icon.isNull()) {
-        painter.drawPixmap(iconRect,
-                           m_icon.scaled(iconRect.size(),
-                                         Qt::KeepAspectRatio,
-                                         Qt::SmoothTransformation));
+    const QPixmap icon = ImageService::instance().scaled(kIconSource,
+                                                         iconRect.size(),
+                                                         Qt::KeepAspectRatio,
+                                                         painter.device()->devicePixelRatioF());
+    if (!icon.isNull()) {
+        painter.drawPixmap(iconRect, icon);
     }
 
     QFont countFont = font();

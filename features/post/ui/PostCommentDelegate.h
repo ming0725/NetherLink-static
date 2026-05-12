@@ -6,6 +6,8 @@
 #include <QString>
 #include <QVector>
 
+#include "shared/ui/SelectableText.h"
+
 class PostCommentDelegate : public QStyledItemDelegate
 {
     Q_OBJECT
@@ -192,8 +194,6 @@ private:
                           TextTargetType target,
                           const QString& commentId,
                           const QString& replyId) const;
-    int selectionStart() const;
-    int selectionEnd() const;
     void trimCaches() const;
     int availableWidth(const QStyleOptionViewItem& option) const;
 
@@ -201,8 +201,7 @@ private:
     TextTargetType m_selectionTarget = NoTextTarget;
     QString m_selectionCommentId;
     QString m_selectionReplyId;
-    int m_selectionAnchor = -1;
-    int m_selectionCursor = -1;
+    SelectableText::Selection m_selection;
     mutable QHash<QString, Layout> m_layoutCache;
     mutable QHash<QString, TextMeasure> m_textMeasureCache;
 };

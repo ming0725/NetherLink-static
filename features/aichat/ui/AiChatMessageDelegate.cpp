@@ -7,31 +7,16 @@
 #include <QRegularExpression>
 #include <QTextBlock>
 #include <QTextBlockFormat>
-#include <QTextBoundaryFinder>
 #include <QTextCharFormat>
 #include <QTextCursor>
 #include <QTextDocument>
 #include <QTextOption>
 #include <QtMath>
 
-#if defined(Q_OS_DARWIN)
-#include <CoreFoundation/CoreFoundation.h>
-#endif
-
 #include "features/aichat/model/AiChatMessageListModel.h"
 #include "shared/theme/ThemeManager.h"
 
 namespace {
-
-struct WordRange {
-    int start = -1;
-    int end = -1;
-
-    bool isValid() const
-    {
-        return start >= 0 && end > start;
-    }
-};
 
 QColor linkTextColor(bool dark, bool isFromUser)
 {
@@ -40,29 +25,6 @@ QColor linkTextColor(bool dark, bool isFromUser)
     }
 
     return dark ? QColor(0x6ab7ff) : QColor(0x1b6ed6);
-}
-
-QString trimmedUrlText(const QString& text)
-{
-    QString url = text;
-    while (!url.isEmpty()) {
-        const QChar last = url.back();
-        if (last == QLatin1Char('.') || last == QLatin1Char(',') ||
-                last == QLatin1Char(';') || last == QLatin1Char(':') ||
-                last == QLatin1Char('!') || last == QLatin1Char('?') ||
-                last == QLatin1Char(')') || last == QLatin1Char(']') ||
-                last == QLatin1Char('}') || last == QLatin1Char('"') ||
-                last == QLatin1Char('\'') || last == QChar(0x3002) ||
-                last == QChar(0xff0c) || last == QChar(0xff1b) ||
-                last == QChar(0xff1a) || last == QChar(0xff01) ||
-                last == QChar(0xff1f) || last == QChar(0xff09) ||
-                last == QChar(0x3011) || last == QChar(0x300b)) {
-            url.chop(1);
-            continue;
-        }
-        break;
-    }
-    return url;
 }
 
 QString documentTextForLayout(QString text)
@@ -117,222 +79,6 @@ QString textDocumentCacheKey(const QString& text,
 int textCacheCost(const QString& text)
 {
     return qBound(1, text.size() / 512 + 1, 16);
-}
-
-bool isAsciiWordChar(QChar ch)
-{
-    const ushort code = ch.unicode();
-    return (code >= 'a' && code <= 'z') ||
-            (code >= 'A' && code <= 'Z') ||
-            (code >= '0' && code <= '9') ||
-            code == '_' ||
-            code == '\'';
-}
-
-bool isCjkChar(QChar ch)
-{
-    const ushort code = ch.unicode();
-    return (code >= 0x3400 && code <= 0x4dbf) ||
-            (code >= 0x4e00 && code <= 0x9fff) ||
-            (code >= 0xf900 && code <= 0xfaff);
-}
-
-bool isSelectableWordChar(QChar ch)
-{
-    return ch.isLetterOrNumber() || ch == QLatin1Char('_') || isCjkChar(ch);
-}
-
-bool containsSelectableWordChar(const QString& text, int start, int end)
-{
-    for (int i = start; i < end; ++i) {
-        if (isSelectableWordChar(text.at(i))) {
-            return true;
-        }
-    }
-    return false;
-}
-
-int characterIndexForWordSelection(const QString& text, int cursor)
-{
-    if (text.isEmpty()) {
-        return -1;
-    }
-
-    const int forward = qBound(0, cursor, text.size() - 1);
-    if (isSelectableWordChar(text.at(forward)) || isAsciiWordChar(text.at(forward))) {
-        return forward;
-    }
-
-    if (cursor > 0) {
-        const int backward = qMin(cursor - 1, text.size() - 1);
-        if (isSelectableWordChar(text.at(backward)) || isAsciiWordChar(text.at(backward))) {
-            return backward;
-        }
-    }
-
-    return -1;
-}
-
-WordRange asciiWordRangeAt(const QString& text, int character)
-{
-    if (character < 0 || character >= text.size() || !isAsciiWordChar(text.at(character))) {
-        return {};
-    }
-
-    int start = character;
-    while (start > 0 && isAsciiWordChar(text.at(start - 1))) {
-        --start;
-    }
-
-    int end = character + 1;
-    while (end < text.size() && isAsciiWordChar(text.at(end))) {
-        ++end;
-    }
-
-    while (start < end && text.at(start) == QLatin1Char('\'')) {
-        ++start;
-    }
-    while (end > start && text.at(end - 1) == QLatin1Char('\'')) {
-        --end;
-    }
-
-    return {start, end};
-}
-
-WordRange unicodeWordRangeAt(const QString& text, int character)
-{
-    QTextBoundaryFinder finder(QTextBoundaryFinder::Word, text);
-    finder.toStart();
-
-    int start = 0;
-    while (true) {
-        int end = finder.toNextBoundary();
-        if (end < 0) {
-            break;
-        }
-
-        if (character >= start && character < end) {
-            while (start < end && !isSelectableWordChar(text.at(start))) {
-                ++start;
-            }
-            while (end > start && !isSelectableWordChar(text.at(end - 1))) {
-                --end;
-            }
-
-            if (character >= start && character < end &&
-                    containsSelectableWordChar(text, start, end)) {
-                return {start, end};
-            }
-            break;
-        }
-
-        start = end;
-    }
-
-    return {};
-}
-
-WordRange systemCjkWordRangeAt(const QString& text, int character)
-{
-#if defined(Q_OS_DARWIN)
-    if (character < 0 || character >= text.size() || !isCjkChar(text.at(character))) {
-        return {};
-    }
-
-    CFStringRef cfText = CFStringCreateWithCharacters(kCFAllocatorDefault,
-                                                      reinterpret_cast<const UniChar*>(text.constData()),
-                                                      text.size());
-    if (!cfText) {
-        return {};
-    }
-
-    CFLocaleRef locale = CFLocaleCreate(kCFAllocatorDefault, CFSTR("zh_CN"));
-    CFStringTokenizerRef tokenizer = CFStringTokenizerCreate(kCFAllocatorDefault,
-                                                            cfText,
-                                                            CFRangeMake(0, text.size()),
-                                                            kCFStringTokenizerUnitWord,
-                                                            locale);
-
-    WordRange range;
-    if (tokenizer) {
-        const CFStringTokenizerTokenType tokenType =
-                CFStringTokenizerGoToTokenAtIndex(tokenizer, character);
-        if (tokenType != kCFStringTokenizerTokenNone) {
-            const CFRange tokenRange = CFStringTokenizerGetCurrentTokenRange(tokenizer);
-            const int start = static_cast<int>(tokenRange.location);
-            const int end = start + static_cast<int>(tokenRange.length);
-            if (tokenRange.location != kCFNotFound &&
-                    start >= 0 && end <= text.size() &&
-                    character >= start && character < end &&
-                    containsSelectableWordChar(text, start, end)) {
-                range = {start, end};
-            }
-        }
-    }
-
-    if (tokenizer) {
-        CFRelease(tokenizer);
-    }
-    if (locale) {
-        CFRelease(locale);
-    }
-    CFRelease(cfText);
-
-    return range;
-#else
-    Q_UNUSED(text)
-    Q_UNUSED(character)
-    return {};
-#endif
-}
-
-WordRange fallbackCjkWordRangeAt(const QString& text, int character)
-{
-    if (character < 0 || character >= text.size() || !isCjkChar(text.at(character))) {
-        return {};
-    }
-
-    if (character > 0 && isCjkChar(text.at(character - 1))) {
-        return {character - 1, character + 1};
-    }
-
-    if (character + 1 < text.size() && isCjkChar(text.at(character + 1))) {
-        return {character, character + 2};
-    }
-
-    return {character, character + 1};
-}
-
-WordRange wordRangeAt(const QString& text, int cursor)
-{
-    const int character = characterIndexForWordSelection(text, cursor);
-    if (character < 0) {
-        return {};
-    }
-
-    const WordRange asciiRange = asciiWordRangeAt(text, character);
-    if (asciiRange.isValid()) {
-        return asciiRange;
-    }
-
-    if (isCjkChar(text.at(character))) {
-        const WordRange systemCjkRange = systemCjkWordRangeAt(text, character);
-        if (systemCjkRange.isValid()) {
-            return systemCjkRange;
-        }
-
-        const WordRange fallbackCjkRange = fallbackCjkWordRangeAt(text, character);
-        if (fallbackCjkRange.isValid()) {
-            return fallbackCjkRange;
-        }
-    }
-
-    const WordRange unicodeRange = unicodeWordRangeAt(text, character);
-    if (unicodeRange.isValid() && unicodeRange.end - unicodeRange.start > 1) {
-        return unicodeRange;
-    }
-
-    return unicodeRange;
 }
 
 } // namespace
@@ -399,8 +145,8 @@ void AiChatMessageDelegate::paint(QPainter* painter,
 
         QAbstractTextDocumentLayout::Selection selection;
         selection.cursor = QTextCursor(const_cast<QTextDocument*>(&textDocument));
-        selection.cursor.setPosition(selectionStart());
-        selection.cursor.setPosition(selectionEnd(), QTextCursor::KeepAnchor);
+        selection.cursor.setPosition(m_selection.start());
+        selection.cursor.setPosition(m_selection.end(), QTextCursor::KeepAnchor);
         selection.format = selectionFormat;
         paintContext.selections.push_back(selection);
     }
@@ -492,13 +238,25 @@ int AiChatMessageDelegate::characterIndexAt(const QStyleOptionViewItem& option,
         return allowLineWhitespace ? text.size() : -1;
     }
 
+    const int textLength = textDocument.toPlainText().size();
+    const int lineCursor = SelectableText::lineCursorAt(textDocument,
+                                                            local,
+                                                            textLength,
+                                                            allowLineWhitespace);
+    if (lineCursor >= 0) {
+        return lineCursor;
+    }
+
     const Qt::HitTestAccuracy accuracy = allowLineWhitespace ? Qt::FuzzyHit : Qt::ExactHit;
     const int cursor = textDocument.documentLayout()->hitTest(local, accuracy);
     if (cursor < 0) {
-        return -1;
+        return SelectableText::lineCursorAt(textDocument,
+                                                local,
+                                                textLength,
+                                                allowLineWhitespace);
     }
 
-    return qBound(0, cursor, textDocument.toPlainText().size());
+    return qBound(0, cursor, textLength);
 }
 
 QString AiChatMessageDelegate::urlAt(const QStyleOptionViewItem& option,
@@ -560,7 +318,7 @@ bool AiChatMessageDelegate::selectWordAt(const QStyleOptionViewItem& option,
     }
 
     const QString text = renderedPlainText(index.data(AiChatMessageListModel::TextRole).toString());
-    const WordRange range = wordRangeAt(text, cursor);
+    const SelectableText::Range range = SelectableText::wordRangeAt(text, cursor);
     if (!range.isValid()) {
         return false;
     }
@@ -574,15 +332,13 @@ void AiChatMessageDelegate::setSelection(const QModelIndex& index, int anchor, i
     m_selectionIndex = QPersistentModelIndex(index);
     m_bubbleSelectionIndex = QPersistentModelIndex();
     const int textLength = renderedPlainText(index.data(AiChatMessageListModel::TextRole).toString()).size();
-    m_selectionAnchor = qBound(0, anchor, textLength);
-    m_selectionCursor = qBound(0, cursor, textLength);
+    m_selection.set(anchor, cursor, textLength);
 }
 
 void AiChatMessageDelegate::clearSelection()
 {
     m_selectionIndex = QPersistentModelIndex();
-    m_selectionAnchor = -1;
-    m_selectionCursor = -1;
+    m_selection.clear();
 }
 
 void AiChatMessageDelegate::setBubbleSelection(const QModelIndex& index)
@@ -598,8 +354,7 @@ void AiChatMessageDelegate::clearBubbleSelection()
 
 bool AiChatMessageDelegate::hasSelection() const
 {
-    return m_selectionIndex.isValid() && m_selectionAnchor >= 0 &&
-            m_selectionCursor >= 0 && m_selectionAnchor != m_selectionCursor;
+    return m_selectionIndex.isValid() && m_selection.hasSelection();
 }
 
 bool AiChatMessageDelegate::hasBubbleSelection() const
@@ -613,7 +368,7 @@ bool AiChatMessageDelegate::selectionContains(const QModelIndex& index, int curs
         return false;
     }
 
-    return cursor >= selectionStart() && cursor <= selectionEnd();
+    return m_selection.contains(cursor);
 }
 
 QString AiChatMessageDelegate::selectedText() const
@@ -623,7 +378,7 @@ QString AiChatMessageDelegate::selectedText() const
     }
 
     const QString text = renderedPlainText(m_selectionIndex.data(AiChatMessageListModel::TextRole).toString());
-    return text.mid(selectionStart(), selectionEnd() - selectionStart());
+    return m_selection.selectedText(text);
 }
 
 QString AiChatMessageDelegate::renderedText(const QModelIndex& index) const
@@ -797,7 +552,7 @@ QVector<AiChatMessageDelegate::TextRange> AiChatMessageDelegate::urlRanges(const
     while (it.hasNext()) {
         const QRegularExpressionMatch match = it.next();
         const QString rawUrl = match.captured(1);
-        const QString url = trimmedUrlText(rawUrl);
+        const QString url = SelectableText::trimmedUrlText(rawUrl);
         if (url.isEmpty()) {
             continue;
         }
@@ -833,14 +588,4 @@ int AiChatMessageDelegate::maxBubbleWidth(int itemWidth) const
 {
     const int availableWidth = qMax(0, itemWidth - kHorizontalMargin * 2);
     return qMin(static_cast<int>(itemWidth * 0.72), availableWidth);
-}
-
-int AiChatMessageDelegate::selectionStart() const
-{
-    return qMin(m_selectionAnchor, m_selectionCursor);
-}
-
-int AiChatMessageDelegate::selectionEnd() const
-{
-    return qMax(m_selectionAnchor, m_selectionCursor);
 }

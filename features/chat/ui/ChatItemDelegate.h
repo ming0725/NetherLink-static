@@ -8,6 +8,7 @@
 #include <QVector>
 
 #include "shared/types/ChatMessage.h"
+#include "shared/ui/SelectableText.h"
 #include "shared/ui/StyledActionMenu.h"
 
 class QColor;
@@ -131,15 +132,12 @@ private:
                                bool isFromMe,
                                bool dark) const;
     QVector<TextRange> urlRanges(const QString& text) const;
-    int selectionStart() const;
-    int selectionEnd() const;
-                             
+
     void showContextMenu(const QPoint& pos, const QModelIndex& index,
                         const ChatMessage* message) const;
 
     QPersistentModelIndex m_selectionIndex;
-    int m_selectionAnchor = -1;
-    int m_selectionCursor = -1;
+    SelectableText::Selection m_selection;
     mutable QCache<QString, TextDocumentCacheEntry> m_textDocumentCache;
     mutable QCache<QString, TextSizeCacheEntry> m_textSizeCache;
     mutable QCache<QString, UrlRangesCacheEntry> m_urlRangesCache;

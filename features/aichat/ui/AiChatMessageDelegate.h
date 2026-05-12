@@ -7,6 +7,8 @@
 #include <QTextDocument>
 #include <QVector>
 
+#include "shared/ui/SelectableText.h"
+
 class QColor;
 
 class AiChatMessageDelegate : public QStyledItemDelegate
@@ -93,13 +95,10 @@ private:
     QString renderedPlainText(const QString& text) const;
     QFont messageFont() const;
     int maxBubbleWidth(int itemWidth) const;
-    int selectionStart() const;
-    int selectionEnd() const;
 
     QPersistentModelIndex m_selectionIndex;
     QPersistentModelIndex m_bubbleSelectionIndex;
-    int m_selectionAnchor = -1;
-    int m_selectionCursor = -1;
+    SelectableText::Selection m_selection;
     mutable QCache<QString, TextDocumentCacheEntry> m_textDocumentCache;
     mutable QCache<QString, TextSizeCacheEntry> m_textSizeCache;
     mutable QCache<QString, UrlRangesCacheEntry> m_urlRangesCache;

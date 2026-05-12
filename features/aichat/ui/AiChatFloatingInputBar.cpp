@@ -13,6 +13,7 @@
 #include <QTextCursor>
 #include <QTextOption>
 
+#include "shared/services/ImageService.h"
 #include "shared/theme/ThemeManager.h"
 #include "shared/ui/TransparentTextEdit.h"
 
@@ -233,7 +234,10 @@ void AiChatFloatingInputBar::updateActionButtonIcon()
             : QStringLiteral(":/resources/icon/book_and_pen.png");
 
     if (auto* iconButton = dynamic_cast<IconOnlyButton*>(m_actionButton)) {
-        iconButton->setIconPixmap(QPixmap(iconPath));
+        iconButton->setIconPixmap(ImageService::instance().scaled(iconPath,
+                                                                   QSize(kActionButtonSize, kActionButtonSize),
+                                                                   Qt::KeepAspectRatio,
+                                                                   devicePixelRatioF()));
     }
 }
 

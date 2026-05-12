@@ -19,7 +19,7 @@ class PostOverlay;
 class PostSessionController;
 
 class PostApplication : public QWidget {
-Q_OBJECT
+    Q_OBJECT
 public:
     explicit PostApplication(QWidget* parent = nullptr);
     void setSystemFloatingBarsSuppressed(bool suppressed);

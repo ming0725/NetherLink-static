@@ -3,6 +3,7 @@
 #include "shared/theme/ThemeManager.h"
 #include <QPainter>
 #include <QPainterPath>
+#include <QPixmapCache>
 #include <QtMath>
 
 namespace {
@@ -18,10 +19,24 @@ QSize logicalPixmapSize(const QPixmap& pixmap)
                  qRound(pixmap.height() / dpr));
 }
 
-QPixmap invertedPixmap(const QPixmap& pixmap)
+QString invertedVariantKey(const QString& source, const QSize& size, qreal dpr)
+{
+    return QStringLiteral("appbar-inverted|%1|%2x%3|%4")
+            .arg(source,
+                 QString::number(size.width()),
+                 QString::number(size.height()),
+                 QString::number(dpr, 'f', 2));
+}
+
+QPixmap invertedPixmap(const QString& key, const QPixmap& pixmap)
 {
     if (pixmap.isNull()) {
         return pixmap;
+    }
+
+    QPixmap cached;
+    if (QPixmapCache::find(key, &cached)) {
+        return cached;
     }
 
     QImage image = pixmap.toImage();
@@ -29,6 +44,7 @@ QPixmap invertedPixmap(const QPixmap& pixmap)
 
     QPixmap inverted = QPixmap::fromImage(image);
     inverted.setDevicePixelRatio(pixmap.devicePixelRatio());
+    QPixmapCache::insert(key, inverted);
     return inverted;
 }
 
@@ -162,12 +178,15 @@ void ApplicationBarItem::paint(QPainter& painter) const
 
     // 2) 正常状态下的图标（按 pixmapScale 缩放并居中）
     QSizeF tgtF = QSizeF(itemRect.size()) * pixmapScale;
+    const QSize targetSize = tgtF.toSize();
+    const qreal dpr = painter.device()->devicePixelRatioF();
     QPixmap normalScaled = ImageService::instance().scaled(normalSource,
-                                                           tgtF.toSize(),
+                                                           targetSize,
                                                            Qt::KeepAspectRatio,
-                                                           painter.device()->devicePixelRatioF());
+                                                           dpr);
     if (ThemeManager::instance().isDark() && darkModeInversionEnabled && !selected) {
-        normalScaled = invertedPixmap(normalScaled);
+        normalScaled = invertedPixmap(invertedVariantKey(normalSource, targetSize, dpr),
+                                      normalScaled);
     }
     const QSize normalLogicalSize = logicalPixmapSize(normalScaled);
     int x0 = itemRect.x() + qFloor((itemRect.width()  - normalLogicalSize.width())  / 2.0);
@@ -193,9 +212,9 @@ void ApplicationBarItem::paint(QPainter& painter) const
         painter.setClipPath(clipPath);
         // 在剪裁区域内绘制被选中状态的图标
         QPixmap selScaled = ImageService::instance().scaled(selectedSource,
-                                                            tgtF.toSize(),
+                                                            targetSize,
                                                             Qt::KeepAspectRatio,
-                                                            painter.device()->devicePixelRatioF());
+                                                            dpr);
         const QSize selectedLogicalSize = logicalPixmapSize(selScaled);
         const int sx = itemRect.x() + qFloor((itemRect.width()  - selectedLogicalSize.width())  / 2.0);
         const int sy = itemRect.y() + qFloor((itemRect.height() - selectedLogicalSize.height()) / 2.0);

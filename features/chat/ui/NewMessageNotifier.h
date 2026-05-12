@@ -2,7 +2,6 @@
 #define NEWMESSAGENOTIFIER_H
 
 #include <QWidget>
-#include <QPixmap>
 
 class NewMessageNotifier : public QWidget
 {
@@ -35,7 +34,6 @@ private:
     int m_count = 0;
     bool m_hovered = false;
     bool m_pressed = false;
-    QPixmap m_icon;
 };
 
 #endif // NEWMESSAGENOTIFIER_H 
