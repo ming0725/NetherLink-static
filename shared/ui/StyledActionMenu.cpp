@@ -92,6 +92,7 @@ StyledActionMenu::StyledActionMenu(QWidget* parent)
                        ShadowMargin + MenuPadding,
                        ShadowMargin + MenuPadding,
                        ShadowMargin + MenuPadding);
+#ifndef Q_OS_WIN
     if (!usesNativeMenu()) {
         auto* shadowEffect = new QGraphicsDropShadowEffect(this);
         shadowEffect->setBlurRadius(22);
@@ -99,6 +100,7 @@ StyledActionMenu::StyledActionMenu(QWidget* parent)
         shadowEffect->setColor(QColor(0, 0, 0, 50));
         setGraphicsEffect(shadowEffect);
     }
+#endif
 
     auto* menuStyle = new StyledActionMenuSizeStyle;
     menuStyle->setParent(this);
