@@ -354,9 +354,9 @@ void AiChatListWidget::showItemMenu(const QModelIndex& index, const QPoint& glob
 
     QAction* deleteAction = menu->addAction(QStringLiteral("删除"));
     StyledActionMenu::setActionColors(deleteAction,
-                                      QColor(235, 87, 87),
-                                      QColor(255, 255, 255),
-                                      QColor(235, 87, 87));
+                                      ThemeManager::instance().color(ThemeColor::DestructiveActionText),
+                                      ThemeManager::instance().color(ThemeColor::DestructiveActionBackground),
+                                      ThemeManager::instance().color(ThemeColor::DestructiveActionText));
     connect(deleteAction, &QAction::triggered, this, [this, persistentIndex]() {
         if (persistentIndex.isValid()) {
             deleteItem(persistentIndex);

@@ -73,7 +73,7 @@ private:
             m_newConversationButton->setNormalColor(ThemeManager::instance().color(ThemeColor::Accent));
             m_newConversationButton->setHoverColor(ThemeManager::instance().color(ThemeColor::AccentHover));
             m_newConversationButton->setPressColor(ThemeManager::instance().color(ThemeColor::AccentPressed));
-            m_newConversationButton->setTextColor(Qt::white);
+            m_newConversationButton->setTextColor(ThemeManager::instance().color(ThemeColor::TextOnAccent));
             update();
         }
 

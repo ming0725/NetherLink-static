@@ -484,7 +484,7 @@ WindowMetrics configureWindow(QWidget* widget, const QColor& tintColor, bool com
         effectView.material = backdropMaterial();
         effectView.state = NSVisualEffectStateActive;
         effectView.blendingMode = NSVisualEffectBlendingModeBehindWindow;
-        effectView.layer.backgroundColor = toNSColor(tintColor, QColor(248, 248, 252, 92)).CGColor;
+        effectView.layer.backgroundColor = toNSColor(tintColor, ThemeManager::instance().color(ThemeColor::WindowBackdropTint)).CGColor;
         effectView.layer.cornerRadius = kWindowCornerRadius;
         effectView.layer.masksToBounds = YES;
     }

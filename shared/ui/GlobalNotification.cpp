@@ -2,6 +2,7 @@
 
 #include "shared/services/AudioService.h"
 #include "shared/services/ImageService.h"
+#include "shared/theme/ThemeManager.h"
 
 #include <QApplication>
 #include <QEvent>
@@ -268,7 +269,7 @@ void GlobalNotification::paintEvent(QPaintEvent* event)
 
     const QPixmap background = ImageService::instance().pixmap(kBackgroundSource);
     if (background.isNull()) {
-        painter.fillRect(rect(), QColor(45, 45, 45, 235));
+        painter.fillRect(rect(), ThemeManager::instance().color(ThemeColor::NotificationFallbackBackground));
     } else {
         drawNinePatch(painter, background, rect());
     }
@@ -301,13 +302,13 @@ void GlobalNotification::paintEvent(QPaintEvent* event)
             : QStringLiteral("操作未达成");
     const QString detail = metrics.elidedText(m_message, Qt::ElideRight, secondLineRect.width());
 
-    painter.setPen(QColor(0, 0, 0, 185));
+    painter.setPen(ThemeManager::instance().color(ThemeColor::NotificationTitleShadow));
     painter.drawText(firstLineRect.translated(1, 1), Qt::AlignLeft | Qt::AlignVCenter, title);
     painter.drawText(secondLineRect.translated(1, 1), Qt::AlignLeft | Qt::AlignVCenter, detail);
 
-    painter.setPen(QColor(0xFF, 0xFF, 0x55));
+    painter.setPen(ThemeManager::instance().color(ThemeColor::NotificationTitleText));
     painter.drawText(firstLineRect, Qt::AlignLeft | Qt::AlignVCenter, title);
-    painter.setPen(QColor(0xFF, 0xFF, 0xFF));
+    painter.setPen(ThemeManager::instance().color(ThemeColor::NotificationBodyText));
     painter.drawText(secondLineRect, Qt::AlignLeft | Qt::AlignVCenter, detail);
 
     if (m_closeButtonOpacity > 0.0) {
@@ -315,10 +316,14 @@ void GlobalNotification::paintEvent(QPaintEvent* event)
         const QPointF center = closeRect.center();
         painter.setRenderHint(QPainter::Antialiasing, true);
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(255, 255, 255, qRound(220 * m_closeButtonOpacity)));
+        QColor closeBackground = ThemeManager::instance().color(ThemeColor::NotificationCloseBackground);
+        closeBackground.setAlpha(qRound(closeBackground.alpha() * m_closeButtonOpacity));
+        painter.setBrush(closeBackground);
         painter.drawEllipse(closeRect);
 
-        QPen closePen(QColor(0, 0, 0, qRound(210 * m_closeButtonOpacity)), 2);
+        QColor closeIcon = ThemeManager::instance().color(ThemeColor::NotificationCloseIcon);
+        closeIcon.setAlpha(qRound(closeIcon.alpha() * m_closeButtonOpacity));
+        QPen closePen(closeIcon, 2);
         closePen.setCapStyle(Qt::RoundCap);
         painter.setPen(closePen);
         painter.drawLine(QPointF(center.x() - kCloseLineHalfLength,

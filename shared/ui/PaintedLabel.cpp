@@ -1,16 +1,20 @@
 #include "PaintedLabel.h"
 
+#include "shared/theme/ThemeManager.h"
+
 #include <QPaintEvent>
 #include <QPalette>
 
 PaintedLabel::PaintedLabel(QWidget* parent)
     : QLabel(parent)
+    , m_textColor(ThemeManager::instance().color(ThemeColor::SecondaryText))
 {
     setAutoFillBackground(false);
 }
 
 PaintedLabel::PaintedLabel(const QString& text, QWidget* parent)
     : QLabel(text, parent)
+    , m_textColor(ThemeManager::instance().color(ThemeColor::SecondaryText))
 {
     setAutoFillBackground(false);
 }

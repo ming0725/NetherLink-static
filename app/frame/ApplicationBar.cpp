@@ -274,7 +274,7 @@ void ApplicationBar::showMoreOptionsMenu()
     }
 
     auto* menu = new StyledActionMenu(this);
-    menu->setItemHoverColor(QColor(238, 238, 238));
+    menu->setItemHoverColor(ThemeManager::instance().color(ThemeColor::ContextMenuHover));
     QAction* settingsAction = menu->addAction(QStringLiteral("设置"));
     menu->addAction(QStringLiteral("主题颜色"));
     menu->addAction(QStringLiteral("聊天记录管理"));

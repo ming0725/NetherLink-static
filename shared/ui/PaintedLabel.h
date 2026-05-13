@@ -18,5 +18,5 @@ protected:
     void paintEvent(QPaintEvent* event) override;
 
 private:
-    QColor m_textColor = QColor(0x55, 0x55, 0x55);
+    QColor m_textColor;
 };

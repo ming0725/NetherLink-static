@@ -1,4 +1,5 @@
 #include "CustomTooltip.h"
+#include "shared/theme/ThemeManager.h"
 #include <QPainter>
 #include <QPainterPath>
 #include <QPalette>
@@ -18,7 +19,7 @@ CustomTooltip::CustomTooltip(QWidget *parent)
     labelFont.setPixelSize(12);
     m_label->setFont(labelFont);
     QPalette labelPalette = m_label->palette();
-    labelPalette.setColor(QPalette::WindowText, QColor(0x33, 0x33, 0x33));
+    labelPalette.setColor(QPalette::WindowText, ThemeManager::instance().color(ThemeColor::TooltipText));
     m_label->setPalette(labelPalette);
     layout->addWidget(m_label);
 }
@@ -46,6 +47,6 @@ void CustomTooltip::paintEvent(QPaintEvent *event)
     path.addRoundedRect(rect(), CORNER_RADIUS, CORNER_RADIUS);
 
     // 半透明白色背景
-    painter.fillPath(path, QColor(255, 255, 255, 120));
+    painter.fillPath(path, ThemeManager::instance().color(ThemeColor::TooltipBackground));
     
 } 

@@ -106,7 +106,7 @@ AiChatFloatingInputBar::AiChatFloatingInputBar(QWidget* parent)
     auto* shadow = new QGraphicsDropShadowEffect(this);
     shadow->setBlurRadius(30);
     shadow->setOffset(0, 0);
-    shadow->setColor(QColor(150, 150, 150, 220));
+    shadow->setColor(ThemeManager::instance().color(ThemeColor::FloatingPanelShadow));
     setGraphicsEffect(shadow);
 
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
@@ -195,7 +195,7 @@ void AiChatFloatingInputBar::applyTheme()
     palette.setColor(QPalette::Text, ThemeManager::instance().color(ThemeColor::PrimaryText));
     palette.setColor(QPalette::PlaceholderText, ThemeManager::instance().color(ThemeColor::PlaceholderText));
     palette.setColor(QPalette::Highlight, ThemeManager::instance().color(ThemeColor::Accent));
-    palette.setColor(QPalette::HighlightedText, Qt::white);
+    palette.setColor(QPalette::HighlightedText, ThemeManager::instance().color(ThemeColor::TextOnAccent));
     m_inputEdit->setPalette(palette);
 
     update();

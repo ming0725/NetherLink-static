@@ -542,7 +542,7 @@ void FriendListWidget::showFriendMenu(const QPoint& globalPos, const QModelIndex
     }
 
     auto* menu = new StyledActionMenu(this);
-    menu->setItemHoverColor(QColor(238, 238, 238));
+    menu->setItemHoverColor(ThemeManager::instance().color(ThemeColor::ContextMenuHover));
     m_model->setContextMenuFriend(friendSummary.userId);
 
     QAction* messageAction = menu->addAction(QStringLiteral("发消息"));
@@ -579,9 +579,9 @@ void FriendListWidget::showFriendMenu(const QPoint& globalPos, const QModelIndex
 
     QAction* deleteAction = menu->addAction(QStringLiteral("删除好友"));
     StyledActionMenu::setActionColors(deleteAction,
-                                      QColor(235, 87, 87),
-                                      QColor(255, 255, 255),
-                                      QColor(235, 87, 87));
+                                      ThemeManager::instance().color(ThemeColor::DestructiveActionText),
+                                      ThemeManager::instance().color(ThemeColor::DestructiveActionBackground),
+                                      ThemeManager::instance().color(ThemeColor::DestructiveActionText));
     connect(deleteAction, &QAction::triggered, this, [this, userId = friendSummary.userId]() {
         deleteFriendFromMenu(userId);
     });

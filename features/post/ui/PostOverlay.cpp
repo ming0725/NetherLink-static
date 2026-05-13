@@ -1,12 +1,8 @@
 #include "PostOverlay.h"
 
+#include "shared/theme/ThemeManager.h"
+
 #include <QPainter>
-
-namespace {
-
-const QColor kOverlayColor(0x00, 0x00, 0x00, 100);
-
-} // namespace
 
 PostOverlay::PostOverlay(QWidget* parent)
     : QWidget(parent)
@@ -28,7 +24,7 @@ void PostOverlay::paintEvent(QPaintEvent* event)
     Q_UNUSED(event);
 
     QPainter painter(this);
-    QColor color = kOverlayColor;
+    QColor color = ThemeManager::instance().color(ThemeColor::PostOverlay);
     color.setAlphaF(color.alphaF() * m_opacity);
     painter.fillRect(rect(), color);
 }

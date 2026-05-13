@@ -40,8 +40,8 @@ void drawFriendDisplayName(QPainter* painter,
                            const QColor& tertiaryText,
                            bool selected)
 {
-    const QColor primaryColor = selected ? Qt::white : primaryText;
-    const QColor secondaryColor = selected ? QColor(0xff, 0xff, 0xff, 165)
+    const QColor primaryColor = selected ? ThemeManager::instance().color(ThemeColor::TextOnAccent) : primaryText;
+    const QColor secondaryColor = selected ? ThemeManager::instance().color(ThemeColor::SecondaryTextOnAccent)
                                            : tertiaryText;
 
     painter->setFont(nameFont());
@@ -406,7 +406,7 @@ void FriendListDelegate::paint(QPainter* painter,
                              subtitleHeight);
 
     painter->setFont(subtitleFont());
-    painter->setPen(selected ? Qt::white : theme.tertiaryText);
+    painter->setPen(selected ? ThemeManager::instance().color(ThemeColor::TextOnAccent) : theme.tertiaryText);
     painter->drawText(subtitleRect,
                       Qt::AlignLeft | Qt::AlignVCenter,
                       subtitleMetrics().elidedText(friendData.subtitle,

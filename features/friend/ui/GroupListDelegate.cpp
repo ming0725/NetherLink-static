@@ -38,8 +38,8 @@ void drawGroupDisplayName(QPainter* painter,
     const QString remark = index.data(GroupListModel::RemarkRole).toString();
     const QString groupName = index.data(GroupListModel::GroupNameRole).toString();
     const QString displayName = index.data(GroupListModel::DisplayNameRole).toString();
-    const QColor primaryColor = selected ? Qt::white : ThemeManager::instance().color(ThemeColor::PrimaryText);
-    const QColor secondaryColor = selected ? QColor(0xff, 0xff, 0xff, 165)
+    const QColor primaryColor = selected ? ThemeManager::instance().color(ThemeColor::TextOnAccent) : ThemeManager::instance().color(ThemeColor::PrimaryText);
+    const QColor secondaryColor = selected ? ThemeManager::instance().color(ThemeColor::SecondaryTextOnAccent)
                                            : ThemeManager::instance().color(ThemeColor::TertiaryText);
 
     painter->setFont(nameFont());
@@ -334,7 +334,7 @@ void GroupListDelegate::paint(QPainter* painter,
                            memberHeight);
 
     painter->setFont(memberFont());
-    painter->setPen(selected ? Qt::white : ThemeManager::instance().color(ThemeColor::TertiaryText));
+    painter->setPen(selected ? ThemeManager::instance().color(ThemeColor::TextOnAccent) : ThemeManager::instance().color(ThemeColor::TertiaryText));
     painter->drawText(memberRect,
                       Qt::AlignLeft | Qt::AlignVCenter,
                       memberMetrics().elidedText(memberText,

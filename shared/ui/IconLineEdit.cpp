@@ -304,6 +304,6 @@ void IconLineEdit::applyThemePalette()
     inputPalette.setColor(QPalette::PlaceholderText,
                           ThemeManager::instance().color(ThemeColor::PlaceholderText));
     inputPalette.setColor(QPalette::Highlight, ThemeManager::instance().color(ThemeColor::Accent));
-    inputPalette.setColor(QPalette::HighlightedText, Qt::white);
+    inputPalette.setColor(QPalette::HighlightedText, ThemeManager::instance().color(ThemeColor::TextOnAccent));
     setPalette(inputPalette);
 }

@@ -28,10 +28,10 @@ namespace {
 QColor groupRoleBackgroundColor(GroupRole role)
 {
     if (role == GroupRole::Owner) {
-        return QColor(0xF5, 0xDD, 0xCB);
+        return ThemeManager::instance().color(ThemeColor::RoleOwnerBackground);
     }
     if (role == GroupRole::Admin && !ThemeManager::instance().isDark()) {
-        return QColor(0xC2, 0xE1, 0xF5);
+        return ThemeManager::instance().color(ThemeColor::RoleAdminBackground);
     }
     return ThemeManager::instance().color(ThemeColor::PanelRaisedBackground);
 }
@@ -45,10 +45,11 @@ void showCopyNotification(QObject* owner)
 QColor linkTextColor(bool dark, bool isFromMe)
 {
     if (isFromMe) {
-        return QColor(0xbf, 0xe9, 0xff);
+        return ThemeManager::instance().color(ThemeColor::AccentLinkTextOnAccent);
     }
 
-    return dark ? QColor(0x6a, 0xb7, 0xff) : QColor(0x1b, 0x6e, 0xd6);
+    Q_UNUSED(dark);
+    return ThemeManager::instance().color(ThemeColor::AccentLinkText);
 }
 
 QString documentTextForLayout(QString text)
@@ -254,7 +255,7 @@ int ChatItemDelegate::characterIndexAt(const QStyleOptionViewItem& option,
 
     const bool dark = ThemeManager::instance().isDark();
     const QColor textColor = message->isFromMe()
-            ? Qt::white
+            ? ThemeManager::instance().color(ThemeColor::TextOnAccent)
             : ThemeManager::instance().color(ThemeColor::PrimaryText);
     const QTextDocument& textDocument = cachedTextDocument(text,
                                                            messageFont(),
@@ -408,16 +409,18 @@ void ChatItemDelegate::drawBubble(QPainter* painter, const QRect& rect,
     const bool dark = ThemeManager::instance().isDark();
     if (isFromMe) {
         const QColor ownBubbleColor = dark
-                ? QColor(0x1e, 0x86, 0xdf)
+                ? ThemeManager::instance().color(ThemeColor::AccentBubble)
                 : ThemeManager::instance().color(ThemeColor::Accent);
         bubbleColor = isSelected ? ownBubbleColor.darker(118)
                                  : ownBubbleColor;
     } else if (dark) {
-        bubbleColor = isSelected ? QColor(0x25, 0x29, 0x30)
-                                 : QColor(0x2d, 0x31, 0x38);
+        bubbleColor = isSelected
+                ? ThemeManager::instance().color(ThemeColor::MessageBubblePeerSelected)
+                : ThemeManager::instance().color(ThemeColor::MessageBubblePeer);
     } else {
-        bubbleColor = isSelected ? QColor(0xea, 0xea, 0xea)
-                                 : ThemeManager::instance().color(ThemeColor::PanelBackground);
+        bubbleColor = isSelected
+                ? ThemeManager::instance().color(ThemeColor::MessageBubblePeerSelected)
+                : ThemeManager::instance().color(ThemeColor::MessageBubblePeer);
     }
     painter->setBrush(bubbleColor);
     painter->setPen(Qt::NoPen);
@@ -456,11 +459,11 @@ void ChatItemDelegate::drawTextMessage(QPainter* painter, const QRect& rect,
     const QRect textRect = calculateTextRect(rect);
     const bool dark = ThemeManager::instance().isDark();
     const QColor textColor = isFromMe
-            ? Qt::white
+            ? ThemeManager::instance().color(ThemeColor::TextOnAccent)
             : ThemeManager::instance().color(ThemeColor::PrimaryText);
     const QColor selectionColor = isFromMe
-            ? QColor(255, 255, 255, 88)
-            : (dark ? QColor(0x4c, 0x82, 0xc5, 150) : QColor(0x8b, 0xb7, 0xff, 130));
+            ? ThemeManager::instance().color(ThemeColor::AccentTextSelectionOnAccent)
+            : ThemeManager::instance().color(ThemeColor::AccentTextSelection);
 
     const QTextDocument& textDocument = cachedTextDocument(text,
                                                            messageFont(),
@@ -509,7 +512,7 @@ void ChatItemDelegate::drawImageMessage(QPainter* painter, const QRect& rect,
     painter->setClipPath(clipPath);
     painter->drawPixmap(rect, image);
     if (isSelected) {
-        painter->fillRect(rect, QColor(128, 128, 128, 80));
+        painter->fillRect(rect, ThemeManager::instance().color(ThemeColor::ScrollThumb));
     }
     painter->restore();
 }
@@ -545,7 +548,9 @@ void ChatItemDelegate::drawGroupInfo(QPainter* painter, const QRect& rect,
     if (role != GroupRole::Member) {
         QString roleText = (role == GroupRole::Owner) ? "群主" : "管理员";
         QColor bgColor = groupRoleBackgroundColor(role);
-        QColor textColor = (role == GroupRole::Owner) ? QColor(0xFF9C00) : ThemeManager::instance().color(ThemeColor::Accent);
+        QColor textColor = (role == GroupRole::Owner)
+                ? ThemeManager::instance().color(ThemeColor::RoleOwnerText)
+                : ThemeManager::instance().color(ThemeColor::RoleAdminText);
 
         // 计算身份标签的宽度和位置
         QRect roleRect = nameRect;
@@ -607,7 +612,9 @@ void ChatItemDelegate::drawGroupInfoForMe(QPainter* painter, const QRect& rect,
     // 如果有特殊身份，先绘制身份标签（在左边）
     if (role != GroupRole::Member) {
         QColor bgColor = groupRoleBackgroundColor(role);
-        QColor textColor = (role == GroupRole::Owner) ? QColor(0xFF9C00) : ThemeManager::instance().color(ThemeColor::Accent);
+        QColor textColor = (role == GroupRole::Owner)
+                ? ThemeManager::instance().color(ThemeColor::RoleOwnerText)
+                : ThemeManager::instance().color(ThemeColor::RoleAdminText);
 
         QRect roleRect(startX, rect.top() + (rect.height() - ROLE_HEIGHT) / 2,
                       roleWidth, ROLE_HEIGHT);
@@ -900,9 +907,9 @@ void ChatItemDelegate::showContextMenu(const QPoint& pos, const QModelIndex& ind
     // 添加删除选项
     QAction* deleteAction = menu->addAction("删除");
     StyledActionMenu::setActionColors(deleteAction,
-                                      QColor(235, 87, 87),
-                                      QColor(255, 255, 255),
-                                      QColor(235, 87, 87));
+                                      ThemeManager::instance().color(ThemeColor::DestructiveActionText),
+                                      ThemeManager::instance().color(ThemeColor::DestructiveActionBackground),
+                                      ThemeManager::instance().color(ThemeColor::DestructiveActionText));
     connect(deleteAction, &QAction::triggered, [this, index, model = index.model()]() {
         Q_UNUSED(model);
         emit const_cast<ChatItemDelegate*>(this)->deleteRequested(index.row());

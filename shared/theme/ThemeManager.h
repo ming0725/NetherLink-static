@@ -10,9 +10,21 @@ class QApplication;
 class QEvent;
 
 enum class ThemeColor {
+    // Accent-derived roles. These should follow the user-selected theme color.
     Accent,
     AccentHover,
     AccentPressed,
+    AccentBubble,
+    AccentLinkText,
+    AccentLinkTextOnAccent,
+    AccentTextSelection,
+    AccentTextSelectionOnAccent,
+    TextOnAccent,
+    SecondaryTextOnAccent,
+    ListSelected,
+
+    // Neutral and fixed semantic roles. These follow light/dark mode or
+    // their own semantic color, not the user-selected theme color.
     WindowBackground,
     PageBackground,
     PanelBackground,
@@ -26,9 +38,13 @@ enum class ThemeColor {
     Divider,
     ListHover,
     ListPinned,
-    ListSelected,
     ChatInfoPanelOverlay,
+    ChatInfoPanelFallbackBackground,
+    ChatInfoPanelCardBackground,
+    ChatInfoPanelCardHover,
+    ChatInfoPanelCardPressed,
     SettingsOverlay,
+    SettingsFallbackBackground,
     ChatInfoMemberListBackground,
     ChatInfoMemberListHover,
     ChatInfoMemberListPrimaryText,
@@ -42,7 +58,49 @@ enum class ThemeColor {
     PostBarItemSelectedBackground,
     ImagePlaceholder,
     ControlHover,
-    ControlPressed
+    ControlPressed,
+    MessageBubblePeer,
+    MessageBubblePeerSelected,
+    ContextMenuBackground,
+    ContextMenuBorder,
+    ContextMenuHover,
+    ContextMenuSeparator,
+    ContextMenuText,
+    ContextMenuDisabledText,
+    ContextMenuShortcutText,
+    PopupShadow,
+    FloatingPanelShadow,
+    NewMessageNotifierBackground,
+    NewMessageNotifierHover,
+    NewMessageNotifierPressed,
+    NewMessageNotifierText,
+    NewMessageNotifierShadow,
+    BadgeUnreadBackground,
+    BadgeUnreadText,
+    BadgeMutedBackground,
+    BadgeMutedText,
+    BadgeSelectedBackground,
+    RoleOwnerBackground,
+    RoleAdminBackground,
+    RoleOwnerText,
+    RoleAdminText,
+    DestructiveActionText,
+    DestructiveActionBackground,
+    NotificationFallbackBackground,
+    NotificationTitleShadow,
+    NotificationTitleText,
+    NotificationBodyText,
+    NotificationCloseBackground,
+    NotificationCloseIcon,
+    WindowBackdropTint,
+    WindowCloseHover,
+    OverlayStroke,
+    TooltipBackground,
+    TooltipText,
+    MediaOverlayStart,
+    MediaOverlayEnd,
+    PostOverlay,
+    ScrollThumb
 };
 
 class ThemeManager final : public QObject
@@ -72,6 +130,9 @@ private:
     explicit ThemeManager(QObject* parent = nullptr);
 
     bool eventFilter(QObject* watched, QEvent* event) override;
+    static bool isAccentColorRole(ThemeColor role);
+    QColor accentColor(ThemeColor role, bool dark) const;
+    QColor fixedColor(ThemeColor role, bool dark) const;
     void installSystemThemeListener(QApplication& application);
     void handleSystemColorSchemeChanged();
     void refreshApplicationTheme();

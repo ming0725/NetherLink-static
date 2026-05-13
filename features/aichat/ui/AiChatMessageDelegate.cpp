@@ -21,10 +21,11 @@ namespace {
 QColor linkTextColor(bool dark, bool isFromUser)
 {
     if (isFromUser) {
-        return QColor(0xbfe9ff);
+        return ThemeManager::instance().color(ThemeColor::AccentLinkTextOnAccent);
     }
 
-    return dark ? QColor(0x6ab7ff) : QColor(0x1b6ed6);
+    Q_UNUSED(dark);
+    return ThemeManager::instance().color(ThemeColor::AccentLinkText);
 }
 
 QString documentTextForLayout(QString text)
@@ -111,19 +112,19 @@ void AiChatMessageDelegate::paint(QPainter* painter,
     const bool isFromUser = index.data(AiChatMessageListModel::IsFromUserRole).toBool();
     const bool dark = ThemeManager::instance().isDark();
     const QColor bubbleColor = isFromUser
-            ? (dark ? QColor(0x1e, 0x86, 0xdf) : ThemeManager::instance().color(ThemeColor::Accent))
-            : (dark ? QColor(0x2d, 0x31, 0x38) : ThemeManager::instance().color(ThemeColor::PanelBackground));
+            ? (dark ? ThemeManager::instance().color(ThemeColor::AccentBubble) : ThemeManager::instance().color(ThemeColor::Accent))
+            : ThemeManager::instance().color(ThemeColor::MessageBubblePeer);
     const bool bubbleSelected = m_bubbleSelectionIndex == index;
     const QColor effectiveBubbleColor = bubbleSelected
             ? (isFromUser ? bubbleColor.darker(118)
-                          : (dark ? QColor(0x25, 0x29, 0x30) : QColor(0xea, 0xea, 0xea)))
+                          : ThemeManager::instance().color(ThemeColor::MessageBubblePeerSelected))
             : bubbleColor;
     const QColor textColor = isFromUser
-            ? Qt::white
+            ? ThemeManager::instance().color(ThemeColor::TextOnAccent)
             : ThemeManager::instance().color(ThemeColor::PrimaryText);
     const QColor selectionColor = isFromUser
-            ? QColor(255, 255, 255, 88)
-            : (dark ? QColor(0x4c, 0x82, 0xc5, 150) : QColor(0x8b, 0xb7, 0xff, 130));
+            ? ThemeManager::instance().color(ThemeColor::AccentTextSelectionOnAccent)
+            : ThemeManager::instance().color(ThemeColor::AccentTextSelection);
 
     const LayoutMetrics metrics = layoutMetrics(option, index);
     QPainterPath bubblePath;
@@ -216,7 +217,7 @@ int AiChatMessageDelegate::characterIndexAt(const QStyleOptionViewItem& option,
     const bool isFromUser = index.data(AiChatMessageListModel::IsFromUserRole).toBool();
     const bool dark = ThemeManager::instance().isDark();
     const QColor textColor = isFromUser
-            ? Qt::white
+            ? ThemeManager::instance().color(ThemeColor::TextOnAccent)
             : ThemeManager::instance().color(ThemeColor::PrimaryText);
     const QTextDocument& textDocument = cachedTextDocument(text,
                                                            messageFont(),
@@ -281,7 +282,7 @@ QString AiChatMessageDelegate::urlAt(const QStyleOptionViewItem& option,
     const bool isFromUser = index.data(AiChatMessageListModel::IsFromUserRole).toBool();
     const bool dark = ThemeManager::instance().isDark();
     const QColor textColor = isFromUser
-            ? Qt::white
+            ? ThemeManager::instance().color(ThemeColor::TextOnAccent)
             : ThemeManager::instance().color(ThemeColor::PrimaryText);
     const QTextDocument& textDocument = cachedTextDocument(text,
                                                            messageFont(),
@@ -489,7 +490,7 @@ QSize AiChatMessageDelegate::textDocumentSize(const QString& text,
                           text,
                           font,
                           maxTextWidth,
-                          Qt::black,
+                          ThemeManager::instance().color(ThemeColor::PrimaryText),
                           false,
                           false);
 

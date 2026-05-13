@@ -31,7 +31,7 @@ PostApplicationBar::PostApplicationBar(QWidget* parent)
         auto* shadow = new QGraphicsDropShadowEffect(this);
         shadow->setBlurRadius(30);
         shadow->setOffset(0, 0);
-        shadow->setColor(QColor(150, 150, 150, 220));
+        shadow->setColor(ThemeManager::instance().color(ThemeColor::FloatingPanelShadow));
         setGraphicsEffect(shadow);
     }
 
@@ -149,7 +149,7 @@ void PostApplicationBar::refreshPlatformAppearance()
             auto* shadow = new QGraphicsDropShadowEffect(this);
             shadow->setBlurRadius(30);
             shadow->setOffset(0, 0);
-            shadow->setColor(QColor(150, 150, 150, 220));
+            shadow->setColor(ThemeManager::instance().color(ThemeColor::FloatingPanelShadow));
             setGraphicsEffect(shadow);
         }
         layoutItems();

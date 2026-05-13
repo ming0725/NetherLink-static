@@ -25,17 +25,16 @@ BadgeLayout layoutForUnreadCount(int unreadCount, bool doNotDisturb,
     const int width = qMax(kBadgeHeight, textWidth + kBadgeHorizontalPadding * 2);
     layout.size = QSize(width, kBadgeHeight);
 
-    if (doNotDisturb && isDark) {
-        layout.backgroundColor = QColor(0x4e, 0x4e, 0x4e);
-        layout.textColor = Qt::white;
-    } else {
-        layout.backgroundColor = doNotDisturb ? QColor(0xcc, 0xcc, 0xcc)
-                                              : QColor(0xf7, 0x4c, 0x30);
-        layout.textColor = doNotDisturb ? QColor(0xff, 0xfa, 0xfa) : QColor(0xff, 0xff, 0xff);
-    }
+    Q_UNUSED(isDark);
+    layout.backgroundColor = doNotDisturb
+            ? ThemeManager::instance().color(ThemeColor::BadgeMutedBackground)
+            : ThemeManager::instance().color(ThemeColor::BadgeUnreadBackground);
+    layout.textColor = doNotDisturb
+            ? ThemeManager::instance().color(ThemeColor::BadgeMutedText)
+            : ThemeManager::instance().color(ThemeColor::BadgeUnreadText);
 
     if (selected && !doNotDisturb) {
-        layout.backgroundColor = QColor(0xff, 0xff, 0xff, 210);
+        layout.backgroundColor = ThemeManager::instance().color(ThemeColor::BadgeSelectedBackground);
         layout.textColor = ThemeManager::instance().color(ThemeColor::Accent);
     }
 

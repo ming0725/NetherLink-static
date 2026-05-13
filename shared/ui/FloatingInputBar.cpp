@@ -58,7 +58,7 @@ FloatingInputBar::FloatingInputBar(QWidget *parent)
     auto *shadow = new QGraphicsDropShadowEffect(this);
     shadow->setBlurRadius(30);
     shadow->setOffset(0, 0);
-    shadow->setColor(QColor(150, 150, 150, 220));
+    shadow->setColor(ThemeManager::instance().color(ThemeColor::FloatingPanelShadow));
     setGraphicsEffect(shadow);
 }
 
@@ -246,7 +246,7 @@ void FloatingInputBar::applyTheme()
         inputPalette.setColor(QPalette::PlaceholderText,
                               ThemeManager::instance().color(ThemeColor::PlaceholderText));
         inputPalette.setColor(QPalette::Highlight, ThemeManager::instance().color(ThemeColor::Accent));
-        inputPalette.setColor(QPalette::HighlightedText, Qt::white);
+        inputPalette.setColor(QPalette::HighlightedText, ThemeManager::instance().color(ThemeColor::TextOnAccent));
         m_inputEdit->setPalette(inputPalette);
         m_inputEdit->update();
     }

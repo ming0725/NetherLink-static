@@ -168,7 +168,7 @@ void MessageListWidget::showConversationMenu(const QPoint& globalPos, const QMod
     }
 
     auto* menu = new StyledActionMenu(this);
-    menu->setItemHoverColor(QColor(238, 238, 238));
+    menu->setItemHoverColor(ThemeManager::instance().color(ThemeColor::ContextMenuHover));
     m_model->setContextMenuConversation(conversation.conversationId);
 
     QAction* pinAction = menu->addAction(conversation.isPinned
@@ -218,9 +218,9 @@ void MessageListWidget::showConversationMenu(const QPoint& globalPos, const QMod
 
     QAction* deleteAction = menu->addAction(QStringLiteral("删除"));
     StyledActionMenu::setActionColors(deleteAction,
-                                      QColor(235, 87, 87),
-                                      QColor(255, 255, 255),
-                                      QColor(235, 87, 87));
+                                      ThemeManager::instance().color(ThemeColor::DestructiveActionText),
+                                      ThemeManager::instance().color(ThemeColor::DestructiveActionBackground),
+                                      ThemeManager::instance().color(ThemeColor::DestructiveActionText));
     connect(deleteAction, &QAction::triggered, this,
             [this, conversationId = conversation.conversationId]() {
         const bool deletingSelected = selectedConversationId() == conversationId;

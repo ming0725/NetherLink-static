@@ -34,7 +34,7 @@ NewMessageNotifier::NewMessageNotifier(QWidget *parent) : QWidget(parent)
     auto* shadow = new QGraphicsDropShadowEffect(this);
     shadow->setBlurRadius(10);
     shadow->setOffset(0, 2);
-    shadow->setColor(QColor(0, 0, 0, 54));
+    shadow->setColor(ThemeManager::instance().color(ThemeColor::NewMessageNotifierShadow));
     setGraphicsEffect(shadow);
 
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
@@ -55,17 +55,12 @@ void NewMessageNotifier::paintEvent(QPaintEvent *event)
     path.addRoundedRect(pillRect, kCornerRadius, kCornerRadius);
 
     painter.setPen(Qt::NoPen);
-    QColor background;
-    QColor foreground;
-    if (ThemeManager::instance().isDark()) {
-        background = m_pressed ? QColor(0x22, 0x24, 0x29)
-                               : (m_hovered ? QColor(0x1b, 0x1d, 0x22) : QColor(0x0f, 0x10, 0x13));
-        foreground = Qt::white;
-    } else {
-        background = m_pressed ? QColor(0xee, 0xee, 0xee)
-                               : (m_hovered ? QColor(0xf8, 0xf8, 0xf8) : Qt::white);
-        foreground = QColor(0x12, 0x12, 0x12);
-    }
+    const QColor background = m_pressed
+            ? ThemeManager::instance().color(ThemeColor::NewMessageNotifierPressed)
+            : (m_hovered
+               ? ThemeManager::instance().color(ThemeColor::NewMessageNotifierHover)
+               : ThemeManager::instance().color(ThemeColor::NewMessageNotifierBackground));
+    const QColor foreground = ThemeManager::instance().color(ThemeColor::NewMessageNotifierText);
     painter.setBrush(background);
     painter.drawPath(path);
 

@@ -13,6 +13,8 @@
 #include <QTimer>
 #include <QVariant>
 
+#include "shared/theme/ThemeManager.h"
+
 #ifdef Q_OS_MACOS
 #include "platform/macos/MacStyledActionMenuBridge_p.h"
 #endif
@@ -84,8 +86,8 @@ public:
 StyledActionMenu::StyledActionMenu(QWidget* parent)
     : QMenu(parent)
 {
-    setProperty(MenuHoverColorProperty, QColor(234, 234, 234));
-    setProperty(MenuSeparatorColorProperty, QColor(229, 229, 229));
+    setProperty(MenuHoverColorProperty, ThemeManager::instance().color(ThemeColor::ContextMenuHover));
+    setProperty(MenuSeparatorColorProperty, ThemeManager::instance().color(ThemeColor::ContextMenuSeparator));
     setAttribute(Qt::WA_TranslucentBackground, true);
     setWindowFlags(windowFlags() | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
     setContentsMargins(ShadowMargin + MenuPadding,
@@ -97,7 +99,7 @@ StyledActionMenu::StyledActionMenu(QWidget* parent)
         auto* shadowEffect = new QGraphicsDropShadowEffect(this);
         shadowEffect->setBlurRadius(22);
         shadowEffect->setOffset(0, 1);
-        shadowEffect->setColor(QColor(0, 0, 0, 50));
+        shadowEffect->setColor(ThemeManager::instance().color(ThemeColor::PopupShadow));
         setGraphicsEffect(shadowEffect);
     }
 #endif
@@ -235,15 +237,16 @@ void StyledActionMenu::paintEvent(QPaintEvent* event)
 
     const QRectF panelRect = QRectF(rect()).adjusted(ShadowMargin, ShadowMargin,
                                                     -ShadowMargin, -ShadowMargin);
-    painter.setPen(QPen(QColor(218, 218, 218), 1));
-    painter.setBrush(QColor(248, 248, 248));
+    painter.setPen(QPen(ThemeManager::instance().color(ThemeColor::ContextMenuBorder), 1));
+    painter.setBrush(ThemeManager::instance().color(ThemeColor::ContextMenuBackground));
     painter.drawRoundedRect(panelRect.adjusted(0, 0, 0, 0), MenuRadius, MenuRadius);
 
     QFont itemFont = painter.font();
     itemFont.setPixelSize(ItemFontSize);
     painter.setFont(itemFont);
 
-    const QColor separatorColor = readColor(property(MenuSeparatorColorProperty), QColor(229, 229, 229));
+    const QColor separatorColor = readColor(property(MenuSeparatorColorProperty),
+                                           ThemeManager::instance().color(ThemeColor::ContextMenuSeparator));
 
     for (QAction* action : actions()) {
         if (!action->isVisible()) {
@@ -267,7 +270,7 @@ void StyledActionMenu::paintEvent(QPaintEvent* event)
         const bool selected = enabled && activeAction() == action;
         const QRect itemRect = actionRect.adjusted(MenuPadding, 2, -MenuPadding, -2);
         const QColor defaultHoverColor = readColor(property(MenuHoverColorProperty),
-                                                  QColor(234, 234, 234));
+                                                  ThemeManager::instance().color(ThemeColor::ContextMenuHover));
         const QColor hoverColor = readColor(action->property(ActionHoverBackgroundColorProperty),
                                             defaultHoverColor);
 
@@ -277,7 +280,9 @@ void StyledActionMenu::paintEvent(QPaintEvent* event)
             painter.drawRoundedRect(itemRect, ItemRadius, ItemRadius);
         }
 
-        const QColor defaultTextColor = enabled ? QColor(34, 34, 34) : QColor(160, 160, 160);
+        const QColor defaultTextColor = enabled
+                ? ThemeManager::instance().color(ThemeColor::ContextMenuText)
+                : ThemeManager::instance().color(ThemeColor::ContextMenuDisabledText);
         const QColor normalTextColor = readColor(action->property(ActionTextColorProperty),
                                                  defaultTextColor);
         const QColor hoverTextColor = readColor(action->property(ActionHoverTextColorProperty),
@@ -343,7 +348,7 @@ void StyledActionMenu::paintEvent(QPaintEvent* event)
             arrow.moveTo(cx - 3, cy - 5);
             arrow.lineTo(cx + 3, cy);
             arrow.lineTo(cx - 3, cy + 5);
-            painter.setPen(QPen(selected ? hoverTextColor : QColor(104, 104, 104), 1.6,
+            painter.setPen(QPen(selected ? hoverTextColor : ThemeManager::instance().color(ThemeColor::ContextMenuShortcutText), 1.6,
                                 Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
             painter.drawPath(arrow);
         }

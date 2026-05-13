@@ -42,7 +42,6 @@ constexpr int kTitleFontSize       = 18;
 
 const QString kSettingsBackgroundSource(QStringLiteral(":/resources/icon/options_background.png"));
 const QString kSettingsFontSource(QStringLiteral(":/resources/font/MinecraftAE.ttf"));
-const QColor kSettingsFallbackBackground(0xB0, 0xB0, 0xB0);
 const QStringList kFontSizeLabels = {
     QStringLiteral("特小"),
     QStringLiteral("小"),
@@ -301,7 +300,7 @@ void SettingsWindow::paintEvent(QPaintEvent* event)
     painter.setRenderHint(QPainter::TextAntialiasing, true);
     const QPixmap background = ImageService::instance().pixmap(kSettingsBackgroundSource);
     if (background.isNull()) {
-        painter.fillRect(rect(), kSettingsFallbackBackground);
+        painter.fillRect(rect(), ThemeManager::instance().color(ThemeColor::SettingsFallbackBackground));
     } else {
         painter.drawTiledPixmap(rect(), background);
     }
@@ -316,9 +315,9 @@ void SettingsWindow::paintEvent(QPaintEvent* event)
                           kSettingsTitleTop,
                           qMax(0, width() - kSettingsTitleLeft * 2),
                           kSettingsTitleHeight);
-    painter.setPen(QColor(0, 0, 0, 150));
+    painter.setPen(ThemeManager::instance().color(ThemeColor::OverlayStroke));
     painter.drawText(titleRect.translated(1, 1), Qt::AlignCenter, m_currentTitle);
-    painter.setPen(Qt::white);
+    painter.setPen(ThemeManager::instance().color(ThemeColor::TextOnAccent));
     painter.drawText(titleRect, Qt::AlignCenter, m_currentTitle);
 }
 

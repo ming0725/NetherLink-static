@@ -1,5 +1,7 @@
 #include "SystemWindow.h"
 
+#include "shared/theme/ThemeManager.h"
+
 #include <QApplication>
 #include <QEvent>
 #include <QMouseEvent>
@@ -23,6 +25,7 @@ QPoint eventGlobalPos(const QMouseEvent* event)
 
 SystemWindow::SystemWindow(QWidget* parent)
     : QWidget(parent)
+    , m_backdropColor(ThemeManager::instance().color(ThemeColor::WindowBackdropTint))
 {
 #ifdef Q_OS_WIN
     setWindowFlags(windowFlags() | Qt::FramelessWindowHint | Qt::WindowSystemMenuHint);

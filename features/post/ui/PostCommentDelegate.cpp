@@ -1066,9 +1066,7 @@ void PostCommentDelegate::drawMeasuredText(QPainter* painter,
 
     const QColor primary = ThemeManager::instance().color(ThemeColor::PrimaryText);
     const QColor highlighted = ThemeManager::instance().color(ThemeColor::Accent);
-    const QColor selectionColor = ThemeManager::instance().isDark()
-            ? QColor(0x4c, 0x82, 0xc5, 150)
-            : QColor(0x8b, 0xb7, 0xff, 130);
+    const QColor selectionColor = ThemeManager::instance().color(ThemeColor::AccentTextSelection);
     const bool selected = selectionMatches(QModelIndex(m_selectionIndex), target, commentId, replyId) && hasSelection();
 
     QTextDocument textDocument;
@@ -1116,9 +1114,7 @@ void PostCommentDelegate::drawSingleLineText(QPainter* painter,
 
     const QFontMetrics metrics(font);
     const QColor primary = ThemeManager::instance().color(ThemeColor::PrimaryText);
-    const QColor selectionColor = ThemeManager::instance().isDark()
-            ? QColor(0x4c, 0x82, 0xc5, 150)
-            : QColor(0x8b, 0xb7, 0xff, 130);
+    const QColor selectionColor = ThemeManager::instance().color(ThemeColor::AccentTextSelection);
     const int lineHeight = metrics.lineSpacing();
     const int textY = rect.top() + (rect.height() - lineHeight) / 2;
 

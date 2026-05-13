@@ -1,4 +1,5 @@
 #include "SmoothScrollBar.h"
+#include "shared/theme/ThemeManager.h"
 #include <QPainter>
 #include <QMouseEvent>
 
@@ -76,7 +77,7 @@ void SmoothScrollBar::paintEvent(QPaintEvent *event)
     // 只绘制滚动条滑块，不绘制背景轨道
     painter.setOpacity(m_opacity);
     painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(128, 128, 128, 80));  // 使用灰色半透明
+    painter.setBrush(ThemeManager::instance().color(ThemeColor::ScrollThumb));
     painter.drawRoundedRect(getHandleRect(), 4, 4);
 }
 

@@ -39,7 +39,7 @@ MessageApplication::LeftPane::LeftPane(QWidget* parent)
 
     connect(m_addButton, &StatefulPushButton::clicked, this, [this]() {
         auto* menu = new StyledActionMenu(this);
-        menu->setItemHoverColor(QColor(238, 238, 238));
+        menu->setItemHoverColor(ThemeManager::instance().color(ThemeColor::ContextMenuHover));
         menu->addAction(QStringLiteral("添加好友"));
         menu->addAction(QStringLiteral("添加群聊"));
         menu->addSeparator();

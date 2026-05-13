@@ -132,17 +132,18 @@ MainWindow::MainWindow(QWidget* parent)
     )";
     btnMinimize->setStyleSheet(btnStyle);
     btnMaximize->setStyleSheet(btnStyle);
-    btnClose->setStyleSheet(R"(
+    const QString closeHoverColor = ThemeManager::instance().color(ThemeColor::WindowCloseHover).name();
+    btnClose->setStyleSheet(QStringLiteral(R"(
     QPushButton {
         background-color: transparent;
         border: none;
         qproperty-icon: url(:/resources/icon/close.png);
     }
     QPushButton:hover {
-        background-color: #C42B1C;
+        background-color: %1;
         border: none;
     }
-    )");
+    )").arg(closeHoverColor));
 
     btnClose->installEventFilter(this);
 

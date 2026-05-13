@@ -86,8 +86,12 @@ void PostCardDelegate::paint(QPainter* painter,
 
     if (hoverOpacity > 0.0) {
         QLinearGradient overlayGradient(layout.imageRect.topLeft(), layout.imageRect.bottomLeft());
-        overlayGradient.setColorAt(0.0, QColor(48, 48, 48, qRound(hoverOpacity * 70)));
-        overlayGradient.setColorAt(1.0, QColor(32, 32, 32, qRound(hoverOpacity * 132)));
+        QColor overlayStart = ThemeManager::instance().color(ThemeColor::MediaOverlayStart);
+        overlayStart.setAlpha(qRound(overlayStart.alpha() * hoverOpacity));
+        QColor overlayEnd = ThemeManager::instance().color(ThemeColor::MediaOverlayEnd);
+        overlayEnd.setAlpha(qRound(overlayEnd.alpha() * hoverOpacity));
+        overlayGradient.setColorAt(0.0, overlayStart);
+        overlayGradient.setColorAt(1.0, overlayEnd);
         painter->setPen(Qt::NoPen);
         painter->setBrush(overlayGradient);
         painter->drawRoundedRect(layout.imageRect, 12, 12);

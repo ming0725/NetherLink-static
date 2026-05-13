@@ -48,10 +48,30 @@ bool ThemeManager::isDark() const
     return systemIsDark();
 }
 
-QColor ThemeManager::color(ThemeColor role) const
+bool ThemeManager::isAccentColorRole(ThemeColor role)
 {
-    const QColor accent(0x00, 0x99, 0xff);
-    if (!isDark()) {
+    switch (role) {
+    case ThemeColor::Accent:
+    case ThemeColor::AccentHover:
+    case ThemeColor::AccentPressed:
+    case ThemeColor::AccentBubble:
+    case ThemeColor::AccentLinkText:
+    case ThemeColor::AccentLinkTextOnAccent:
+    case ThemeColor::AccentTextSelection:
+    case ThemeColor::AccentTextSelectionOnAccent:
+    case ThemeColor::TextOnAccent:
+    case ThemeColor::SecondaryTextOnAccent:
+    case ThemeColor::ListSelected:
+        return true;
+    default:
+        return false;
+    }
+}
+
+QColor ThemeManager::accentColor(ThemeColor role, bool dark) const
+{
+    if (!dark) {
+        const QColor accent(0x00, 0x99, 0xff);
         switch (role) {
         case ThemeColor::Accent:
         case ThemeColor::ListSelected:
@@ -60,6 +80,62 @@ QColor ThemeManager::color(ThemeColor role) const
             return QColor(0x00, 0x88, 0xee);
         case ThemeColor::AccentPressed:
             return QColor(0x00, 0x77, 0xdd);
+        case ThemeColor::AccentBubble:
+            return accent;
+        case ThemeColor::AccentLinkText:
+            return QColor(0x1b, 0x6e, 0xd6);
+        case ThemeColor::AccentLinkTextOnAccent:
+            return QColor(0xbf, 0xe9, 0xff);
+        case ThemeColor::AccentTextSelection:
+            return QColor(0x8b, 0xb7, 0xff, 130);
+        case ThemeColor::AccentTextSelectionOnAccent:
+            return QColor(255, 255, 255, 88);
+        case ThemeColor::TextOnAccent:
+            return QColor(0xff, 0xff, 0xff);
+        case ThemeColor::SecondaryTextOnAccent:
+            return QColor(0xff, 0xff, 0xff, 165);
+        default:
+            return QColor();
+        }
+    }
+
+    switch (role) {
+    case ThemeColor::Accent:
+    case ThemeColor::ListSelected:
+        return QColor(0x00, 0x78, 0xd4);
+    case ThemeColor::AccentHover:
+        return QColor(0x00, 0x86, 0xe4);
+    case ThemeColor::AccentPressed:
+        return QColor(0x00, 0x66, 0xb8);
+    case ThemeColor::AccentBubble:
+        return QColor(0x1e, 0x86, 0xdf);
+    case ThemeColor::AccentLinkText:
+        return QColor(0x6a, 0xb7, 0xff);
+    case ThemeColor::AccentLinkTextOnAccent:
+        return QColor(0xbf, 0xe9, 0xff);
+    case ThemeColor::AccentTextSelection:
+        return QColor(0x4c, 0x82, 0xc5, 150);
+    case ThemeColor::AccentTextSelectionOnAccent:
+        return QColor(255, 255, 255, 88);
+    case ThemeColor::TextOnAccent:
+        return QColor(0xff, 0xff, 0xff);
+    case ThemeColor::SecondaryTextOnAccent:
+        return QColor(0xff, 0xff, 0xff, 165);
+    default:
+        return QColor();
+    }
+}
+
+QColor ThemeManager::color(ThemeColor role) const
+{
+    const bool dark = isDark();
+    return isAccentColorRole(role) ? accentColor(role, dark) : fixedColor(role, dark);
+}
+
+QColor ThemeManager::fixedColor(ThemeColor role, bool dark) const
+{
+    if (!dark) {
+        switch (role) {
         case ThemeColor::WindowBackground:
             return QColor(0xf8, 0xf8, 0xfc);
         case ThemeColor::PageBackground:
@@ -86,8 +162,18 @@ QColor ThemeManager::color(ThemeColor role) const
             return QColor(0xec, 0xec, 0xec);
         case ThemeColor::ChatInfoPanelOverlay:
             return QColor(0, 0, 0, 88);
+        case ThemeColor::ChatInfoPanelFallbackBackground:
+            return QColor(0xef, 0xef, 0xef);
+        case ThemeColor::ChatInfoPanelCardBackground:
+            return QColor(0, 0, 0, 150);
+        case ThemeColor::ChatInfoPanelCardHover:
+            return QColor(0, 0, 0, 170);
+        case ThemeColor::ChatInfoPanelCardPressed:
+            return QColor(0, 0, 0, 190);
         case ThemeColor::SettingsOverlay:
             return QColor(0, 0, 0, 168);
+        case ThemeColor::SettingsFallbackBackground:
+            return QColor(0xb0, 0xb0, 0xb0);
         case ThemeColor::ChatInfoMemberListBackground:
             return QColor(0xff, 0xff, 0xff);
         case ThemeColor::ChatInfoMemberListHover:
@@ -116,19 +202,96 @@ QColor ThemeManager::color(ThemeColor role) const
             return QColor(0, 0, 0, 14);
         case ThemeColor::ControlPressed:
             return QColor(0, 0, 0, 28);
+        case ThemeColor::MessageBubblePeer:
+            return QColor(0xff, 0xff, 0xff);
+        case ThemeColor::MessageBubblePeerSelected:
+            return QColor(0xea, 0xea, 0xea);
+        case ThemeColor::ContextMenuBackground:
+            return QColor(0xf8, 0xf8, 0xf8);
+        case ThemeColor::ContextMenuBorder:
+            return QColor(0xda, 0xda, 0xda);
+        case ThemeColor::ContextMenuHover:
+            return QColor(0xea, 0xea, 0xea);
+        case ThemeColor::ContextMenuSeparator:
+            return QColor(0xe5, 0xe5, 0xe5);
+        case ThemeColor::ContextMenuText:
+            return QColor(0x22, 0x22, 0x22);
+        case ThemeColor::ContextMenuDisabledText:
+            return QColor(0xa0, 0xa0, 0xa0);
+        case ThemeColor::ContextMenuShortcutText:
+            return QColor(0x68, 0x68, 0x68);
+        case ThemeColor::PopupShadow:
+            return QColor(0, 0, 0, 50);
+        case ThemeColor::FloatingPanelShadow:
+            return QColor(150, 150, 150, 220);
+        case ThemeColor::NewMessageNotifierBackground:
+            return QColor(0xff, 0xff, 0xff);
+        case ThemeColor::NewMessageNotifierHover:
+            return QColor(0xf8, 0xf8, 0xf8);
+        case ThemeColor::NewMessageNotifierPressed:
+            return QColor(0xee, 0xee, 0xee);
+        case ThemeColor::NewMessageNotifierText:
+            return QColor(0x12, 0x12, 0x12);
+        case ThemeColor::NewMessageNotifierShadow:
+            return QColor(0, 0, 0, 54);
+        case ThemeColor::BadgeUnreadBackground:
+            return QColor(0xf7, 0x4c, 0x30);
+        case ThemeColor::BadgeUnreadText:
+            return QColor(0xff, 0xff, 0xff);
+        case ThemeColor::BadgeMutedBackground:
+            return QColor(0xcc, 0xcc, 0xcc);
+        case ThemeColor::BadgeMutedText:
+            return QColor(0xff, 0xfa, 0xfa);
+        case ThemeColor::BadgeSelectedBackground:
+            return QColor(0xff, 0xff, 0xff, 210);
+        case ThemeColor::RoleOwnerBackground:
+            return QColor(0xf5, 0xdd, 0xcb);
+        case ThemeColor::RoleAdminBackground:
+            return QColor(0xc2, 0xe1, 0xf5);
+        case ThemeColor::RoleOwnerText:
+            return QColor(0xff, 0x9c, 0x00);
+        case ThemeColor::RoleAdminText:
+            return QColor(0x00, 0x66, 0xcc);
+        case ThemeColor::DestructiveActionText:
+            return QColor(0xeb, 0x57, 0x57);
+        case ThemeColor::DestructiveActionBackground:
+            return QColor(0xff, 0xff, 0xff);
+        case ThemeColor::NotificationFallbackBackground:
+            return QColor(45, 45, 45, 235);
+        case ThemeColor::NotificationTitleShadow:
+            return QColor(0, 0, 0, 185);
+        case ThemeColor::NotificationTitleText:
+            return QColor(0xff, 0xff, 0x55);
+        case ThemeColor::NotificationBodyText:
+            return QColor(0xff, 0xff, 0xff);
+        case ThemeColor::NotificationCloseBackground:
+            return QColor(255, 255, 255, 220);
+        case ThemeColor::NotificationCloseIcon:
+            return QColor(0, 0, 0, 210);
+        case ThemeColor::WindowBackdropTint:
+            return QColor(248, 248, 252, 92);
+        case ThemeColor::WindowCloseHover:
+            return QColor(0xc4, 0x2b, 0x1c);
+        case ThemeColor::OverlayStroke:
+            return QColor(0, 0, 0, 150);
+        case ThemeColor::TooltipBackground:
+            return QColor(255, 255, 255, 120);
+        case ThemeColor::TooltipText:
+            return QColor(0x33, 0x33, 0x33);
+        case ThemeColor::MediaOverlayStart:
+            return QColor(48, 48, 48, 70);
+        case ThemeColor::MediaOverlayEnd:
+            return QColor(32, 32, 32, 132);
+        case ThemeColor::PostOverlay:
+            return QColor(0, 0, 0, 100);
+        case ThemeColor::ScrollThumb:
+            return QColor(128, 128, 128, 80);
+        default:
+            return QColor();
         }
     }
 
-    const QColor darkAccent(0x00, 0x78, 0xd4);
-
     switch (role) {
-    case ThemeColor::Accent:
-    case ThemeColor::ListSelected:
-        return darkAccent;
-    case ThemeColor::AccentHover:
-        return QColor(0x00, 0x86, 0xe4);
-    case ThemeColor::AccentPressed:
-        return QColor(0x00, 0x66, 0xb8);
     case ThemeColor::WindowBackground:
         return QColor(0x18, 0x19, 0x1c);
     case ThemeColor::PageBackground:
@@ -157,8 +320,18 @@ QColor ThemeManager::color(ThemeColor role) const
         return QColor(0x30, 0x33, 0x3a);
     case ThemeColor::ChatInfoPanelOverlay:
         return QColor(0, 0, 0, 132);
+    case ThemeColor::ChatInfoPanelFallbackBackground:
+        return QColor(0x20, 0x21, 0x26);
+    case ThemeColor::ChatInfoPanelCardBackground:
+        return QColor(0, 0, 0, 150);
+    case ThemeColor::ChatInfoPanelCardHover:
+        return QColor(0, 0, 0, 170);
+    case ThemeColor::ChatInfoPanelCardPressed:
+        return QColor(0, 0, 0, 190);
     case ThemeColor::SettingsOverlay:
         return QColor(0, 0, 0, 168);
+    case ThemeColor::SettingsFallbackBackground:
+        return QColor(0x20, 0x21, 0x26);
     case ThemeColor::ChatInfoMemberListBackground:
         return QColor(0x20, 0x21, 0x26);
     case ThemeColor::ChatInfoMemberListHover:
@@ -187,6 +360,92 @@ QColor ThemeManager::color(ThemeColor role) const
         return QColor(255, 255, 255, 18);
     case ThemeColor::ControlPressed:
         return QColor(255, 255, 255, 34);
+    case ThemeColor::MessageBubblePeer:
+        return QColor(0x2d, 0x31, 0x38);
+    case ThemeColor::MessageBubblePeerSelected:
+        return QColor(0x25, 0x29, 0x30);
+    case ThemeColor::ContextMenuBackground:
+        return QColor(0x20, 0x21, 0x26);
+    case ThemeColor::ContextMenuBorder:
+        return QColor(0x36, 0x39, 0x40);
+    case ThemeColor::ContextMenuHover:
+        return QColor(0x2c, 0x2f, 0x36);
+    case ThemeColor::ContextMenuSeparator:
+        return QColor(0x36, 0x39, 0x40);
+    case ThemeColor::ContextMenuText:
+        return QColor(0xf1, 0xf3, 0xf5);
+    case ThemeColor::ContextMenuDisabledText:
+        return QColor(0x82, 0x89, 0x94);
+    case ThemeColor::ContextMenuShortcutText:
+        return QColor(0x9a, 0xa1, 0xac);
+    case ThemeColor::PopupShadow:
+        return QColor(0, 0, 0, 132);
+    case ThemeColor::FloatingPanelShadow:
+        return QColor(0, 0, 0, 132);
+    case ThemeColor::NewMessageNotifierBackground:
+        return QColor(0x0f, 0x10, 0x13);
+    case ThemeColor::NewMessageNotifierHover:
+        return QColor(0x1b, 0x1d, 0x22);
+    case ThemeColor::NewMessageNotifierPressed:
+        return QColor(0x22, 0x24, 0x29);
+    case ThemeColor::NewMessageNotifierText:
+        return QColor(0xff, 0xff, 0xff);
+    case ThemeColor::NewMessageNotifierShadow:
+        return QColor(0, 0, 0, 90);
+    case ThemeColor::BadgeUnreadBackground:
+        return QColor(0xf7, 0x4c, 0x30);
+    case ThemeColor::BadgeUnreadText:
+        return QColor(0xff, 0xff, 0xff);
+    case ThemeColor::BadgeMutedBackground:
+        return QColor(0x4e, 0x4e, 0x4e);
+    case ThemeColor::BadgeMutedText:
+        return QColor(0xff, 0xff, 0xff);
+    case ThemeColor::BadgeSelectedBackground:
+        return QColor(0xff, 0xff, 0xff, 210);
+    case ThemeColor::RoleOwnerBackground:
+        return QColor(0xf5, 0xdd, 0xcb);
+    case ThemeColor::RoleAdminBackground:
+        return QColor(0x2a, 0x3a, 0x46);
+    case ThemeColor::RoleOwnerText:
+        return QColor(0xff, 0xb3, 0x42);
+    case ThemeColor::RoleAdminText:
+        return QColor(0x6a, 0xb7, 0xff);
+    case ThemeColor::DestructiveActionText:
+        return QColor(0xeb, 0x57, 0x57);
+    case ThemeColor::DestructiveActionBackground:
+        return QColor(0x20, 0x21, 0x26);
+    case ThemeColor::NotificationFallbackBackground:
+        return QColor(45, 45, 45, 235);
+    case ThemeColor::NotificationTitleShadow:
+        return QColor(0, 0, 0, 185);
+    case ThemeColor::NotificationTitleText:
+        return QColor(0xff, 0xff, 0x55);
+    case ThemeColor::NotificationBodyText:
+        return QColor(0xff, 0xff, 0xff);
+    case ThemeColor::NotificationCloseBackground:
+        return QColor(255, 255, 255, 220);
+    case ThemeColor::NotificationCloseIcon:
+        return QColor(0, 0, 0, 210);
+    case ThemeColor::WindowBackdropTint:
+        return QColor(24, 25, 28, 120);
+    case ThemeColor::WindowCloseHover:
+        return QColor(0xc4, 0x2b, 0x1c);
+    case ThemeColor::OverlayStroke:
+        return QColor(0, 0, 0, 150);
+    case ThemeColor::TooltipBackground:
+        return QColor(0x20, 0x21, 0x26, 220);
+    case ThemeColor::TooltipText:
+        return QColor(0xf1, 0xf3, 0xf5);
+    case ThemeColor::MediaOverlayStart:
+        return QColor(48, 48, 48, 70);
+    case ThemeColor::MediaOverlayEnd:
+        return QColor(32, 32, 32, 132);
+    case ThemeColor::PostOverlay:
+        return QColor(0, 0, 0, 100);
+    case ThemeColor::ScrollThumb:
+        return QColor(128, 128, 128, 96);
+    default:
+        return QColor();
     }
 
     return QColor();

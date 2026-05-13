@@ -274,7 +274,7 @@ void PostMasonryView::paintEvent(QPaintEvent* event)
     QPainter painter(viewport());
     painter.setCompositionMode(QPainter::CompositionMode_Source);
 #ifdef Q_OS_WIN
-    painter.fillRect(event->rect(), Qt::white);
+    painter.fillRect(event->rect(), ThemeManager::instance().color(ThemeColor::WindowBackground));
 #else
     painter.fillRect(event->rect(), Qt::transparent);
 #endif

@@ -93,7 +93,7 @@ private:
 #endif
 
     QWidget* m_titleBar = nullptr;
-    QColor m_backdropColor = QColor(248, 248, 252, 92);
+    QColor m_backdropColor;
     int m_topInset = 0;
     int m_leadingInset = 0;
     bool m_platformChromeReady = false;

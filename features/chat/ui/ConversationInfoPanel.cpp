@@ -48,16 +48,27 @@ constexpr int kMemberAvatarSize = 28;
 constexpr int kMemberPreviewLimit = 5;
 constexpr int kMemberFullPageSize = 40;
 constexpr int kMemberFetchBottomThreshold = 80;
-constexpr int kCardBackgroundAlpha = 150;
-constexpr int kCardHoverAlpha = 170;
-constexpr int kCardPressAlpha = 190;
-
 const QString kPanelBackgroundSource(QStringLiteral(":/resources/icon/options_background.png"));
-const QColor kPanelFallbackBackground(0xEF, 0xEF, 0xEF);
-const QColor kCardBackground(0, 0, 0, kCardBackgroundAlpha);
-const QColor kCardHover(0, 0, 0, kCardHoverAlpha);
-const QColor kCardPress(0, 0, 0, kCardPressAlpha);
-const QColor kTextColor(Qt::white);
+
+QColor panelTextColor()
+{
+    return ThemeManager::instance().color(ThemeColor::TextOnAccent);
+}
+
+QColor cardBackgroundColor()
+{
+    return ThemeManager::instance().color(ThemeColor::ChatInfoPanelCardBackground);
+}
+
+QColor cardHoverColor()
+{
+    return ThemeManager::instance().color(ThemeColor::ChatInfoPanelCardHover);
+}
+
+QColor cardPressedColor()
+{
+    return ThemeManager::instance().color(ThemeColor::ChatInfoPanelCardPressed);
+}
 
 QColor opaqueColor(QColor color)
 {
@@ -134,7 +145,7 @@ protected:
 
         QPainter painter(this);
         painter.setPen(Qt::NoPen);
-        painter.setBrush(kCardBackground);
+        painter.setBrush(cardBackgroundColor());
         painter.drawRect(rect());
     }
 };
@@ -336,23 +347,23 @@ QString roleText(GroupRole role)
 QColor roleBackgroundColor(GroupRole role)
 {
     if (role == GroupRole::Owner) {
-        return QColor(0xF5, 0xDD, 0xCB);
+        return ThemeManager::instance().color(ThemeColor::RoleOwnerBackground);
     }
     if (role == GroupRole::Admin) {
-        return QColor(0xC2, 0xE1, 0xF5);
+        return ThemeManager::instance().color(ThemeColor::RoleAdminBackground);
     }
-    return QColor(0xE8, 0xE8, 0xE8);
+    return ThemeManager::instance().color(ThemeColor::PanelRaisedBackground);
 }
 
 QColor roleTextColor(GroupRole role)
 {
     if (role == GroupRole::Owner) {
-        return QColor(0xFF, 0x9C, 0x00);
+        return ThemeManager::instance().color(ThemeColor::RoleOwnerText);
     }
     if (role == GroupRole::Admin) {
-        return QColor(0x00, 0x66, 0xCC);
+        return ThemeManager::instance().color(ThemeColor::RoleAdminText);
     }
-    return QColor(0x66, 0x66, 0x66);
+    return ThemeManager::instance().color(ThemeColor::SecondaryText);
 }
 
 QVector<User> sortedGroupMembers(const Group& group,
@@ -509,7 +520,7 @@ QWidget* createOptionLabel(const QString& text, QWidget* parent)
     labelFont.setPixelSize(14);
     label->setFont(labelFont);
     label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    label->setTextColor(kTextColor);
+    label->setTextColor(panelTextColor());
     return label;
 }
 
@@ -519,8 +530,8 @@ void configurePanelEditableText(InlineEditableText* text,
     text->setFixedHeight(kRemarkRowHeight);
     text->setPlaceholderText(placeholder);
     text->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    text->setTextColor(kTextColor);
-    text->setPlaceholderTextColor(QColor(255, 255, 255, 150));
+    text->setTextColor(panelTextColor());
+    text->setPlaceholderTextColor(ThemeManager::instance().color(ThemeColor::PlaceholderText));
     text->setNormalBackgroundColor(Qt::transparent);
     text->setHoverBackgroundColor(Qt::transparent);
     text->setFocusBackgroundColor(Qt::transparent);
@@ -566,9 +577,9 @@ void applyPanelActionButtonStyle(StatefulPushButton* button,
                                  Qt::Alignment alignment)
 {
     button->setRadius(0);
-    button->setNormalColor(kCardBackground);
-    button->setHoverColor(kCardHover);
-    button->setPressColor(kCardPress);
+    button->setNormalColor(cardBackgroundColor());
+    button->setHoverColor(cardHoverColor());
+    button->setPressColor(cardPressedColor());
     button->setTextColor(textColor);
     button->setBorderWidth(0);
     button->setTextAlignment(alignment);
@@ -595,7 +606,7 @@ void ConversationInfoPanel::paintEvent(QPaintEvent* event)
     QPainter painter(this);
     const QPixmap background = ImageService::instance().pixmap(kPanelBackgroundSource);
     if (background.isNull()) {
-        painter.fillRect(rect(), kPanelFallbackBackground);
+        painter.fillRect(rect(), ThemeManager::instance().color(ThemeColor::ChatInfoPanelFallbackBackground));
     } else {
         painter.drawTiledPixmap(rect(), background);
     }
@@ -673,7 +684,7 @@ GroupConversationInfoPanel::GroupConversationInfoPanel(QWidget* parent)
     layout->addWidget(m_memberSummaryCard);
     layout->addSpacing(kSectionSpacing);
 
-    applyPanelActionButtonStyle(m_clearHistoryButton, kTextColor, Qt::AlignLeft | Qt::AlignVCenter);
+    applyPanelActionButtonStyle(m_clearHistoryButton, panelTextColor(), Qt::AlignLeft | Qt::AlignVCenter);
     applyPanelActionButtonStyle(m_exitGroupButton, dangerTextColor(), Qt::AlignCenter);
     layout->addWidget(m_clearHistoryButton);
     layout->addSpacing(kSectionSpacing);
@@ -928,7 +939,7 @@ void GroupConversationInfoPanel::showMemberContextMenu(const User& user, const Q
         QAction* removeAction = menu->addAction(QStringLiteral("移出本群"));
         StyledActionMenu::setActionColors(removeAction,
                                           dangerTextColor(),
-                                          QColor(Qt::white),
+                                          ThemeManager::instance().color(ThemeColor::TextOnAccent),
                                           dangerTextColor());
         connect(removeAction, &QAction::triggered, this, [this, user]() {
             confirmMemberRemoval(user);
@@ -1129,8 +1140,8 @@ DirectConversationInfoPanel::DirectConversationInfoPanel(QWidget* parent)
     m_remarkText->setFixedHeight(kRemarkRowHeight);
     m_remarkText->setPlaceholderText(QStringLiteral("设置备注"));
     m_remarkText->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_remarkText->setTextColor(kTextColor);
-    m_remarkText->setPlaceholderTextColor(QColor(255, 255, 255, 150));
+    m_remarkText->setTextColor(panelTextColor());
+    m_remarkText->setPlaceholderTextColor(ThemeManager::instance().color(ThemeColor::PlaceholderText));
     m_remarkText->setNormalBackgroundColor(Qt::transparent);
     m_remarkText->setHoverBackgroundColor(Qt::transparent);
     m_remarkText->setFocusBackgroundColor(Qt::transparent);
@@ -1144,7 +1155,7 @@ DirectConversationInfoPanel::DirectConversationInfoPanel(QWidget* parent)
     layout->addWidget(switchCard);
     layout->addSpacing(kSectionSpacing);
 
-    applyPanelActionButtonStyle(m_clearHistoryButton, kTextColor, Qt::AlignLeft | Qt::AlignVCenter);
+    applyPanelActionButtonStyle(m_clearHistoryButton, panelTextColor(), Qt::AlignLeft | Qt::AlignVCenter);
     applyPanelActionButtonStyle(m_deleteFriendButton, dangerTextColor(), Qt::AlignCenter);
 
     layout->addWidget(m_clearHistoryButton);

@@ -193,7 +193,7 @@ void MessageListDelegate::paint(QPainter* painter,
                          nameHeight);
 
     painter->setFont(nameFont());
-    painter->setPen(selected ? Qt::white : ThemeManager::instance().color(ThemeColor::PrimaryText));
+    painter->setPen(selected ? ThemeManager::instance().color(ThemeColor::TextOnAccent) : ThemeManager::instance().color(ThemeColor::PrimaryText));
     painter->drawText(nameRect,
                       Qt::AlignLeft | Qt::AlignVCenter,
                       nameMetrics().elidedText(index.data(MessageListModel::TitleRole).toString(),
@@ -202,12 +202,12 @@ void MessageListDelegate::paint(QPainter* painter,
 
     if (!timeText.isEmpty()) {
         painter->setFont(timeFont());
-        painter->setPen(selected ? Qt::white : ThemeManager::instance().color(ThemeColor::TertiaryText));
+        painter->setPen(selected ? ThemeManager::instance().color(ThemeColor::TextOnAccent) : ThemeManager::instance().color(ThemeColor::TertiaryText));
         painter->drawText(timeRect, Qt::AlignLeft | Qt::AlignVCenter, timeText);
     }
 
     painter->setFont(previewFont());
-    painter->setPen(selected ? Qt::white : ThemeManager::instance().color(ThemeColor::TertiaryText));
+    painter->setPen(selected ? ThemeManager::instance().color(ThemeColor::TextOnAccent) : ThemeManager::instance().color(ThemeColor::TertiaryText));
     painter->drawText(previewRect,
                       Qt::AlignLeft | Qt::AlignVCenter,
                       previewMetrics().elidedText(index.data(MessageListModel::PreviewTextRole).toString(),
