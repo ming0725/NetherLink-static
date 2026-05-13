@@ -83,7 +83,10 @@ private:
                                const QColor& textColor,
                                bool isFromUser,
                                bool dark) const;
-    QSize textDocumentSize(const QString& text, const QFont& font, int maxTextWidth) const;
+    QSize textDocumentSize(const QString& text,
+                           const QFont& font,
+                           int maxTextWidth,
+                           bool isFromUser) const;
     const QTextDocument& cachedTextDocument(const QString& text,
                                             const QFont& font,
                                             int textWidth,
@@ -92,7 +95,7 @@ private:
                                             bool dark) const;
     QVector<TextRange> cachedUrlRanges(const QString& text) const;
     QVector<TextRange> urlRanges(const QString& text) const;
-    QString renderedPlainText(const QString& text) const;
+    QString renderedPlainText(const QString& text, bool isFromUser) const;
     QFont messageFont() const;
     int maxBubbleWidth(int itemWidth) const;
 

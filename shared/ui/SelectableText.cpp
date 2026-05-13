@@ -289,23 +289,23 @@ int lineCursorAt(const QTextDocument& document,
             const int lineEnd = qBound(0,
                                        block.position() + line.textStart() + line.textLength(),
                                        boundedLength);
-            const qreal lineStartX = blockRect.left() + line.x() +
-                    line.cursorToX(line.textStart());
-            const qreal lineEndX = blockRect.left() + line.x() +
+            const qreal lineOriginX = blockRect.left() + line.x();
+            const qreal lineStartX = lineOriginX + line.cursorToX(line.textStart());
+            const qreal lineEndX = lineOriginX +
                     line.cursorToX(line.textStart() + line.textLength());
 
             if (local.x() < lineStartX) {
                 return allowOuterWhitespace ? lineStart : -1;
             }
             if (local.x() >= lineEndX) {
-                if (!allowOuterWhitespace && local.x() > documentWidth) {
+                if (!allowOuterWhitespace || local.x() > documentWidth) {
                     return -1;
                 }
                 return lineEnd;
             }
 
             const int cursor = block.position() +
-                    line.xToCursor(local.x() - lineStartX,
+                    line.xToCursor(local.x() - lineOriginX,
                                    QTextLine::CursorBetweenCharacters);
             return qBound(lineStart, cursor, lineEnd);
         }

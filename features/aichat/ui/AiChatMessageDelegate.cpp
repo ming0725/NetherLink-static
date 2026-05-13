@@ -2,6 +2,7 @@
 
 #include <QAbstractTextDocumentLayout>
 #include <QApplication>
+#include <QFontMetricsF>
 #include <QPainter>
 #include <QPainterPath>
 #include <QRegularExpression>
@@ -35,6 +36,74 @@ QString documentTextForLayout(QString text)
     return text;
 }
 
+QString markdownTextForLayout(const QString& sourceText)
+{
+    const QString text = documentTextForLayout(sourceText);
+    QString result;
+    result.reserve(text.size() + text.count(QLatin1Char('\n')));
+
+    bool inFencedCodeBlock = false;
+    int lineStart = 0;
+    while (lineStart <= text.size()) {
+        const int newline = text.indexOf(QLatin1Char('\n'), lineStart);
+        const int lineEnd = newline < 0 ? text.size() : newline;
+        const QString line = text.mid(lineStart, lineEnd - lineStart);
+        const QString trimmedLine = line.trimmed();
+
+        if (trimmedLine.startsWith(QStringLiteral("```")) ||
+                trimmedLine.startsWith(QStringLiteral("~~~"))) {
+            inFencedCodeBlock = !inFencedCodeBlock;
+        }
+
+        bool escapedListMarker = false;
+        if (!inFencedCodeBlock) {
+            int markerOffset = 0;
+            while (markerOffset < line.size() && line.at(markerOffset).isSpace()) {
+                ++markerOffset;
+            }
+            int markerEnd = markerOffset;
+            while (markerEnd < line.size() && line.at(markerEnd).isDigit()) {
+                ++markerEnd;
+            }
+
+            const bool orderedListMarker = markerEnd > markerOffset &&
+                    markerEnd + 1 < line.size() &&
+                    line.at(markerEnd) == QLatin1Char('.') &&
+                    line.at(markerEnd + 1).isSpace();
+            const bool unorderedListMarker = markerOffset + 1 < line.size() &&
+                    (line.at(markerOffset) == QLatin1Char('-') ||
+                     line.at(markerOffset) == QLatin1Char('+') ||
+                     line.at(markerOffset) == QLatin1Char('*')) &&
+                    line.at(markerOffset + 1).isSpace();
+
+            if (orderedListMarker) {
+                result += line.left(markerEnd);
+                result += QLatin1Char('\\');
+                result += line.mid(markerEnd);
+                escapedListMarker = true;
+            } else if (unorderedListMarker) {
+                result += line.left(markerOffset);
+                result += QLatin1Char('\\');
+                result += line.mid(markerOffset);
+                escapedListMarker = true;
+            } else {
+                result += line;
+            }
+        } else {
+            result += line;
+        }
+
+        if (newline < 0) {
+            break;
+        }
+
+        result += escapedListMarker ? QStringLiteral("  \n") : QStringLiteral("\n");
+        lineStart = newline + 1;
+    }
+
+    return result;
+}
+
 void allowWrappedPreformattedBlocks(QTextDocument& document)
 {
     for (QTextBlock block = document.begin(); block.isValid(); block = block.next()) {
@@ -49,12 +118,29 @@ void allowWrappedPreformattedBlocks(QTextDocument& document)
     }
 }
 
-QString textLayoutCacheKey(const QString& text, const QFont& font, int textWidth)
+void addMarkdownParagraphSpacing(QTextDocument& document, const QFont& font)
+{
+    const qreal paragraphSpacing = QFontMetricsF(font).lineSpacing();
+    for (QTextBlock block = document.begin(); block.isValid(); block = block.next()) {
+        if (!block.next().isValid() || block.textList()) {
+            continue;
+        }
+
+        QTextBlockFormat blockFormat = block.blockFormat();
+        blockFormat.setBottomMargin(paragraphSpacing);
+        QTextCursor cursor(block);
+        cursor.setBlockFormat(blockFormat);
+    }
+}
+
+QString textLayoutCacheKey(const QString& text, const QFont& font, int textWidth, bool isFromUser)
 {
     QString key = font.toString();
     key.reserve(key.size() + text.size() + 24);
     key += QLatin1Char('\x1f');
     key += QString::number(qMax(1, textWidth));
+    key += QLatin1Char('\x1f');
+    key += isFromUser ? QLatin1Char('1') : QLatin1Char('0');
     key += QLatin1Char('\x1f');
     key += text;
     return key;
@@ -67,11 +153,9 @@ QString textDocumentCacheKey(const QString& text,
                              bool isFromUser,
                              bool dark)
 {
-    QString key = textLayoutCacheKey(text, font, textWidth);
+    QString key = textLayoutCacheKey(text, font, textWidth, isFromUser);
     key += QLatin1Char('\x1f');
     key += QString::number(textColor.rgba());
-    key += QLatin1Char('\x1f');
-    key += isFromUser ? QLatin1Char('1') : QLatin1Char('0');
     key += QLatin1Char('\x1f');
     key += dark ? QLatin1Char('1') : QLatin1Char('0');
     return key;
@@ -236,7 +320,7 @@ int AiChatMessageDelegate::characterIndexAt(const QStyleOptionViewItem& option,
         return 0;
     }
     if (local.y() >= height) {
-        return allowLineWhitespace ? text.size() : -1;
+        return allowLineWhitespace ? textDocument.toPlainText().size() : -1;
     }
 
     const int textLength = textDocument.toPlainText().size();
@@ -295,8 +379,9 @@ QString AiChatMessageDelegate::urlAt(const QStyleOptionViewItem& option,
         return anchor;
     }
 
-    const QString rendered = renderedPlainText(text);
-    if (rendered == text) {
+    const QString rendered = renderedPlainText(text, isFromUser);
+    const QString normalizedText = documentTextForLayout(text);
+    if (rendered == normalizedText) {
         const QVector<TextRange> urls = cachedUrlRanges(text);
         for (const TextRange& url : urls) {
             const int end = url.start + url.length;
@@ -318,7 +403,8 @@ bool AiChatMessageDelegate::selectWordAt(const QStyleOptionViewItem& option,
         return false;
     }
 
-    const QString text = renderedPlainText(index.data(AiChatMessageListModel::TextRole).toString());
+    const QString text = renderedPlainText(index.data(AiChatMessageListModel::TextRole).toString(),
+                                           index.data(AiChatMessageListModel::IsFromUserRole).toBool());
     const SelectableText::Range range = SelectableText::wordRangeAt(text, cursor);
     if (!range.isValid()) {
         return false;
@@ -332,7 +418,8 @@ void AiChatMessageDelegate::setSelection(const QModelIndex& index, int anchor, i
 {
     m_selectionIndex = QPersistentModelIndex(index);
     m_bubbleSelectionIndex = QPersistentModelIndex();
-    const int textLength = renderedPlainText(index.data(AiChatMessageListModel::TextRole).toString()).size();
+    const int textLength = renderedPlainText(index.data(AiChatMessageListModel::TextRole).toString(),
+                                             index.data(AiChatMessageListModel::IsFromUserRole).toBool()).size();
     m_selection.set(anchor, cursor, textLength);
 }
 
@@ -378,7 +465,8 @@ QString AiChatMessageDelegate::selectedText() const
         return {};
     }
 
-    const QString text = renderedPlainText(m_selectionIndex.data(AiChatMessageListModel::TextRole).toString());
+    const QString text = renderedPlainText(m_selectionIndex.data(AiChatMessageListModel::TextRole).toString(),
+                                           m_selectionIndex.data(AiChatMessageListModel::IsFromUserRole).toBool());
     return m_selection.selectedText(text);
 }
 
@@ -388,7 +476,8 @@ QString AiChatMessageDelegate::renderedText(const QModelIndex& index) const
         return {};
     }
 
-    return renderedPlainText(index.data(AiChatMessageListModel::TextRole).toString());
+    return renderedPlainText(index.data(AiChatMessageListModel::TextRole).toString(),
+                             index.data(AiChatMessageListModel::IsFromUserRole).toBool());
 }
 
 QPersistentModelIndex AiChatMessageDelegate::selectionIndex() const
@@ -403,11 +492,11 @@ AiChatMessageDelegate::LayoutMetrics AiChatMessageDelegate::layoutMetrics(
     const QString text = index.data(AiChatMessageListModel::TextRole).toString();
     const int bubbleMaxWidth = maxBubbleWidth(option.rect.width());
     const int maxTextWidth = qMax(1, bubbleMaxWidth - kBubblePadding * 2);
-    const QSize textSize = textDocumentSize(text, messageFont(), maxTextWidth);
+    const bool isFromUser = index.data(AiChatMessageListModel::IsFromUserRole).toBool();
+    const QSize textSize = textDocumentSize(text, messageFont(), maxTextWidth, isFromUser);
     const int bubbleWidth = qMin(textSize.width() + kBubblePadding * 2,
                                  bubbleMaxWidth);
     const int bubbleHeight = textSize.height() + kBubblePadding * 2;
-    const bool isFromUser = index.data(AiChatMessageListModel::IsFromUserRole).toBool();
     const int x = isFromUser
             ? option.rect.right() - kHorizontalMargin - bubbleWidth + 1
             : option.rect.left() + kHorizontalMargin;
@@ -436,8 +525,13 @@ void AiChatMessageDelegate::configureTextDocument(QTextDocument& document,
     textOption.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
     document.setDefaultTextOption(textOption);
 #if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
-    document.setMarkdown(documentTextForLayout(text));
-    allowWrappedPreformattedBlocks(document);
+    if (isFromUser) {
+        document.setPlainText(documentTextForLayout(text));
+    } else {
+        document.setMarkdown(markdownTextForLayout(text));
+        allowWrappedPreformattedBlocks(document);
+        addMarkdownParagraphSpacing(document, font);
+    }
 #else
     document.setPlainText(documentTextForLayout(text));
 #endif
@@ -465,7 +559,7 @@ void AiChatMessageDelegate::configureTextDocument(QTextDocument& document,
         }
     }
 
-    if (document.toPlainText() == text) {
+    if (document.toPlainText() == documentTextForLayout(text)) {
         const QVector<TextRange> urls = cachedUrlRanges(text);
         for (const TextRange& url : urls) {
             cursor.clearSelection();
@@ -478,9 +572,10 @@ void AiChatMessageDelegate::configureTextDocument(QTextDocument& document,
 
 QSize AiChatMessageDelegate::textDocumentSize(const QString& text,
                                               const QFont& font,
-                                              int maxTextWidth) const
+                                              int maxTextWidth,
+                                              bool isFromUser) const
 {
-    const QString key = textLayoutCacheKey(text, font, maxTextWidth);
+    const QString key = textLayoutCacheKey(text, font, maxTextWidth, isFromUser);
     if (const TextSizeCacheEntry* entry = m_textSizeCache.object(key)) {
         return entry->size;
     }
@@ -491,7 +586,7 @@ QSize AiChatMessageDelegate::textDocumentSize(const QString& text,
                           font,
                           maxTextWidth,
                           ThemeManager::instance().color(ThemeColor::PrimaryText),
-                          false,
+                          isFromUser,
                           false);
 
     const int width = qMin(qCeil(textDocument.idealWidth()), maxTextWidth);
@@ -567,13 +662,18 @@ QVector<AiChatMessageDelegate::TextRange> AiChatMessageDelegate::urlRanges(const
     return ranges;
 }
 
-QString AiChatMessageDelegate::renderedPlainText(const QString& text) const
+QString AiChatMessageDelegate::renderedPlainText(const QString& text, bool isFromUser) const
 {
 #if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    if (isFromUser) {
+        return documentTextForLayout(text);
+    }
+
     QTextDocument document;
-    document.setMarkdown(documentTextForLayout(text));
+    document.setMarkdown(markdownTextForLayout(text));
     return document.toPlainText();
 #else
+    Q_UNUSED(isFromUser)
     return documentTextForLayout(text);
 #endif
 }
