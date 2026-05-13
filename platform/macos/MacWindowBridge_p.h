@@ -12,4 +12,5 @@ struct WindowMetrics {
 
 WindowMetrics configureWindow(QWidget* widget, const QColor& tintColor, bool compactTrafficLights);
 bool startWindowDrag(QWidget* widget);
+bool performWindowZoom(QWidget* widget);
 }

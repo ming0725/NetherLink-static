@@ -159,6 +159,16 @@ bool SystemWindow::nativeEvent(const QByteArray& eventType, void* message, qint6
 bool SystemWindow::eventFilter(QObject* watched, QEvent* event)
 {
 #ifdef Q_OS_MACOS
+    if (watched == m_titleBar && event->type() == QEvent::MouseButtonDblClick) {
+        auto* mouseEvent = static_cast<QMouseEvent*>(event);
+        if (mouseEvent->button() == Qt::LeftButton && isDragRegion(eventGlobalPos(mouseEvent))) {
+            if (MacWindowBridge::performWindowZoom(this)) {
+                event->accept();
+                return true;
+            }
+        }
+    }
+
     if (watched == m_titleBar && event->type() == QEvent::MouseButtonPress) {
         auto* mouseEvent = static_cast<QMouseEvent*>(event);
         if (mouseEvent->button() == Qt::LeftButton && isDragRegion(eventGlobalPos(mouseEvent))) {
