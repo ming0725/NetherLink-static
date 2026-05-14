@@ -12,6 +12,7 @@ class QStackedWidget;
 
 class MinecraftButton;
 class MinecraftSlider;
+class NetherLinkCreditsWindow;
 
 class SettingsWindow final : public QWidget
 {
@@ -60,6 +61,7 @@ private:
     void navigateTo(int page);
     void goBack();
     void layoutCurrentPage();
+    void openCreditsWindow();
 
     // Unified layout — all pages use this
     void layoutPageItems(const QVector<QPointer<QWidget>>& leftItems,
@@ -102,6 +104,7 @@ private:
     MinecraftButton* m_postBarStyleToggle = nullptr;
     MinecraftButton* m_actionMenuStyleToggle = nullptr;
     MinecraftSlider* m_fontSizeSlider = nullptr;
+    QPointer<NetherLinkCreditsWindow> m_creditsWindow;
 
     static inline const QStringList kAppearanceChoices = {
         QStringLiteral("浅色模式"),

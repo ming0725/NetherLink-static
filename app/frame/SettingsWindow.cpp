@@ -1,5 +1,6 @@
 #include "SettingsWindow.h"
 
+#include "NetherLinkCreditsWindow.h"
 #include "shared/services/ImageService.h"
 #include "shared/services/AudioService.h"
 #include "shared/theme/ThemeManager.h"
@@ -281,6 +282,20 @@ void SettingsWindow::hideAnimated()
 
 void SettingsWindow::keyPressEvent(QKeyEvent* event)
 {
+    if (m_creditsWindow && m_creditsWindow->isVisible()) {
+        switch (event->key()) {
+        case Qt::Key_Escape:
+        case Qt::Key_Return:
+        case Qt::Key_Enter:
+        case Qt::Key_Space:
+            m_creditsWindow->close();
+            return;
+        default:
+            QWidget::keyPressEvent(event);
+            return;
+        }
+    }
+
     if (event->key() == Qt::Key_Escape) {
         if (m_stack->currentIndex() != PageMain) {
             goBack();
@@ -325,6 +340,10 @@ void SettingsWindow::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
     m_stack->setGeometry(0, 0, event->size().width(), event->size().height());
+    if (m_creditsWindow) {
+        m_creditsWindow->setGeometry(rect());
+        m_creditsWindow->raise();
+    }
     layoutCurrentPage();
 }
 
@@ -363,6 +382,28 @@ void SettingsWindow::layoutCurrentPage()
     const PageLayout& pl = m_layouts[idx];
     layoutPageItems(pl.leftItems, pl.rightItems, pl.doneWidget,
                     pl.firstRowGap, pl.bodyRowGap);
+}
+
+void SettingsWindow::openCreditsWindow()
+{
+    if (m_creditsWindow) {
+        m_creditsWindow->setGeometry(rect());
+        m_creditsWindow->show();
+        m_creditsWindow->raise();
+        m_creditsWindow->setFocus();
+        return;
+    }
+
+    auto* credits = new NetherLinkCreditsWindow(this);
+    credits->setAttribute(Qt::WA_DeleteOnClose);
+    credits->setGeometry(rect());
+    m_creditsWindow = credits;
+    connect(credits, &QObject::destroyed, this, [this]() {
+        m_creditsWindow = nullptr;
+    });
+    credits->show();
+    credits->raise();
+    credits->setFocus();
 }
 
 void SettingsWindow::layoutPageItems(const QVector<QPointer<QWidget>>& leftItems,
@@ -895,13 +936,15 @@ void SettingsWindow::createAboutPage()
 
     auto* updateToggle  = createToggleButton(QStringLiteral("检查更新"), onOffChoices(), 0, page);
     auto* licenseToggle = createToggleButton(QStringLiteral("开源协议"), QStringList{QStringLiteral("MIT")}, 0, page);
+    auto* creditsBtn = createMenuButton(QStringLiteral("鸣谢名单"), page);
+    connect(creditsBtn, &QPushButton::clicked, this, &SettingsWindow::openCreditsWindow);
 
     auto* doneBtn = createMenuButton(QStringLiteral("完成"), page);
     connect(doneBtn, &QPushButton::clicked, this, &SettingsWindow::goBack);
 
     PageLayout pl;
     pl.leftItems  = {versionBtn, licenseToggle};
-    pl.rightItems = {updateToggle};
+    pl.rightItems = {updateToggle, creditsBtn};
     pl.doneWidget = doneBtn;
     pl.firstRowGap = kSubPageRowGap;
     pl.bodyRowGap  = kSubPageRowGap;
