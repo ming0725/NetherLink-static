@@ -1,4 +1,6 @@
 // PostDetailView.cpp
+#include <utility>
+
 #include <QDate>
 #include <QLabel>
 #include <QMouseEvent>
@@ -27,6 +29,7 @@ constexpr int kMinSidePanelWidth = 340;
 constexpr int kMinImageWidth = 220;
 constexpr int kFallbackImageWidth = 3;
 constexpr int kFallbackImageHeight = 4;
+constexpr int kCommentExpandAnimationDurationMs = 420;
 const QString kCommentIconSource = QStringLiteral(":/resources/icon/selected_message.png");
 
 QString likeIconSource(bool liked)
@@ -268,18 +271,29 @@ void PostDetailView::setupUI()
             const bool needsLayout = roles.isEmpty()
                     || topLeft.row() == 0
                     || roles.contains(PostDetailListModel::PostBodyRevisionRole)
-                    || roles.contains(PostDetailListModel::CommentLayoutRole)
-                    || roles.contains(PostDetailListModel::CommentEngagementRole);
+                    || roles.contains(PostDetailListModel::CommentLayoutRole);
             if (needsLayout) {
                 m_contentList->doItemsLayout();
             }
 
-            const QRect dirty = m_contentList->visualRect(topLeft)
-                    .united(m_contentList->visualRect(bottomRight));
-            if (dirty.isValid()) {
-                m_contentList->viewport()->update(dirty);
+            const bool shiftsFollowingItems = roles.isEmpty()
+                    || topLeft.row() == 0
+                    || roles.contains(PostDetailListModel::PostBodyRevisionRole)
+                    || roles.contains(PostDetailListModel::CommentLayoutRole);
+            if (shiftsFollowingItems) {
+                const QRect topRect = m_contentList->visualRect(topLeft);
+                const int dirtyTop = topRect.isValid() ? qMax(0, topRect.top()) : 0;
+                m_contentList->viewport()->update(QRect(0,
+                                                        dirtyTop,
+                                                        m_contentList->viewport()->width(),
+                                                        m_contentList->viewport()->height() - dirtyTop));
+            } else {
+                const QRect dirty = m_contentList->visualRect(topLeft)
+                        .united(m_contentList->visualRect(bottomRight));
+                if (dirty.isValid()) {
+                    m_contentList->viewport()->update(dirty);
+                }
             }
-            scheduleMaybeLoadMoreComments();
         }
     });
     connect(m_detailModel, &QAbstractItemModel::rowsInserted, this, [this]() {
@@ -345,11 +359,11 @@ void PostDetailView::setupUI()
                 setReplyTarget(commentId, replyId);
             });
     connect(m_contentList, &PostDetailListView::commentExpandRequested,
-            m_detailModel, &PostDetailListModel::setCommentExpanded);
+            this, &PostDetailView::animateCommentExpansion);
     connect(m_contentList, &PostDetailListView::replyExpandRequested,
-            m_detailModel, &PostDetailListModel::setReplyExpanded);
+            this, &PostDetailView::animateReplyExpansion);
     connect(m_contentList, &PostDetailListView::moreRepliesRequested,
-            m_detailModel, &PostDetailListModel::showMoreReplies);
+            this, &PostDetailView::animateMoreReplies);
     connect(m_contentList->verticalScrollBar(), &QScrollBar::valueChanged,
             this, &PostDetailView::maybeLoadMoreComments);
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
@@ -530,6 +544,7 @@ void PostDetailView::setPostData(const PostDetailData& data)
     m_state.fullImageOpacity = 0.0;
 
     if (postChanged) {
+        stopCommentAnimations();
         clearReplyTarget();
         m_commentsRequestId.clear();
         m_pendingCommentsOffset = -1;
@@ -540,7 +555,9 @@ void PostDetailView::setPostData(const PostDetailData& data)
     syncUiFromState();
     loadInitialComments();
 
+    stopImageFadeAnimation();
     auto* imageFade = new QVariantAnimation(this);
+    m_imageFadeAnimation = imageFade;
     imageFade->setDuration(180);
     imageFade->setStartValue(m_state.fullImageOpacity);
     imageFade->setEndValue(1.0);
@@ -549,7 +566,13 @@ void PostDetailView::setPostData(const PostDetailData& data)
         m_state.fullImageOpacity = value.toReal();
         update(imageRect());
     });
-    imageFade->start(QAbstractAnimation::DeleteWhenStopped);
+    connect(imageFade, &QVariantAnimation::finished, this, [this, imageFade]() {
+        if (m_imageFadeAnimation == imageFade) {
+            m_imageFadeAnimation = nullptr;
+        }
+        imageFade->deleteLater();
+    });
+    imageFade->start();
 
     update();
 }
@@ -582,6 +605,8 @@ void PostDetailView::applySummaryState(const PostSummary& summary, bool resetDet
         m_state.fullImageSize = {};
         m_state.fullImageOpacity = 0.0;
         if (m_detailModel) {
+            stopCommentAnimations();
+            stopImageFadeAnimation();
             clearReplyTarget();
             m_commentsRequestId.clear();
             m_pendingCommentsOffset = -1;
@@ -658,6 +683,164 @@ void PostDetailView::onCommentsReady(const QString& requestId, const PostComment
     }
 
     scheduleMaybeLoadMoreComments();
+}
+
+void PostDetailView::animateCommentExpansion(const QString& commentId)
+{
+    if (!m_detailModel || commentId.isEmpty() || m_detailModel->isCommentExpanded(commentId)) {
+        return;
+    }
+
+    if (QPointer<QVariantAnimation> running = m_commentExpansionAnimations.value(commentId)) {
+        running->stop();
+        running->deleteLater();
+    }
+
+    const qreal startProgress = m_detailModel->commentExpansionProgress(commentId);
+    m_detailModel->beginCommentExpansion(commentId);
+
+    auto* animation = new QVariantAnimation(this);
+    m_commentExpansionAnimations.insert(commentId, animation);
+    animation->setStartValue(startProgress);
+    animation->setEndValue(1.0);
+    animation->setDuration(kCommentExpandAnimationDurationMs);
+    animation->setEasingCurve(QEasingCurve::OutCubic);
+
+    connect(animation, &QVariantAnimation::valueChanged, this, [this, commentId](const QVariant& value) {
+        if (!m_detailModel) {
+            return;
+        }
+        m_detailModel->setCommentExpansionProgress(commentId, value.toReal());
+    });
+    connect(animation, &QVariantAnimation::finished, this, [this, commentId, animation]() {
+        if (m_detailModel) {
+            m_detailModel->setCommentExpansionProgress(commentId, 1.0);
+        }
+        m_commentExpansionAnimations.remove(commentId);
+        animation->deleteLater();
+        scheduleMaybeLoadMoreComments();
+    });
+
+    animation->start();
+}
+
+void PostDetailView::animateReplyExpansion(const QString& commentId, const QString& replyId)
+{
+    if (!m_detailModel
+        || commentId.isEmpty()
+        || replyId.isEmpty()
+        || m_detailModel->isReplyExpanded(replyId)) {
+        return;
+    }
+
+    if (QPointer<QVariantAnimation> running = m_replyExpansionAnimations.value(replyId)) {
+        running->stop();
+        running->deleteLater();
+    }
+
+    const qreal startProgress = m_detailModel->replyExpansionProgress(replyId);
+    m_detailModel->beginReplyExpansion(commentId, replyId);
+
+    auto* animation = new QVariantAnimation(this);
+    m_replyExpansionAnimations.insert(replyId, animation);
+    animation->setStartValue(startProgress);
+    animation->setEndValue(1.0);
+    animation->setDuration(kCommentExpandAnimationDurationMs);
+    animation->setEasingCurve(QEasingCurve::OutCubic);
+
+    connect(animation, &QVariantAnimation::valueChanged, this, [this, commentId, replyId](const QVariant& value) {
+        if (!m_detailModel) {
+            return;
+        }
+        m_detailModel->setReplyExpansionProgress(commentId, replyId, value.toReal());
+    });
+    connect(animation, &QVariantAnimation::finished, this, [this, commentId, replyId, animation]() {
+        if (m_detailModel) {
+            m_detailModel->setReplyExpansionProgress(commentId, replyId, 1.0);
+        }
+        m_replyExpansionAnimations.remove(replyId);
+        animation->deleteLater();
+        scheduleMaybeLoadMoreComments();
+    });
+
+    animation->start();
+}
+
+void PostDetailView::animateMoreReplies(const QString& commentId)
+{
+    if (!m_detailModel || commentId.isEmpty()) {
+        return;
+    }
+
+    if (m_moreReplyAnimations.value(commentId)) {
+        return;
+    }
+
+    const QStringList revealedReplyIds = m_detailModel->beginShowMoreReplies(commentId);
+    if (revealedReplyIds.isEmpty()) {
+        return;
+    }
+
+    auto* animation = new QVariantAnimation(this);
+    m_moreReplyAnimations.insert(commentId, animation);
+    animation->setStartValue(0.0);
+    animation->setEndValue(1.0);
+    animation->setDuration(kCommentExpandAnimationDurationMs);
+    animation->setEasingCurve(QEasingCurve::OutCubic);
+
+    connect(animation, &QVariantAnimation::valueChanged, this, [this, commentId, revealedReplyIds](const QVariant& value) {
+        if (!m_detailModel) {
+            return;
+        }
+        m_detailModel->setReplyRevealProgress(commentId, revealedReplyIds, value.toReal());
+    });
+    connect(animation, &QVariantAnimation::finished, this, [this, commentId, revealedReplyIds, animation]() {
+        if (m_detailModel) {
+            m_detailModel->setReplyRevealProgress(commentId, revealedReplyIds, 1.0);
+        }
+        m_moreReplyAnimations.remove(commentId);
+        animation->deleteLater();
+        scheduleMaybeLoadMoreComments();
+    });
+
+    animation->start();
+}
+
+void PostDetailView::stopCommentAnimations()
+{
+    for (const QPointer<QVariantAnimation>& animation : std::as_const(m_commentExpansionAnimations)) {
+        if (animation) {
+            animation->stop();
+            animation->deleteLater();
+        }
+    }
+    for (const QPointer<QVariantAnimation>& animation : std::as_const(m_replyExpansionAnimations)) {
+        if (animation) {
+            animation->stop();
+            animation->deleteLater();
+        }
+    }
+    for (const QPointer<QVariantAnimation>& animation : std::as_const(m_moreReplyAnimations)) {
+        if (animation) {
+            animation->stop();
+            animation->deleteLater();
+        }
+    }
+    m_commentExpansionAnimations.clear();
+    m_replyExpansionAnimations.clear();
+    m_moreReplyAnimations.clear();
+}
+
+void PostDetailView::stopImageFadeAnimation()
+{
+    if (!m_imageFadeAnimation) {
+        return;
+    }
+
+    QVariantAnimation* animation = m_imageFadeAnimation;
+    m_imageFadeAnimation = nullptr;
+    animation->stop();
+    animation->deleteLater();
 }
 
 void PostDetailView::setReplyTarget(const QString& commentId, const QString& replyId)
@@ -737,6 +920,9 @@ void PostDetailView::submitCommentText()
 
     ++m_state.commentCount;
     syncEngagementUi();
+    if (m_controller) {
+        m_controller->adjustCurrentPostCommentCount(1);
+    }
     m_commentLineEdit->clear();
     clearReplyTarget();
 }

@@ -4,6 +4,7 @@
 #include <QHash>
 #include <QMap>
 #include <QSet>
+#include <QStringList>
 
 #include "shared/types/RepositoryTypes.h"
 
@@ -51,9 +52,19 @@ public:
     void setCommentExpanded(const QString& commentId);
     void setReplyExpanded(const QString& commentId, const QString& replyId);
     void showMoreReplies(const QString& commentId);
+    void beginCommentExpansion(const QString& commentId);
+    void beginReplyExpansion(const QString& commentId, const QString& replyId);
+    QStringList beginShowMoreReplies(const QString& commentId);
+    void setCommentExpansionProgress(const QString& commentId, qreal progress);
+    void setReplyExpansionProgress(const QString& commentId, const QString& replyId, qreal progress);
+    void setReplyRevealProgress(const QString& commentId, const QStringList& replyIds, qreal progress);
     int visibleReplyCount(const QString& commentId) const;
     bool isCommentExpanded(const QString& commentId) const;
     bool isReplyExpanded(const QString& replyId) const;
+    qreal commentExpansionProgress(const QString& commentId) const;
+    qreal replyExpansionProgress(const QString& replyId) const;
+    qreal replyRevealProgress(const QString& replyId) const;
+    qreal loadMoreRepliesPlaceholderProgress(const QString& commentId) const;
     void updateCommentLike(const QString& commentId, bool liked);
     void updateReplyLike(const QString& commentId, const QString& replyId, bool liked);
     void insertComment(PostComment comment);
@@ -72,6 +83,10 @@ private:
     QSet<QString> m_expandedComments;
     QSet<QString> m_expandedReplies;
     QMap<QString, int> m_visibleReplyCounts;
+    QHash<QString, qreal> m_commentExpansionProgress;
+    QHash<QString, qreal> m_replyExpansionProgress;
+    QHash<QString, qreal> m_replyRevealProgress;
+    QHash<QString, qreal> m_loadMoreRepliesPlaceholderProgress;
     QString m_postTitleText;
     QString m_postBodyText;
     QString m_postBodyDateText;

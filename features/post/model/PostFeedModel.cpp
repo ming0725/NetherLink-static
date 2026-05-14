@@ -56,6 +56,7 @@ void PostFeedModel::setPosts(QVector<PostSummary> posts)
 {
     beginResetModel();
     m_posts = std::move(posts);
+    rebuildPostIndex();
     endResetModel();
 }
 
@@ -69,6 +70,9 @@ void PostFeedModel::appendPosts(const QVector<PostSummary>& posts)
     const int end = start + posts.size() - 1;
     beginInsertRows(QModelIndex(), start, end);
     for (const PostSummary& post : posts) {
+        if (!post.postId.isEmpty()) {
+            m_postRows.insert(post.postId, m_posts.size());
+        }
         m_posts.append(post);
     }
     endInsertRows();
@@ -119,6 +123,12 @@ void PostFeedModel::updatePost(const PostSummary& post)
     }
 
     m_posts[row] = post;
+    if (previous.postId != post.postId) {
+        m_postRows.remove(previous.postId);
+        if (!post.postId.isEmpty()) {
+            m_postRows.insert(post.postId, row);
+        }
+    }
     const QModelIndex modelIndex = index(row, 0);
     emit dataChanged(modelIndex, modelIndex, changedRoles);
 }
@@ -141,10 +151,17 @@ PostSummary PostFeedModel::postAt(const QModelIndex& index) const
 
 int PostFeedModel::indexOfPost(const QString& postId) const
 {
+    return m_postRows.value(postId, -1);
+}
+
+void PostFeedModel::rebuildPostIndex()
+{
+    m_postRows.clear();
+    m_postRows.reserve(m_posts.size());
     for (int i = 0; i < m_posts.size(); ++i) {
-        if (m_posts.at(i).postId == postId) {
-            return i;
+        const QString& postId = m_posts.at(i).postId;
+        if (!postId.isEmpty()) {
+            m_postRows.insert(postId, i);
         }
     }
-    return -1;
 }

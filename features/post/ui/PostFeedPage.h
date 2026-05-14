@@ -30,6 +30,8 @@ private slots:
     void onRepositoryPostUpdated(const PostSummary& summary);
 
 private:
+    void scheduleLoadMore();
+
     PostFeedModel* m_model;
     PostCardDelegate* m_delegate;
     PostSessionController* m_controller = nullptr;
@@ -37,6 +39,8 @@ private:
     int m_nextOffset = 0;
     bool m_hasMore = true;
     bool m_initialized = false;
+    bool m_loading = false;
+    bool m_loadMoreScheduled = false;
 
     static constexpr int kPageSize = 12;
 };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <QHash>
 #include <QVector>
 
 #include "shared/types/RepositoryTypes.h"
@@ -37,7 +38,9 @@ public:
     PostSummary postAt(const QModelIndex& index) const;
 
 private:
+    void rebuildPostIndex();
     int indexOfPost(const QString& postId) const;
 
     QVector<PostSummary> m_posts;
+    QHash<QString, int> m_postRows;
 };

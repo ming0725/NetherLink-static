@@ -21,9 +21,7 @@ PostFeedPage::PostFeedPage(QWidget* parent)
     setModel(m_model);
     setCardDelegate(m_delegate);
 
-    connect(this, &PostMasonryView::reachedBottom, this, [this]() {
-        QTimer::singleShot(100, this, &PostFeedPage::loadMore);
-    });
+    connect(this, &PostMasonryView::reachedBottom, this, &PostFeedPage::scheduleLoadMore);
     connect(this, &PostMasonryView::postActivated,
             this, &PostFeedPage::onPostActivated);
     connect(this, &PostMasonryView::postLikeRequested,
@@ -63,6 +61,8 @@ void PostFeedPage::ensureInitialized()
 void PostFeedPage::setPosts(const QVector<PostSummary>& posts)
 {
     m_initialized = true;
+    m_loading = false;
+    m_loadMoreScheduled = false;
     m_model->setPosts(posts);
     m_nextOffset = posts.size();
     m_hasMore = posts.size() >= kPageSize;
@@ -70,11 +70,14 @@ void PostFeedPage::setPosts(const QVector<PostSummary>& posts)
 
 void PostFeedPage::loadMore()
 {
-    if (!m_controller || !m_hasMore) {
+    m_loadMoreScheduled = false;
+    if (!m_controller || !m_hasMore || m_loading) {
         return;
     }
 
+    m_loading = true;
     const QVector<PostSummary> posts = m_controller->loadFeedPage(m_nextOffset, kPageSize);
+    m_loading = false;
     if (posts.isEmpty()) {
         m_hasMore = false;
         return;
@@ -87,6 +90,16 @@ void PostFeedPage::loadMore()
     }
     m_nextOffset += posts.size();
     m_hasMore = posts.size() >= kPageSize;
+}
+
+void PostFeedPage::scheduleLoadMore()
+{
+    if (m_loadMoreScheduled || m_loading || !m_hasMore) {
+        return;
+    }
+
+    m_loadMoreScheduled = true;
+    QTimer::singleShot(100, this, &PostFeedPage::loadMore);
 }
 
 void PostFeedPage::onPostActivated(const PostSummary& summary, const QRect& globalGeometry)

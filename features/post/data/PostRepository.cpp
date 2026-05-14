@@ -270,6 +270,32 @@ bool PostRepository::setPostLiked(const QString& postId, bool liked)
     return true;
 }
 
+bool PostRepository::adjustPostCommentCount(const QString& postId, int delta)
+{
+    if (postId.isEmpty() || delta == 0) {
+        return false;
+    }
+
+    PostSummary summary;
+    {
+        QMutexLocker locker(&mutex);
+        const int index = postIndexForId(postId);
+        if (index < 0) {
+            return false;
+        }
+
+        Post post = buildPostAt(index);
+        const int nextCount = qMax(0, post.commentCount + delta);
+        m_commentCountDeltas.insert(postId,
+                                    m_commentCountDeltas.value(postId, 0) + nextCount - post.commentCount);
+        post.commentCount = nextCount;
+        summary = buildSummary(post);
+    }
+
+    emit postUpdated(summary);
+    return true;
+}
+
 Post PostRepository::buildPostAt(int index) const
 {
     if (index < 0 || index >= kSamplePostCount) {
@@ -302,6 +328,7 @@ Post PostRepository::buildPostAt(int index) const
         post.likes = likeIt->likes;
         post.isLiked = likeIt->isLiked;
     }
+    post.commentCount = qMax(0, post.commentCount + m_commentCountDeltas.value(post.postID, 0));
     return post;
 }
 

@@ -132,6 +132,8 @@ private:
         QRect replyButtonRect;
         QRect replyTextRect;
         TextMeasure textMeasure;
+        QRect revealClipRect;
+        qreal revealProgress = 1.0;
     };
 
     struct Layout {

@@ -1,8 +1,10 @@
 #pragma once
 
 #include <QDateTime>
+#include <QHash>
 #include <QMetaObject>
 #include <QPixmap>
+#include <QPointer>
 #include <QRect>
 #include <QSize>
 #include <QWidget>
@@ -16,6 +18,7 @@ class PostDetailListModel;
 class PostDetailListView;
 class PostSessionController;
 class QPushButton;
+class QVariantAnimation;
 
 class PostDetailView : public QWidget {
     Q_OBJECT
@@ -72,6 +75,11 @@ private:
     void maybeLoadMoreComments();
     void scheduleMaybeLoadMoreComments();
     void onCommentsReady(const QString& requestId, const PostCommentsPage& page);
+    void animateCommentExpansion(const QString& commentId);
+    void animateReplyExpansion(const QString& commentId, const QString& replyId);
+    void animateMoreReplies(const QString& commentId);
+    void stopCommentAnimations();
+    void stopImageFadeAnimation();
     void setReplyTarget(const QString& commentId, const QString& replyId = QString());
     void clearReplyTarget();
     void submitCommentText();
@@ -102,4 +110,8 @@ private:
     QString m_commentsRequestId;
     int m_pendingCommentsOffset = -1;
     int m_commentPageSize = 12;
+    QHash<QString, QPointer<QVariantAnimation>> m_commentExpansionAnimations;
+    QHash<QString, QPointer<QVariantAnimation>> m_replyExpansionAnimations;
+    QHash<QString, QPointer<QVariantAnimation>> m_moreReplyAnimations;
+    QPointer<QVariantAnimation> m_imageFadeAnimation;
 };

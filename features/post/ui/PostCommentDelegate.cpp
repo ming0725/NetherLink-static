@@ -44,6 +44,12 @@ constexpr int kPostBodyDateTopGap = 16;
 constexpr int kPostBodyDividerTopGap = 16;
 constexpr int kPostBodyBottomMargin = 16;
 
+int interpolatedHeight(int collapsedHeight, int fullHeight, qreal progress)
+{
+    const qreal boundedProgress = qBound(0.0, progress, 1.0);
+    return collapsedHeight + qRound((fullHeight - collapsedHeight) * boundedProgress);
+}
+
 QFont fontWithPointSize(int pointSize, bool bold = false)
 {
     QFont font = QApplication::font();
@@ -263,6 +269,7 @@ void PostCommentDelegate::paint(QPainter* painter,
     painter->setRenderHints(QPainter::Antialiasing
                             | QPainter::TextAntialiasing
                             | QPainter::SmoothPixmapTransform);
+    painter->setClipRect(option.rect);
     painter->fillRect(option.rect, ThemeManager::instance().color(ThemeColor::PanelBackground));
 
     painter->drawPixmap(layout.avatarRect,
@@ -322,6 +329,13 @@ void PostCommentDelegate::paint(QPainter* painter,
         const ReplyLayout& replyLayout = layout.replyLayouts.at(i);
         const ReplyTextParts text = replyDisplayText(reply);
 
+        if (replyLayout.revealProgress <= 0.001) {
+            continue;
+        }
+
+        painter->save();
+        painter->setClipRect(replyLayout.revealClipRect, Qt::IntersectClip);
+        painter->setOpacity(qMin<qreal>(1.0, replyLayout.revealProgress * 1.6));
         painter->drawPixmap(replyLayout.avatarRect,
                             ImageService::instance().circularAvatar(reply.authorAvatarPath,
                                                                     replyLayout.avatarRect.width(),
@@ -371,6 +385,7 @@ void PostCommentDelegate::paint(QPainter* painter,
         painter->drawText(replyLayout.replyTextRect,
                           Qt::AlignLeft | Qt::AlignVCenter,
                           QStringLiteral("回复"));
+        painter->restore();
     }
 
     if (!layout.loadMoreRepliesRect.isNull()) {
@@ -445,7 +460,7 @@ PostCommentDelegate::HitAction PostCommentDelegate::actionAt(const QStyleOptionV
         result.commentId = comment->commentId;
         return result;
     }
-    if (layout.expandRect.contains(point)) {
+    if (!detailModel->isCommentExpanded(comment->commentId) && layout.expandRect.contains(point)) {
         result.action = ExpandCommentAction;
         result.commentId = comment->commentId;
         return result;
@@ -470,7 +485,7 @@ PostCommentDelegate::HitAction PostCommentDelegate::actionAt(const QStyleOptionV
             result.replyId = reply.replyId;
             return result;
         }
-        if (replyLayout.expandRect.contains(point)) {
+        if (!detailModel->isReplyExpanded(reply.replyId) && replyLayout.expandRect.contains(point)) {
             result.action = ExpandReplyAction;
             result.commentId = comment->commentId;
             result.replyId = reply.replyId;
@@ -803,16 +818,36 @@ PostCommentDelegate::Layout PostCommentDelegate::calculateLayout(const QStyleOpt
     const QString key = QStringLiteral("%1|%2|%3").arg(commentId,
                                                        QString::number(width),
                                                        QString::number(revision));
+    const auto* detailModel = qobject_cast<const PostDetailListModel*>(index.model());
+    const PostComment* comment = detailModel ? detailModel->commentAtIndex(index) : nullptr;
+    bool transientLayout = false;
+    if (detailModel && comment) {
+        transientLayout = detailModel->isCommentExpanded(comment->commentId)
+                && detailModel->commentExpansionProgress(comment->commentId) < 0.999;
+        const int visibleReplies = qMin(detailModel->visibleReplyCount(comment->commentId),
+                                        comment->replies.size());
+        for (int i = 0; !transientLayout && i < visibleReplies; ++i) {
+            const PostCommentReply& reply = comment->replies.at(i);
+            transientLayout = (detailModel->isReplyExpanded(reply.replyId)
+                               && detailModel->replyExpansionProgress(reply.replyId) < 0.999)
+                    || detailModel->replyRevealProgress(reply.replyId) < 0.999;
+        }
+        transientLayout = transientLayout
+                || detailModel->loadMoreRepliesPlaceholderProgress(comment->commentId) > 0.001;
+    }
 
     Layout layout;
-    if (const auto it = m_layoutCache.constFind(key); it != m_layoutCache.constEnd()) {
+    if (!transientLayout && (m_layoutCache.constFind(key) != m_layoutCache.constEnd())) {
+        const auto it = m_layoutCache.constFind(key);
         layout = it.value();
     } else {
         QStyleOptionViewItem baseOption(option);
         baseOption.rect = QRect(0, 0, width, option.rect.height());
         layout = buildLayout(baseOption, index);
-        m_layoutCache.insert(key, layout);
-        trimCaches();
+        if (!transientLayout) {
+            m_layoutCache.insert(key, layout);
+            trimCaches();
+        }
     }
 
     const QPoint offset = option.rect.topLeft();
@@ -836,6 +871,7 @@ PostCommentDelegate::Layout PostCommentDelegate::calculateLayout(const QStyleOpt
         replyLayout.likeCountRect.translate(offset);
         replyLayout.replyButtonRect.translate(offset);
         replyLayout.replyTextRect.translate(offset);
+        replyLayout.revealClipRect.translate(offset);
     }
     return layout;
 }
@@ -871,18 +907,20 @@ PostCommentDelegate::Layout PostCommentDelegate::buildLayout(const QStyleOptionV
 
     y += nameMetrics.lineSpacing() + kNameContentGap;
     const bool commentExpanded = detailModel->isCommentExpanded(comment->commentId);
+    const qreal commentProgress = detailModel->commentExpansionProgress(comment->commentId);
     const TextMeasure commentMeasure = measureText(comment->content, body, textWidth, kCommentMaxLines);
     layout.contentMeasure = commentMeasure;
     layout.commentCanExpand = commentMeasure.canExpand;
-    const int commentTextHeight = (commentExpanded || !layout.commentCanExpand)
-            ? commentMeasure.fullHeight
-            : commentMeasure.collapsedHeight;
+    const int commentTextHeight = layout.commentCanExpand
+            ? interpolatedHeight(commentMeasure.collapsedHeight, commentMeasure.fullHeight, commentProgress)
+            : commentMeasure.fullHeight;
     layout.contentRect = QRect(contentX, y, textWidth, commentTextHeight);
     y += commentTextHeight;
 
-    if (layout.commentCanExpand && !commentExpanded) {
+    if (layout.commentCanExpand && (!commentExpanded || commentProgress < 0.999)) {
         y += 2;
-        layout.expandRect = QRect(contentX, y, textWidth, actionMetrics.lineSpacing() + 4);
+        const int expandHeight = qRound((actionMetrics.lineSpacing() + 4) * (1.0 - commentProgress));
+        layout.expandRect = QRect(contentX, y, textWidth, expandHeight);
         y += layout.expandRect.height();
     }
 
@@ -910,6 +948,10 @@ PostCommentDelegate::Layout PostCommentDelegate::buildLayout(const QStyleOptionV
         const int replyTextWidth = qMax(70, right - replyContentX);
 
         for (int i = 0; i < visibleReplies; ++i) {
+            const int replyBlockStartY = y;
+            if (i != 0) {
+                y += kReplyGap;
+            }
             const PostCommentReply& reply = comment->replies.at(i);
             const ReplyTextParts text = replyDisplayText(reply);
             const TextMeasure replyMeasure = measureText(text.text,
@@ -920,21 +962,26 @@ PostCommentDelegate::Layout PostCommentDelegate::buildLayout(const QStyleOptionV
                                                          text.targetNameLength);
             const bool replyCanExpand = replyMeasure.canExpand;
             const bool replyExpanded = detailModel->isReplyExpanded(reply.replyId);
-            const int replyTextHeight = (replyExpanded || !replyCanExpand)
-                    ? replyMeasure.fullHeight
-                    : replyMeasure.collapsedHeight;
+            const qreal replyExpansionProgress = detailModel->replyExpansionProgress(reply.replyId);
+            const int replyTextHeight = replyCanExpand
+                    ? interpolatedHeight(replyMeasure.collapsedHeight,
+                                         replyMeasure.fullHeight,
+                                         replyExpansionProgress)
+                    : replyMeasure.fullHeight;
 
             ReplyLayout replyLayout;
             replyLayout.replyId = reply.replyId;
+            replyLayout.revealProgress = detailModel->replyRevealProgress(reply.replyId);
             replyLayout.avatarRect = QRect(replyAvatarX, y, kReplyAvatarSize, kReplyAvatarSize);
             replyLayout.nameRect = QRect(replyContentX, y - 1, replyTextWidth, nameMetrics.lineSpacing());
             y += nameMetrics.lineSpacing() + kNameContentGap;
             replyLayout.textRect = QRect(replyContentX, y, replyTextWidth, replyTextHeight);
             replyLayout.textMeasure = replyMeasure;
             y += replyTextHeight;
-            if (replyCanExpand && !replyExpanded) {
+            if (replyCanExpand && (!replyExpanded || replyExpansionProgress < 0.999)) {
                 y += 2;
-                replyLayout.expandRect = QRect(replyContentX, y, replyTextWidth, actionMetrics.lineSpacing() + 4);
+                const int expandHeight = qRound((actionMetrics.lineSpacing() + 4) * (1.0 - replyExpansionProgress));
+                replyLayout.expandRect = QRect(replyContentX, y, replyTextWidth, expandHeight);
                 y += replyLayout.expandRect.height();
             }
 
@@ -953,10 +1000,15 @@ PostCommentDelegate::Layout PostCommentDelegate::buildLayout(const QStyleOptionV
             replyLayout.replyTextRect = QRect(replyActionX, y, actionMetrics.horizontalAdvance(QStringLiteral("回复")) + 8, actionMetrics.lineSpacing());
             y += qMax(kActionIconSize, actionMetrics.lineSpacing());
 
+            const int replyBlockEndY = y;
+            const int revealedHeight = qRound((replyBlockEndY - replyBlockStartY)
+                                             * qBound(0.0, replyLayout.revealProgress, 1.0));
+            replyLayout.revealClipRect = QRect(replyAvatarX,
+                                               replyBlockStartY,
+                                               qMax(0, right - replyAvatarX + 1),
+                                               qMax(0, revealedHeight));
             layout.replyLayouts.append(replyLayout);
-            if (i != visibleReplies - 1) {
-                y += kReplyGap;
-            }
+            y = replyBlockStartY + revealedHeight;
         }
 
         if (visibleReplies < comment->totalReplyCount) {
@@ -966,6 +1018,15 @@ PostCommentDelegate::Layout PostCommentDelegate::buildLayout(const QStyleOptionV
                                                replyTextWidth,
                                                actionMetrics.lineSpacing() + kLoadMoreReplyHeightExtra);
             y += layout.loadMoreRepliesRect.height();
+        } else {
+            const qreal placeholderProgress =
+                    detailModel->loadMoreRepliesPlaceholderProgress(comment->commentId);
+            if (placeholderProgress > 0.001) {
+                const int placeholderHeight = kLoadMoreReplyTopGap
+                        + actionMetrics.lineSpacing()
+                        + kLoadMoreReplyHeightExtra;
+                y += qRound(placeholderHeight * qBound(0.0, placeholderProgress, 1.0));
+            }
         }
     }
 
@@ -1094,7 +1155,7 @@ void PostCommentDelegate::drawMeasuredText(QPainter* painter,
     }
 
     painter->save();
-    painter->setClipRect(rect);
+    painter->setClipRect(rect, Qt::IntersectClip);
     painter->translate(rect.left(), rect.top());
     textDocument.documentLayout()->draw(painter, paintContext);
     painter->restore();
@@ -1120,7 +1181,7 @@ void PostCommentDelegate::drawSingleLineText(QPainter* painter,
 
     painter->save();
     painter->setFont(font);
-    painter->setClipRect(rect);
+    painter->setClipRect(rect, Qt::IntersectClip);
     if (selectionMatches(QModelIndex(m_selectionIndex), target, commentId, replyId) && hasSelection()) {
         const int start = m_selection.start();
         const int end = m_selection.end();

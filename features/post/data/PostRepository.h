@@ -15,6 +15,7 @@ public:
     PostDetailData requestPostDetail(const PostDetailRequest& query) const;
     QString requestPostDetailAsync(const PostDetailRequest& query, int delayMs = 120);
     bool setPostLiked(const QString& postId, bool liked);
+    bool adjustPostCommentCount(const QString& postId, int delta);
 
 signals:
     void postUpdated(const PostSummary& summary);
@@ -34,5 +35,6 @@ private:
     PostSummary buildSummary(const Post& post) const;
 
     QMap<QString, PostLikeState> m_likeStates;
+    QMap<QString, int> m_commentCountDeltas;
     mutable QMutex mutex;
 };

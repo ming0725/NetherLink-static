@@ -85,6 +85,7 @@ private:
     QRect itemRectInViewport(const QModelIndex& index) const;
     int totalContentHeight() const;
     void maybeEmitReachedBottom();
+    QVector<int> visibleRowsForContentRect(const QRect& visibleRect) const;
 
     QVector<LayoutItem> m_layoutItems;
     QVector<QVector<int>> m_columnRows;

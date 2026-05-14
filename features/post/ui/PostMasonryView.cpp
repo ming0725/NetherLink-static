@@ -1,5 +1,7 @@
 #include "PostMasonryView.h"
 
+#include <algorithm>
+
 #include <QCursor>
 #include <QDateTime>
 #include <QMouseEvent>
@@ -285,12 +287,9 @@ void PostMasonryView::paintEvent(QPaintEvent* event)
     }
 
     const QRect visibleRect(0, verticalOffset(), viewport()->width(), viewport()->height());
-    for (int row = 0; row < m_layoutItems.size(); ++row) {
+    const QVector<int> visibleRows = visibleRowsForContentRect(visibleRect);
+    for (int row : visibleRows) {
         const QRect contentRect = m_layoutItems.at(row).rect;
-        if (!contentRect.intersects(visibleRect)) {
-            continue;
-        }
-
         const QModelIndex index = model()->index(row, 0, rootIndex());
         QStyleOptionViewItem option = viewOptionsForIndex(index);
         option.rect = contentRect.translated(0, -verticalOffset());
@@ -656,12 +655,8 @@ void PostMasonryView::warmVisiblePreviews()
 
     const QRect visibleRect(0, verticalOffset(), viewport()->width(), viewport()->height());
     const qreal dpr = devicePixelRatioF();
-    for (int row = 0; row < m_layoutItems.size(); ++row) {
-        const QRect contentRect = m_layoutItems.at(row).rect;
-        if (!contentRect.intersects(visibleRect)) {
-            continue;
-        }
-
+    const QVector<int> visibleRows = visibleRowsForContentRect(visibleRect);
+    for (int row : visibleRows) {
         const QModelIndex index = model()->index(row, 0, rootIndex());
         const QStyleOptionViewItem option = viewOptionsForIndex(index);
         const QString source = index.data(PostFeedModel::ThumbnailImageRole).toString();
@@ -811,4 +806,46 @@ void PostMasonryView::maybeEmitReachedBottom()
     } else {
         m_bottomSignalArmed = true;
     }
+}
+
+QVector<int> PostMasonryView::visibleRowsForContentRect(const QRect& visibleRect) const
+{
+    QVector<int> rows;
+    if (visibleRect.isEmpty() || m_layoutItems.isEmpty()) {
+        return rows;
+    }
+
+    for (const QVector<int>& columnRows : m_columnRows) {
+        if (columnRows.isEmpty()) {
+            continue;
+        }
+
+        int low = 0;
+        int high = columnRows.size() - 1;
+        int first = columnRows.size();
+        while (low <= high) {
+            const int mid = (low + high) / 2;
+            const QRect& rect = m_layoutItems.at(columnRows.at(mid)).rect;
+            if (rect.bottom() >= visibleRect.top()) {
+                first = mid;
+                high = mid - 1;
+            } else {
+                low = mid + 1;
+            }
+        }
+
+        for (int i = first; i < columnRows.size(); ++i) {
+            const int row = columnRows.at(i);
+            const QRect& rect = m_layoutItems.at(row).rect;
+            if (rect.top() > visibleRect.bottom()) {
+                break;
+            }
+            if (rect.intersects(visibleRect)) {
+                rows.append(row);
+            }
+        }
+    }
+
+    std::sort(rows.begin(), rows.end());
+    return rows;
 }

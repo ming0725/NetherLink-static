@@ -22,6 +22,7 @@ public:
     bool setPostLiked(const QString& postId, bool liked);
     bool setCommentLiked(const QString& commentId, bool liked);
     bool setReplyLiked(const QString& replyId, bool liked);
+    bool adjustCurrentPostCommentCount(int delta);
 
     PostComment createLocalComment(const QString& postId, const QString& text) const;
     PostCommentReply createLocalReply(const QString& postId,

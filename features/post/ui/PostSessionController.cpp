@@ -88,6 +88,14 @@ bool PostSessionController::setReplyLiked(const QString& replyId, bool liked)
     return PostCommentRepository::instance().setReplyLiked(replyId, liked);
 }
 
+bool PostSessionController::adjustCurrentPostCommentCount(int delta)
+{
+    if (m_currentPostId.isEmpty() || delta == 0) {
+        return false;
+    }
+    return PostRepository::instance().adjustPostCommentCount(m_currentPostId, delta);
+}
+
 PostComment PostSessionController::createLocalComment(const QString& postId, const QString& text) const
 {
     const CurrentUser& currentUser = CurrentUser::instance();
