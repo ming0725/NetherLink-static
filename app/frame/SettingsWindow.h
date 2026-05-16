@@ -13,6 +13,7 @@ class QStackedWidget;
 class MinecraftButton;
 class MinecraftSlider;
 class NetherLinkCreditsWindow;
+class ThemeColorPalette;
 
 class SettingsWindow final : public QWidget
 {
@@ -22,6 +23,7 @@ public:
     explicit SettingsWindow(QWidget* parent = nullptr);
     void showAnimated();
     void hideAnimated();
+    void showAppearancePage();
 
 signals:
     void closeRequested();
@@ -88,6 +90,9 @@ private:
     int toggleCurrentIndex(const MinecraftButton* btn) const;
     void setToggleIndex(MinecraftButton* btn, int idx);
     void updateFontSizeText(int value);
+    void updateThemeColorButtonText();
+    void openThemeColorPalette();
+    void positionThemeColorPalette();
 
     // Appearance — real ThemeManager integration
     void resetAppearanceControls();
@@ -103,8 +108,10 @@ private:
     MinecraftButton* m_inputBarStyleToggle = nullptr;
     MinecraftButton* m_postBarStyleToggle = nullptr;
     MinecraftButton* m_actionMenuStyleToggle = nullptr;
+    MinecraftButton* m_themeColorButton = nullptr;
     MinecraftSlider* m_fontSizeSlider = nullptr;
     QPointer<NetherLinkCreditsWindow> m_creditsWindow;
+    QPointer<ThemeColorPalette> m_themeColorPalette;
 
     static inline const QStringList kAppearanceChoices = {
         QStringLiteral("浅色模式"),

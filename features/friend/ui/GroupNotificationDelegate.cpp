@@ -636,7 +636,7 @@ void GroupNotificationDelegate::paint(QPainter* painter,
                 painter->setBrush(acceptBg);
                 painter->setPen(QPen(acceptBg, kButtonBorderWidth));
                 painter->drawRoundedRect(accR, kButtonRadius, kButtonRadius);
-                painter->setPen(ThemeManager::instance().color(ThemeColor::TextOnAccent));
+                painter->setPen(ThemeManager::textColorOn(acceptBg));
                 painter->drawText(accR, Qt::AlignCenter, QStringLiteral("同意"));
 
                 const QColor rejectColor = ThemeManager::instance().color(ThemeColor::DangerText);

@@ -94,6 +94,7 @@ private:
                     const QModelIndex& index) const;
     void drawTextMessage(QPainter* painter, const QRect& rect,
                          const QString& text, bool isFromMe,
+                         const QColor& textColor,
                          const QModelIndex& index) const;
     void drawImageMessage(QPainter* painter, const QRect& rect,
                          const QString& imageSource, bool isSelected) const;

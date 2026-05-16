@@ -316,7 +316,7 @@ void FriendNotificationDelegate::paint(QPainter* painter,
             painter->setBrush(bg);
             painter->setPen(QPen(bg, kButtonBorderWidth));
             painter->drawRoundedRect(accR, kButtonRadius, kButtonRadius);
-            painter->setPen(ThemeManager::instance().color(ThemeColor::TextOnAccent));
+            painter->setPen(ThemeManager::textColorOn(bg));
             painter->drawText(accR, Qt::AlignCenter, QStringLiteral("同意"));
         }
 

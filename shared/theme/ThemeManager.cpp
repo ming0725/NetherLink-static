@@ -9,7 +9,36 @@
 #include <QStyle>
 #include <QStyleHints>
 #include <QWidget>
+#include <QtMath>
 #include <QtGlobal>
+
+namespace {
+
+qreal linearizedSrgb(int value)
+{
+    const qreal channel = qBound(0, value, 255) / 255.0;
+    return channel <= 0.03928
+            ? channel / 12.92
+            : qPow((channel + 0.055) / 1.055, 2.4);
+}
+
+qreal relativeLuminance(const QColor& color)
+{
+    const QColor rgb = color.toRgb();
+    return 0.2126 * linearizedSrgb(rgb.red())
+            + 0.7152 * linearizedSrgb(rgb.green())
+            + 0.0722 * linearizedSrgb(rgb.blue());
+}
+
+QColor selectionColorOn(const QColor& background)
+{
+    const QColor textColor = ThemeManager::textColorOn(background);
+    return textColor == QColor(Qt::black)
+            ? QColor(0, 0, 0, 52)
+            : QColor(255, 255, 255, 88);
+}
+
+} // namespace
 
 ThemeManager& ThemeManager::instance()
 {
@@ -48,6 +77,51 @@ bool ThemeManager::isDark() const
     return systemIsDark();
 }
 
+QColor ThemeManager::themeColor() const
+{
+    return m_themeColor;
+}
+
+void ThemeManager::setThemeColor(const QColor& color)
+{
+    if (!color.isValid()) {
+        return;
+    }
+
+    QColor rgb = color.toRgb();
+    rgb.setAlpha(255);
+    if (m_themeColor == rgb) {
+        return;
+    }
+
+    m_themeColor = rgb;
+    refreshApplicationTheme();
+}
+
+bool ThemeManager::qtFallbackLiquidGlassEnabled() const
+{
+    return m_qtFallbackLiquidGlassEnabled;
+}
+
+void ThemeManager::setQtFallbackLiquidGlassEnabled(bool enabled)
+{
+    if (m_qtFallbackLiquidGlassEnabled == enabled) {
+        return;
+    }
+
+    m_qtFallbackLiquidGlassEnabled = enabled;
+    refreshApplicationTheme();
+}
+
+QColor ThemeManager::textColorOn(const QColor& background, int alpha)
+{
+    QColor textColor = relativeLuminance(background) > 0.46
+            ? QColor(Qt::black)
+            : QColor(Qt::white);
+    textColor.setAlpha(qBound(0, alpha, 255));
+    return textColor;
+}
+
 bool ThemeManager::isAccentColorRole(ThemeColor role)
 {
     switch (role) {
@@ -70,30 +144,31 @@ bool ThemeManager::isAccentColorRole(ThemeColor role)
 
 QColor ThemeManager::accentColor(ThemeColor role, bool dark) const
 {
+    const QColor accent = m_themeColor.isValid() ? m_themeColor : QColor(0x00, 0x99, 0xff);
+    const QColor accentBackground = dark ? accent.darker(112) : accent;
     if (!dark) {
-        const QColor accent(0x00, 0x99, 0xff);
         switch (role) {
         case ThemeColor::Accent:
         case ThemeColor::ListSelected:
             return accent;
         case ThemeColor::AccentHover:
-            return QColor(0x00, 0x88, 0xee);
+            return accent.darker(108);
         case ThemeColor::AccentPressed:
-            return QColor(0x00, 0x77, 0xdd);
+            return accent.darker(120);
         case ThemeColor::AccentBubble:
             return accent;
         case ThemeColor::AccentLinkText:
-            return QColor(0x1b, 0x6e, 0xd6);
+            return accent.darker(135);
         case ThemeColor::AccentLinkTextOnAccent:
-            return QColor(0xbf, 0xe9, 0xff);
+            return textColorOn(accentBackground);
         case ThemeColor::AccentTextSelection:
-            return QColor(0x8b, 0xb7, 0xff, 130);
+            return QColor(accent.red(), accent.green(), accent.blue(), 130);
         case ThemeColor::AccentTextSelectionOnAccent:
-            return QColor(255, 255, 255, 88);
+            return selectionColorOn(accentBackground);
         case ThemeColor::TextOnAccent:
-            return QColor(0xff, 0xff, 0xff);
+            return textColorOn(accentBackground);
         case ThemeColor::SecondaryTextOnAccent:
-            return QColor(0xff, 0xff, 0xff, 165);
+            return textColorOn(accentBackground, 165);
         default:
             return QColor();
         }
@@ -102,25 +177,25 @@ QColor ThemeManager::accentColor(ThemeColor role, bool dark) const
     switch (role) {
     case ThemeColor::Accent:
     case ThemeColor::ListSelected:
-        return QColor(0x00, 0x78, 0xd4);
+        return accent.darker(112);
     case ThemeColor::AccentHover:
-        return QColor(0x00, 0x86, 0xe4);
+        return accent;
     case ThemeColor::AccentPressed:
-        return QColor(0x00, 0x66, 0xb8);
+        return accent.darker(125);
     case ThemeColor::AccentBubble:
-        return QColor(0x1e, 0x86, 0xdf);
+        return accent.darker(108);
     case ThemeColor::AccentLinkText:
-        return QColor(0x6a, 0xb7, 0xff);
+        return accent.lighter(145);
     case ThemeColor::AccentLinkTextOnAccent:
-        return QColor(0xbf, 0xe9, 0xff);
+        return textColorOn(accentBackground);
     case ThemeColor::AccentTextSelection:
-        return QColor(0x4c, 0x82, 0xc5, 150);
+        return QColor(accent.red(), accent.green(), accent.blue(), 150);
     case ThemeColor::AccentTextSelectionOnAccent:
-        return QColor(255, 255, 255, 88);
+        return selectionColorOn(accentBackground);
     case ThemeColor::TextOnAccent:
-        return QColor(0xff, 0xff, 0xff);
+        return textColorOn(accentBackground);
     case ThemeColor::SecondaryTextOnAccent:
-        return QColor(0xff, 0xff, 0xff, 165);
+        return textColorOn(accentBackground, 165);
     default:
         return QColor();
     }
@@ -463,7 +538,7 @@ QPalette ThemeManager::applicationPalette() const
     palette.setColor(QPalette::Button, color(ThemeColor::PanelRaisedBackground));
     palette.setColor(QPalette::ButtonText, color(ThemeColor::PrimaryText));
     palette.setColor(QPalette::Highlight, color(ThemeColor::Accent));
-    palette.setColor(QPalette::HighlightedText, Qt::white);
+    palette.setColor(QPalette::HighlightedText, color(ThemeColor::TextOnAccent));
     palette.setColor(QPalette::PlaceholderText, color(ThemeColor::PlaceholderText));
     palette.setColor(QPalette::ToolTipBase, color(ThemeColor::PanelRaisedBackground));
     palette.setColor(QPalette::ToolTipText, color(ThemeColor::PrimaryText));

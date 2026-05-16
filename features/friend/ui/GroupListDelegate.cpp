@@ -33,13 +33,15 @@ const QFontMetrics& nameMetrics()
 void drawGroupDisplayName(QPainter* painter,
                           const QRect& rect,
                           const QModelIndex& index,
+                          const QColor& selectedText,
+                          const QColor& selectedSecondaryText,
                           bool selected)
 {
     const QString remark = index.data(GroupListModel::RemarkRole).toString();
     const QString groupName = index.data(GroupListModel::GroupNameRole).toString();
     const QString displayName = index.data(GroupListModel::DisplayNameRole).toString();
-    const QColor primaryColor = selected ? ThemeManager::instance().color(ThemeColor::TextOnAccent) : ThemeManager::instance().color(ThemeColor::PrimaryText);
-    const QColor secondaryColor = selected ? ThemeManager::instance().color(ThemeColor::SecondaryTextOnAccent)
+    const QColor primaryColor = selected ? selectedText : ThemeManager::instance().color(ThemeColor::PrimaryText);
+    const QColor secondaryColor = selected ? selectedSecondaryText
                                            : ThemeManager::instance().color(ThemeColor::TertiaryText);
 
     painter->setFont(nameFont());
@@ -279,6 +281,8 @@ void GroupListDelegate::paint(QPainter* painter,
             : (hovered ? ThemeManager::instance().color(ThemeColor::ListHover)
                        : ThemeManager::instance().color(ThemeColor::PanelBackground));
     painter->fillRect(option.rect, backgroundColor);
+    const QColor selectedTextColor = ThemeManager::textColorOn(backgroundColor);
+    const QColor selectedSecondaryTextColor = ThemeManager::textColorOn(backgroundColor, 165);
     painter->setOpacity(qMin(1.0, progress * 1.25));
 
     const int contentTop = option.rect.top() - qRound((1.0 - progress) * 10.0);
@@ -311,7 +315,7 @@ void GroupListDelegate::paint(QPainter* painter,
                          qMax(0, rightEdge - contentLeft),
                          nameHeight);
 
-    drawGroupDisplayName(painter, nameRect, index, selected);
+    drawGroupDisplayName(painter, nameRect, index, selectedTextColor, selectedSecondaryTextColor, selected);
 
     const QString memberText = QStringLiteral("%1人").arg(index.data(GroupListModel::MemberCountRole).toInt());
     const int memberHeight = memberMetrics().height();
@@ -334,7 +338,7 @@ void GroupListDelegate::paint(QPainter* painter,
                            memberHeight);
 
     painter->setFont(memberFont());
-    painter->setPen(selected ? ThemeManager::instance().color(ThemeColor::TextOnAccent) : ThemeManager::instance().color(ThemeColor::TertiaryText));
+    painter->setPen(selected ? selectedTextColor : ThemeManager::instance().color(ThemeColor::TertiaryText));
     painter->drawText(memberRect,
                       Qt::AlignLeft | Qt::AlignVCenter,
                       memberMetrics().elidedText(memberText,

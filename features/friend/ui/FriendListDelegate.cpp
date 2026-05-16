@@ -38,11 +38,12 @@ void drawFriendDisplayName(QPainter* painter,
                            const QString& displayName,
                            const QColor& primaryText,
                            const QColor& tertiaryText,
+                           const QColor& selectedText,
+                           const QColor& selectedSecondaryText,
                            bool selected)
 {
-    const QColor primaryColor = selected ? ThemeManager::instance().color(ThemeColor::TextOnAccent) : primaryText;
-    const QColor secondaryColor = selected ? ThemeManager::instance().color(ThemeColor::SecondaryTextOnAccent)
-                                           : tertiaryText;
+    const QColor primaryColor = selected ? selectedText : primaryText;
+    const QColor secondaryColor = selected ? selectedSecondaryText : tertiaryText;
 
     painter->setFont(nameFont());
     if (remark.isEmpty() || nickName.isEmpty()) {
@@ -384,6 +385,8 @@ void FriendListDelegate::paint(QPainter* painter,
                           friendData.displayName,
                           theme.primaryText,
                           theme.tertiaryText,
+                          theme.selectedText,
+                          theme.selectedSecondaryText,
                           selected);
 
     const int subtitleHeight = subtitleMetrics().height();
@@ -406,7 +409,7 @@ void FriendListDelegate::paint(QPainter* painter,
                              subtitleHeight);
 
     painter->setFont(subtitleFont());
-    painter->setPen(selected ? ThemeManager::instance().color(ThemeColor::TextOnAccent) : theme.tertiaryText);
+    painter->setPen(selected ? theme.selectedText : theme.tertiaryText);
     painter->drawText(subtitleRect,
                       Qt::AlignLeft | Qt::AlignVCenter,
                       subtitleMetrics().elidedText(friendData.subtitle,
@@ -479,6 +482,8 @@ const FriendListDelegate::ThemePaintCache& FriendListDelegate::themePaintCache()
     m_themePaintCache.primaryText = ThemeManager::instance().color(ThemeColor::PrimaryText);
     m_themePaintCache.secondaryText = ThemeManager::instance().color(ThemeColor::SecondaryText);
     m_themePaintCache.tertiaryText = ThemeManager::instance().color(ThemeColor::TertiaryText);
+    m_themePaintCache.selectedText = ThemeManager::textColorOn(m_themePaintCache.listSelected);
+    m_themePaintCache.selectedSecondaryText = ThemeManager::textColorOn(m_themePaintCache.listSelected, 165);
     m_themePaintCache.imagePlaceholder = ThemeManager::instance().color(ThemeColor::ImagePlaceholder);
     return m_themePaintCache;
 }

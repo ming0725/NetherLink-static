@@ -36,3 +36,4 @@ build/
 cmake-build-debug/
 CMakeLists.txt.user
 .DS_Store
+ref/

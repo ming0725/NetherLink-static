@@ -276,12 +276,13 @@ void ApplicationBar::showMoreOptionsMenu()
     auto* menu = new StyledActionMenu(this);
     menu->setItemHoverColor(ThemeManager::instance().color(ThemeColor::ContextMenuHover));
     QAction* settingsAction = menu->addAction(QStringLiteral("设置"));
-    menu->addAction(QStringLiteral("主题颜色"));
+    QAction* themeColorAction = menu->addAction(QStringLiteral("主题颜色"));
     menu->addAction(QStringLiteral("聊天记录管理"));
     menu->addSeparator();
     menu->addAction(QStringLiteral("退出账号"));
 
     connect(settingsAction, &QAction::triggered, this, &ApplicationBar::settingsRequested);
+    connect(themeColorAction, &QAction::triggered, this, &ApplicationBar::appearanceSettingsRequested);
 
     connect(menu, &QMenu::aboutToHide, this, [this, menu]() {
         if (moreOptionsItem) {

@@ -3,7 +3,9 @@
 #include "NetherLinkCreditsWindow.h"
 #include "shared/services/ImageService.h"
 #include "shared/services/AudioService.h"
+#include "shared/theme/ThemeColorPalette.h"
 #include "shared/theme/ThemeManager.h"
+#include "shared/ui/FloatingInputBar.h"
 #include "shared/ui/MinecraftButton.h"
 #include "shared/ui/MinecraftSlider.h"
 
@@ -12,16 +14,17 @@
 #include "platform/macos/MacFloatingInputBarBridge_p.h"
 #include "platform/macos/MacPostBarBridge_p.h"
 #include "platform/macos/MacStyledActionMenuBridge_p.h"
-#include "shared/ui/FloatingInputBar.h"
 #endif
 
 #include <QApplication>
 #include <QFontDatabase>
+#include <QGuiApplication>
 #include <QKeyEvent>
 #include <QPainter>
 #include <QPaintEvent>
 #include <QPropertyAnimation>
 #include <QResizeEvent>
+#include <QScreen>
 #include <QStackedWidget>
 
 namespace {
@@ -93,14 +96,51 @@ QStringList imgQualityChoices(){ return {QStringLiteral("原始"), QStringLitera
 QStringList historyChoices()   { return {QStringLiteral("保留全部"), QStringLiteral("保留30天"), QStringLiteral("保留7天")}; }
 QStringList sendKeyChoices()   { return {QStringLiteral("Enter"), QStringLiteral("Ctrl+Enter")}; }
 QStringList verifyChoices()    { return {QStringLiteral("关闭"), QStringLiteral("开启")}; }
+QStringList qtFallbackInputBarChoices()
+{
+    return {
+        QStringLiteral("默认（液态玻璃）"),
+        QStringLiteral("默认")
+    };
+}
+
+int qtFallbackInputBarIndex()
+{
+    return ThemeManager::instance().qtFallbackLiquidGlassEnabled() ? 0 : 1;
+}
+
+bool qtFallbackLiquidGlassForIndex(int index)
+{
+    return index == 0;
+}
 
 #ifdef Q_OS_MACOS
 QVariantList floatingInputBarModeValues(const QVector<MacFloatingInputBarBridge::Mode>& modes)
 {
     QVariantList values;
-    values.reserve(modes.size());
+    values.reserve(modes.size() + 1);
     for (MacFloatingInputBarBridge::Mode mode : modes) {
-        values.push_back(static_cast<int>(mode));
+        if (mode == MacFloatingInputBarBridge::Mode::QtFallback) {
+            values.push_back(static_cast<int>(MacFloatingInputBarBridge::Mode::QtFallback));
+            values.push_back(static_cast<int>(MacFloatingInputBarBridge::Mode::QtFallback));
+        } else {
+            values.push_back(static_cast<int>(mode));
+        }
+    }
+    return values;
+}
+
+QVariantList floatingInputBarFallbackGlassValues(const QVector<MacFloatingInputBarBridge::Mode>& modes)
+{
+    QVariantList values;
+    values.reserve(modes.size() + 1);
+    for (MacFloatingInputBarBridge::Mode mode : modes) {
+        if (mode == MacFloatingInputBarBridge::Mode::QtFallback) {
+            values.push_back(true);
+            values.push_back(false);
+        } else {
+            values.push_back(true);
+        }
     }
     return values;
 }
@@ -108,7 +148,7 @@ QVariantList floatingInputBarModeValues(const QVector<MacFloatingInputBarBridge:
 QStringList floatingInputBarModeChoices(const QVector<MacFloatingInputBarBridge::Mode>& modes)
 {
     QStringList choices;
-    choices.reserve(modes.size());
+    choices.reserve(modes.size() + 1);
     for (MacFloatingInputBarBridge::Mode mode : modes) {
         switch (mode) {
         case MacFloatingInputBarBridge::Mode::LiquidGlass:
@@ -118,11 +158,34 @@ QStringList floatingInputBarModeChoices(const QVector<MacFloatingInputBarBridge:
             choices.push_back(QStringLiteral("高斯模糊"));
             break;
         case MacFloatingInputBarBridge::Mode::QtFallback:
+            choices.push_back(QStringLiteral("默认（液态玻璃）"));
             choices.push_back(QStringLiteral("默认"));
             break;
         }
     }
     return choices;
+}
+
+int indexForFloatingInputBarStyle(const QVariantList& modeValues,
+                                  const QVariantList& fallbackGlassValues,
+                                  int modeValue,
+                                  bool fallbackGlassEnabled)
+{
+    for (int i = 0; i < modeValues.size(); ++i) {
+        if (modeValues.at(i).toInt() != modeValue) {
+            continue;
+        }
+        if (modeValue != static_cast<int>(MacFloatingInputBarBridge::Mode::QtFallback)) {
+            return i;
+        }
+        const bool candidateFallbackGlass = i < fallbackGlassValues.size()
+                ? fallbackGlassValues.at(i).toBool()
+                : true;
+        if (candidateFallbackGlass == fallbackGlassEnabled) {
+            return i;
+        }
+    }
+    return modeValues.isEmpty() ? -1 : 0;
 }
 
 QVariantList postBarModeValues(const QVector<MacPostBarBridge::Mode>& modes)
@@ -207,6 +270,20 @@ int modeValueForToggle(const MinecraftButton* button)
 }
 #endif
 
+bool qtFallbackLiquidGlassForToggle(const MinecraftButton* button)
+{
+    if (!button) {
+        return ThemeManager::instance().qtFallbackLiquidGlassEnabled();
+    }
+
+    const QVariantList values = button->property("fallbackGlassValues").toList();
+    const int index = button->property("toggleIndex").toInt();
+    if (index >= 0 && index < values.size()) {
+        return values.at(index).toBool();
+    }
+    return qtFallbackLiquidGlassForIndex(index);
+}
+
 } // namespace
 
 // ============================================================
@@ -276,12 +353,28 @@ void SettingsWindow::hideAnimated()
     anim->start();
 }
 
+void SettingsWindow::showAppearancePage()
+{
+    m_currentTitle = QStringLiteral("外观设置");
+    update();
+    navigateTo(PageAppearance);
+}
+
 // ============================================================
 // Events
 // ============================================================
 
 void SettingsWindow::keyPressEvent(QKeyEvent* event)
 {
+    if (m_themeColorPalette && m_themeColorPalette->isVisible()) {
+        if (event->key() == Qt::Key_Escape) {
+            m_themeColorPalette->close();
+            return;
+        }
+        QWidget::keyPressEvent(event);
+        return;
+    }
+
     if (m_creditsWindow && m_creditsWindow->isVisible()) {
         switch (event->key()) {
         case Qt::Key_Escape:
@@ -332,7 +425,7 @@ void SettingsWindow::paintEvent(QPaintEvent* event)
                           kSettingsTitleHeight);
     painter.setPen(ThemeManager::instance().color(ThemeColor::OverlayStroke));
     painter.drawText(titleRect.translated(1, 1), Qt::AlignCenter, m_currentTitle);
-    painter.setPen(ThemeManager::instance().color(ThemeColor::TextOnAccent));
+    painter.setPen(QColor(Qt::white));
     painter.drawText(titleRect, Qt::AlignCenter, m_currentTitle);
 }
 
@@ -343,6 +436,9 @@ void SettingsWindow::resizeEvent(QResizeEvent* event)
     if (m_creditsWindow) {
         m_creditsWindow->setGeometry(rect());
         m_creditsWindow->raise();
+    }
+    if (m_themeColorPalette) {
+        positionThemeColorPalette();
     }
     layoutCurrentPage();
 }
@@ -494,6 +590,93 @@ void SettingsWindow::updateFontSizeText(int value)
     if (!m_fontSizeSlider) return;
     const int idx = qBound(0, value, static_cast<int>(kFontSizeLabels.size()) - 1);
     m_fontSizeSlider->setText(QStringLiteral("字号：%1").arg(kFontSizeLabels.at(idx)));
+}
+
+void SettingsWindow::updateThemeColorButtonText()
+{
+    if (!m_themeColorButton) return;
+
+    const QColor color = ThemeManager::instance().themeColor();
+    const QString text = QStringLiteral("主题颜色：#%1%2%3")
+            .arg(color.red(), 2, 16, QLatin1Char('0'))
+            .arg(color.green(), 2, 16, QLatin1Char('0'))
+            .arg(color.blue(), 2, 16, QLatin1Char('0'))
+            .toUpper();
+    m_themeColorButton->setText(text);
+}
+
+void SettingsWindow::openThemeColorPalette()
+{
+    if (m_themeColorPalette) {
+        m_themeColorPalette->setCurrentColor(ThemeManager::instance().themeColor());
+        positionThemeColorPalette();
+        m_themeColorPalette->show();
+        m_themeColorPalette->raise();
+        m_themeColorPalette->setFocus();
+        return;
+    }
+
+    auto* palette = new ThemeColorPalette(this);
+    palette->setAttribute(Qt::WA_DeleteOnClose);
+    palette->setCurrentColor(ThemeManager::instance().themeColor());
+    m_themeColorPalette = palette;
+
+    connect(palette, &ThemeColorPalette::accepted, this, [this](const QColor& color) {
+        ThemeManager::instance().setThemeColor(color);
+        updateThemeColorButtonText();
+        if (m_themeColorPalette) {
+            m_themeColorPalette->close();
+        }
+    });
+    connect(palette, &ThemeColorPalette::canceled, this, [this]() {
+        if (m_themeColorPalette) {
+            m_themeColorPalette->close();
+        }
+    });
+    connect(palette, &QObject::destroyed, this, [this]() {
+        m_themeColorPalette = nullptr;
+    });
+
+    positionThemeColorPalette();
+    palette->show();
+    palette->raise();
+    palette->setFocus();
+}
+
+void SettingsWindow::positionThemeColorPalette()
+{
+    if (!m_themeColorButton || !m_themeColorPalette) {
+        return;
+    }
+
+    const QSize popupSize = m_themeColorPalette->sizeHint();
+    const QPoint buttonCenter = m_themeColorButton->mapToGlobal(m_themeColorButton->rect().center());
+    const bool buttonIsOnRight = m_themeColorButton->mapTo(this, m_themeColorButton->rect().center()).x()
+                                 > width() / 2;
+    const int popupLocalX = buttonIsOnRight
+            ? m_themeColorButton->width() - popupSize.width()
+            : (m_themeColorButton->width() - popupSize.width()) / 2;
+    QPoint popupPos = m_themeColorButton->mapToGlobal(QPoint(popupLocalX,
+                                                             m_themeColorButton->height() + 10));
+
+    QScreen* screen = QGuiApplication::screenAt(buttonCenter);
+    if (!screen) {
+        screen = QGuiApplication::primaryScreen();
+    }
+    if (screen) {
+        const QRect available = screen->availableGeometry();
+        popupPos.setX(qBound(available.left() + 8,
+                             popupPos.x(),
+                             available.right() - popupSize.width() + 1 - 8));
+        if (popupPos.y() + popupSize.height() > available.bottom() + 1 - 8) {
+            popupPos.setY(m_themeColorButton->mapToGlobal(QPoint(0, -popupSize.height() - 10)).y());
+        }
+        popupPos.setY(qBound(available.top() + 8,
+                             popupPos.y(),
+                             available.bottom() - popupSize.height() + 1 - 8));
+    }
+
+    m_themeColorPalette->move(popupPos);
 }
 
 // ============================================================
@@ -697,22 +880,36 @@ void SettingsWindow::createAppearancePage()
 
     const int curModeIdx = modeToIndex(ThemeManager::instance().configuredMode());
     m_appearanceModeToggle = createToggleButton(QStringLiteral("外观模式"), kAppearanceChoices, curModeIdx, page);
+    m_themeColorButton = createMenuButton(QStringLiteral("主题颜色..."), page);
+    updateThemeColorButtonText();
+    connect(m_themeColorButton, &QPushButton::clicked, this, &SettingsWindow::openThemeColorPalette);
 
     auto* transpToggle = createToggleButton(QStringLiteral("窗口透明度"), transparencyChoices(), 1, page);
 
 #ifdef Q_OS_MACOS
     const QVector<MacFloatingInputBarBridge::Mode> inputBarModes =
             MacFloatingInputBarBridge::supportedModes();
-    if (inputBarModes.size() >= 2) {
-        const QVariantList values = floatingInputBarModeValues(inputBarModes);
-        m_inputBarStyleToggle = createToggleButton(
-                QStringLiteral("聊天输入栏样式"),
-                floatingInputBarModeChoices(inputBarModes),
-                indexForModeValue(values, static_cast<int>(MacFloatingInputBarBridge::mode())),
-                page);
-        m_inputBarStyleToggle->setProperty("modeValues", values);
-    }
+    const QVariantList inputBarModeValues = floatingInputBarModeValues(inputBarModes);
+    const QVariantList inputBarFallbackGlassValues = floatingInputBarFallbackGlassValues(inputBarModes);
+    m_inputBarStyleToggle = createToggleButton(
+            QStringLiteral("聊天输入栏样式"),
+            floatingInputBarModeChoices(inputBarModes),
+            indexForFloatingInputBarStyle(
+                    inputBarModeValues,
+                    inputBarFallbackGlassValues,
+                    static_cast<int>(MacFloatingInputBarBridge::mode()),
+                    ThemeManager::instance().qtFallbackLiquidGlassEnabled()),
+            page);
+    m_inputBarStyleToggle->setProperty("modeValues", inputBarModeValues);
+    m_inputBarStyleToggle->setProperty("fallbackGlassValues", inputBarFallbackGlassValues);
+#else
+    m_inputBarStyleToggle = createToggleButton(QStringLiteral("聊天输入栏样式"),
+                                               qtFallbackInputBarChoices(),
+                                               qtFallbackInputBarIndex(),
+                                               page);
+#endif
 
+#ifdef Q_OS_MACOS
     const QVector<MacPostBarBridge::Mode> postBarModes = MacPostBarBridge::supportedModes();
     if (postBarModes.size() >= 2) {
         const QVariantList values = postBarModeValues(postBarModes);
@@ -744,19 +941,26 @@ void SettingsWindow::createAppearancePage()
     });
 
     PageLayout pl;
-    pl.leftItems = {m_appearanceModeToggle};
-    pl.rightItems = {transpToggle};
-#ifdef Q_OS_MACOS
+    QVector<QWidget*> orderedItems = {m_appearanceModeToggle, transpToggle};
     if (m_inputBarStyleToggle) {
-        pl.leftItems.push_back(m_inputBarStyleToggle);
+        orderedItems.push_back(m_inputBarStyleToggle);
+    }
+#ifdef Q_OS_MACOS
+    if (m_postBarStyleToggle) {
+        orderedItems.push_back(m_postBarStyleToggle);
     }
     if (m_actionMenuStyleToggle) {
-        pl.leftItems.push_back(m_actionMenuStyleToggle);
-    }
-    if (m_postBarStyleToggle) {
-        pl.rightItems.push_back(m_postBarStyleToggle);
+        orderedItems.push_back(m_actionMenuStyleToggle);
     }
 #endif
+    orderedItems.push_back(m_themeColorButton);
+    for (int i = 0; i < orderedItems.size(); ++i) {
+        if (i % 2 == 0) {
+            pl.leftItems.push_back(orderedItems.at(i));
+        } else {
+            pl.rightItems.push_back(orderedItems.at(i));
+        }
+    }
     pl.doneWidget = doneBtn;
     pl.firstRowGap = kSubPageRowGap;
     pl.bodyRowGap  = kSubPageRowGap;
@@ -966,9 +1170,19 @@ void SettingsWindow::resetAppearanceControls()
     if (m_inputBarStyleToggle) {
         setToggleIndex(
                 m_inputBarStyleToggle,
-                indexForModeValue(m_inputBarStyleToggle->property("modeValues").toList(),
-                                  static_cast<int>(MacFloatingInputBarBridge::mode())));
+                indexForFloatingInputBarStyle(
+                        m_inputBarStyleToggle->property("modeValues").toList(),
+                        m_inputBarStyleToggle->property("fallbackGlassValues").toList(),
+                        static_cast<int>(MacFloatingInputBarBridge::mode()),
+                        ThemeManager::instance().qtFallbackLiquidGlassEnabled()));
     }
+#else
+    if (m_inputBarStyleToggle) {
+        setToggleIndex(m_inputBarStyleToggle, qtFallbackInputBarIndex());
+    }
+#endif
+
+#ifdef Q_OS_MACOS
     if (m_postBarStyleToggle) {
         setToggleIndex(
                 m_postBarStyleToggle,
@@ -990,6 +1204,8 @@ void SettingsWindow::applyAppearance()
 
     const int idx = toggleCurrentIndex(m_appearanceModeToggle);
     ThemeManager::instance().setMode(indexToMode(idx));
+    ThemeManager::instance().setQtFallbackLiquidGlassEnabled(
+            qtFallbackLiquidGlassForToggle(m_inputBarStyleToggle));
 
 #ifdef Q_OS_MACOS
     if (m_inputBarStyleToggle) {
@@ -1004,14 +1220,17 @@ void SettingsWindow::applyAppearance()
         MacStyledActionMenuBridge::setMode(static_cast<MacStyledActionMenuBridge::Mode>(
                 modeValueForToggle(m_actionMenuStyleToggle)));
     }
+#endif
 
     const QWidgetList widgets = QApplication::allWidgets();
     for (QWidget* widget : widgets) {
         if (auto* inputBar = qobject_cast<FloatingInputBar*>(widget)) {
             inputBar->refreshPlatformAppearance();
-        } else if (auto* postBar = qobject_cast<PostApplicationBar*>(widget)) {
+        }
+#ifdef Q_OS_MACOS
+        else if (auto* postBar = qobject_cast<PostApplicationBar*>(widget)) {
             postBar->refreshPlatformAppearance();
         }
-    }
 #endif
+    }
 }

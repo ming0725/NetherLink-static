@@ -119,6 +119,11 @@ public:
     void setMode(Mode mode);
     bool isDark() const;
     QColor color(ThemeColor role) const;
+    QColor themeColor() const;
+    void setThemeColor(const QColor& color);
+    bool qtFallbackLiquidGlassEnabled() const;
+    void setQtFallbackLiquidGlassEnabled(bool enabled);
+    static QColor textColorOn(const QColor& background, int alpha = 255);
 
     QPalette applicationPalette() const;
     void applyToApplication(QApplication& application);
@@ -140,5 +145,7 @@ private:
 
     QPointer<QApplication> m_application;
     Mode m_configuredMode = Mode::FollowSystem;
+    QColor m_themeColor = QColor(0x00, 0x99, 0xff);
+    bool m_qtFallbackLiquidGlassEnabled = true;
     bool m_refreshing = false;
 };

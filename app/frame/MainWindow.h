@@ -36,6 +36,8 @@ private:
     void openConversationFromContacts(const QString& conversationId);
     void updateBackdropTheme();
     void openSettingsWindow();
+    void openAppearanceSettingsWindow();
+    void showSettingsWindow(bool openAppearancePage);
     void closeSettingsWindow();
     void setSystemFloatingBarsSuppressed(bool suppressed);
     void layoutWindow();

@@ -52,7 +52,7 @@ const QString kPanelBackgroundSource(QStringLiteral(":/resources/icon/options_ba
 
 QColor panelTextColor()
 {
-    return ThemeManager::instance().color(ThemeColor::TextOnAccent);
+    return QColor(Qt::white);
 }
 
 QColor cardBackgroundColor()
@@ -939,7 +939,7 @@ void GroupConversationInfoPanel::showMemberContextMenu(const User& user, const Q
         QAction* removeAction = menu->addAction(QStringLiteral("移出本群"));
         StyledActionMenu::setActionColors(removeAction,
                                           dangerTextColor(),
-                                          ThemeManager::instance().color(ThemeColor::TextOnAccent),
+                                          ThemeManager::textColorOn(dangerTextColor()),
                                           dangerTextColor());
         connect(removeAction, &QAction::triggered, this, [this, user]() {
             confirmMemberRemoval(user);

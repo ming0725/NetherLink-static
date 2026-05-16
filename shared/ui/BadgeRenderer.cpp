@@ -1,9 +1,43 @@
 #include "BadgeRenderer.h"
 
 #include <QPainter>
+#include <QPixmapCache>
 
 #include "shared/services/ImageService.h"
 #include "shared/theme/ThemeManager.h"
+
+namespace {
+
+QString invertedIconCacheKey(const QString& source, const QSize& size, qreal dpr)
+{
+    return QStringLiteral("badge-inverted|%1|%2x%3|%4")
+            .arg(source,
+                 QString::number(size.width()),
+                 QString::number(size.height()),
+                 QString::number(dpr, 'f', 2));
+}
+
+QPixmap invertedPixmap(const QString& key, const QPixmap& pixmap)
+{
+    if (pixmap.isNull()) {
+        return pixmap;
+    }
+
+    QPixmap cached;
+    if (QPixmapCache::find(key, &cached)) {
+        return cached;
+    }
+
+    QImage image = pixmap.toImage();
+    image.invertPixels(QImage::InvertRgb);
+
+    QPixmap inverted = QPixmap::fromImage(image);
+    inverted.setDevicePixelRatio(pixmap.devicePixelRatio());
+    QPixmapCache::insert(key, inverted);
+    return inverted;
+}
+
+} // namespace
 
 namespace BadgeRenderer {
 
@@ -54,10 +88,14 @@ void drawBadge(QPainter* painter, const QRect& rect,
         const QString iconPath = selected
                 ? QStringLiteral(":/resources/icon/selected_notification.png")
                 : QStringLiteral(":/resources/icon/notification.png");
-        const QPixmap icon = ImageService::instance().scaled(iconPath,
-                                                             rect.size(),
-                                                             Qt::KeepAspectRatio,
-                                                             painter->device()->devicePixelRatioF());
+        const qreal dpr = painter->device()->devicePixelRatioF();
+        QPixmap icon = ImageService::instance().scaled(iconPath,
+                                                       rect.size(),
+                                                       Qt::KeepAspectRatio,
+                                                       dpr);
+        if (layout.invertIcon) {
+            icon = invertedPixmap(invertedIconCacheKey(iconPath, rect.size(), dpr), icon);
+        }
         painter->drawPixmap(rect, icon);
         painter->restore();
         return;

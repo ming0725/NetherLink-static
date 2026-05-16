@@ -13,8 +13,8 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets OpenGL)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets OpenGL)
 find_package(Threads REQUIRED)
 
 file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
@@ -79,7 +79,11 @@ target_include_directories(NetherLink-static PRIVATE
     ${PROJECT_SOURCE_DIR}/third_party/miniaudio
 )
 
-target_link_libraries(NetherLink-static PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Threads::Threads)
+target_link_libraries(NetherLink-static PRIVATE
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::OpenGL
+    Threads::Threads
+)
 
 if(UNIX AND NOT APPLE)
     target_link_libraries(NetherLink-static PRIVATE ${CMAKE_DL_LIBS} m)

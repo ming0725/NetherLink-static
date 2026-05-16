@@ -25,6 +25,7 @@ StatefulPushButton::StatefulPushButton(QWidget* parent)
         , m_isHovered(false)
         , m_isPressed(false)
         , m_forcedPressedVisual(false)
+        , m_textColorFollowsBackground(true)
         , m_colorAnimation(new QPropertyAnimation(this, "currentColor"))
 {
     initializeButton();
@@ -47,6 +48,7 @@ StatefulPushButton::StatefulPushButton(const QString& text, QWidget* parent)
         , m_isHovered(false)
         , m_isPressed(false)
         , m_forcedPressedVisual(false)
+        , m_textColorFollowsBackground(true)
         , m_colorAnimation(new QPropertyAnimation(this, "currentColor"))
 {
     initializeButton();
@@ -137,7 +139,12 @@ void StatefulPushButton::setCurrentColor(const QColor& c)
 }
 
 QColor StatefulPushButton::textColor() const { return m_textColor; }
-void StatefulPushButton::setTextColor(const QColor& c) { m_textColor = c; update(); }
+void StatefulPushButton::setTextColor(const QColor& c)
+{
+    m_textColor = c;
+    m_textColorFollowsBackground = (c == ThemeManager::instance().color(ThemeColor::TextOnAccent));
+    update();
+}
 
 Qt::Alignment StatefulPushButton::textAlignment() const { return m_textAlignment; }
 void StatefulPushButton::setTextAlignment(Qt::Alignment alignment)
@@ -178,28 +185,33 @@ void StatefulPushButton::setDefaultStyle() {
     setHoverColor(ThemeManager::instance().color(ThemeColor::ListHover));
     setPressColor(ThemeManager::instance().color(ThemeColor::Divider));
     setTextColor(ThemeManager::instance().color(ThemeColor::PrimaryText));
+    m_textColorFollowsBackground = false;
 }
 
 void StatefulPushButton::setPrimaryStyle() {
     setNormalColor(ThemeManager::instance().color(ThemeColor::Accent));
     setHoverColor(ThemeManager::instance().color(ThemeColor::AccentHover));
     setPressColor(ThemeManager::instance().color(ThemeColor::AccentPressed));
-    setTextColor(0xFFFFFF);
+    setTextColor(ThemeManager::instance().color(ThemeColor::TextOnAccent));
+    m_textColorFollowsBackground = true;
 }
 
 void StatefulPushButton::setSuccessStyle() {
     setNormalColor(0x28A745); setHoverColor(0x218838);
     setPressColor(0x1E7E34); setTextColor(0xFFFFFF);
+    m_textColorFollowsBackground = false;
 }
 
 void StatefulPushButton::setWarningStyle() {
     setNormalColor(0xFFC107); setHoverColor(0xE0A800);
     setPressColor(0xD39E00); setTextColor(0x333333);
+    m_textColorFollowsBackground = false;
 }
 
 void StatefulPushButton::setDangerStyle() {
     setNormalColor(0xDC3545); setHoverColor(0xC82333);
     setPressColor(0xBD2130); setTextColor(0xFFFFFF);
+    m_textColorFollowsBackground = false;
 }
 
 void StatefulPushButton::enterEvent(QEnterEvent* e)
@@ -262,7 +274,10 @@ void StatefulPushButton::paintEvent(QPaintEvent* e)
         p.drawPath(path);
     }
 
-    p.setPen(m_textColor);
+    const QColor effectiveTextColor = m_textColorFollowsBackground && !m_isFlat
+            ? ThemeManager::textColorOn(m_currentColor)
+            : m_textColor;
+    p.setPen(effectiveTextColor);
     const QString buttonText = text();
     Qt::Alignment alignment = m_textAlignment;
     if (!(alignment & Qt::AlignVertical_Mask)) {

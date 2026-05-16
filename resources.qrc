@@ -46,6 +46,8 @@
         <file>resources/icon/offline.png</file>
         <file>resources/icon/online.png</file>
         <file>resources/icon/options_background.png</file>
+        <file>resources/icon/oak_planks.png</file>
+        <file>resources/icon/oak_planks_palette_tile.png</file>
         <file>resources/icon/painting.png</file>
         <file>resources/icon/redstone_lamp.png</file>
         <file>resources/icon/redstone_lamp_on.png</file>
@@ -55,6 +57,8 @@
         <file>resources/icon/selected_notification.png</file>
         <file>resources/icon/shears.png</file>
         <file>resources/icon/skull.png</file>
+        <file>resources/icon/sun.png</file>
+        <file>resources/icon/moon.png</file>
         <file>resources/icon/unselected_aichat.png</file>
         <file>resources/icon/unselected_blazer.png</file>
         <file>resources/icon/unselected_message.png</file>
@@ -89,5 +93,8 @@
         <file>resources/audio/chestopen.wav</file>
         <file>resources/audio/fuse.wav</file>
         <file>resources/audio/chestclosed.wav</file>
+        <file>resources/shaders/floating_input_liquid_glass.vert</file>
+        <file>resources/shaders/floating_input_blur.frag</file>
+        <file>resources/shaders/floating_input_liquid_glass.frag</file>
     </qresource>
 </RCC>

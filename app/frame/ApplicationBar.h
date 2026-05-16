@@ -31,6 +31,7 @@ private slots:
 signals:
     void applicationClicked(ApplicationBarItem*);
     void settingsRequested();
+    void appearanceSettingsRequested();
 private:
     void layoutItems();
     ApplicationBarItem* itemAtPosition(const QPoint& pos) const;

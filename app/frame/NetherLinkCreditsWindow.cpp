@@ -23,7 +23,7 @@ const QString kLogoSource(QStringLiteral(":/resources/icon/netherlink.png"));
 
 constexpr int kFrameIntervalMs = 33;
 constexpr int kRevealDurationMs = 2400;
-constexpr int kCreditsPauseAfterRevealMs = 1000;
+constexpr int kCreditsPauseAfterRevealMs = 0;
 constexpr qreal kBackgroundSpeed = 15;
 constexpr qreal kBackgroundTileScale = 1.85;
 constexpr qreal kCreditsSpeed = 30.0;

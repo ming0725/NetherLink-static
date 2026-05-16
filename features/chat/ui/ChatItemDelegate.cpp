@@ -42,10 +42,17 @@ void showCopyNotification(QObject* owner)
     GlobalNotification::showSuccess(widget, QStringLiteral("复制成功"));
 }
 
-QColor linkTextColor(bool dark, bool isFromMe)
+QColor ownBubbleColor(bool dark)
+{
+    return dark
+            ? ThemeManager::instance().color(ThemeColor::AccentBubble)
+            : ThemeManager::instance().color(ThemeColor::Accent);
+}
+
+QColor linkTextColor(bool dark, bool isFromMe, const QColor& textColor)
 {
     if (isFromMe) {
-        return ThemeManager::instance().color(ThemeColor::AccentLinkTextOnAccent);
+        return textColor;
     }
 
     Q_UNUSED(dark);
@@ -255,7 +262,7 @@ int ChatItemDelegate::characterIndexAt(const QStyleOptionViewItem& option,
 
     const bool dark = ThemeManager::instance().isDark();
     const QColor textColor = message->isFromMe()
-            ? ThemeManager::instance().color(ThemeColor::TextOnAccent)
+            ? ThemeManager::textColorOn(ownBubbleColor(dark))
             : ThemeManager::instance().color(ThemeColor::PrimaryText);
     const QTextDocument& textDocument = cachedTextDocument(text,
                                                            messageFont(),
@@ -408,11 +415,9 @@ void ChatItemDelegate::drawBubble(QPainter* painter, const QRect& rect,
     QColor bubbleColor;
     const bool dark = ThemeManager::instance().isDark();
     if (isFromMe) {
-        const QColor ownBubbleColor = dark
-                ? ThemeManager::instance().color(ThemeColor::AccentBubble)
-                : ThemeManager::instance().color(ThemeColor::Accent);
-        bubbleColor = isSelected ? ownBubbleColor.darker(118)
-                                 : ownBubbleColor;
+        const QColor baseBubbleColor = ownBubbleColor(dark);
+        bubbleColor = isSelected ? baseBubbleColor.darker(118)
+                                 : baseBubbleColor;
     } else if (dark) {
         bubbleColor = isSelected
                 ? ThemeManager::instance().color(ThemeColor::MessageBubblePeerSelected)
@@ -434,7 +439,10 @@ void ChatItemDelegate::drawBubble(QPainter* painter, const QRect& rect,
 
     // 根据消息类型绘制内容
     if (message->getType() == MessageType::Text) {
-        drawTextMessage(painter, rect, message->getContent(), isFromMe, index);
+        const QColor textColor = isFromMe
+                ? ThemeManager::textColorOn(bubbleColor)
+                : ThemeManager::instance().color(ThemeColor::PrimaryText);
+        drawTextMessage(painter, rect, message->getContent(), isFromMe, textColor, index);
     }
 }
 
@@ -454,13 +462,11 @@ void ChatItemDelegate::drawAvatar(QPainter* painter, const QRect& rect,
 
 void ChatItemDelegate::drawTextMessage(QPainter* painter, const QRect& rect,
                                        const QString& text, bool isFromMe,
+                                       const QColor& textColor,
                                        const QModelIndex& index) const
 {
     const QRect textRect = calculateTextRect(rect);
     const bool dark = ThemeManager::instance().isDark();
-    const QColor textColor = isFromMe
-            ? ThemeManager::instance().color(ThemeColor::TextOnAccent)
-            : ThemeManager::instance().color(ThemeColor::PrimaryText);
     const QColor selectionColor = isFromMe
             ? ThemeManager::instance().color(ThemeColor::AccentTextSelectionOnAccent)
             : ThemeManager::instance().color(ThemeColor::AccentTextSelection);
@@ -847,7 +853,7 @@ void ChatItemDelegate::configureTextDocument(QTextDocument& document,
     textFormat.setForeground(textColor);
     cursor.mergeCharFormat(textFormat);
 
-    const QColor urlColor = linkTextColor(dark, isFromMe);
+    const QColor urlColor = linkTextColor(dark, isFromMe, textColor);
     const QVector<TextRange> urls = cachedUrlRanges(text);
     for (const TextRange& url : urls) {
         QTextCharFormat linkFormat;

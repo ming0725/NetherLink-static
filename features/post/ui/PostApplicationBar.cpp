@@ -249,7 +249,7 @@ void PostApplicationBar::paintEvent(QPaintEvent*)
     const qreal outerRadius = 15.0;
 
     QColor barBackground = ThemeManager::instance().color(ThemeColor::PanelBackground);
-    barBackground.setAlpha(ThemeManager::instance().isDark() ? 190 : 100);
+    barBackground.setAlpha(ThemeManager::instance().isDark() ? 190 : 205);
     painter.setBrush(barBackground);
     painter.drawRoundedRect(contentRect, outerRadius, outerRadius);
 

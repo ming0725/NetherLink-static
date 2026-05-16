@@ -13,6 +13,7 @@ struct BadgeLayout {
     QSize size;
     QString text;
     bool drawIcon = false;
+    bool invertIcon = false;
     QColor backgroundColor;
     QColor textColor;
 };

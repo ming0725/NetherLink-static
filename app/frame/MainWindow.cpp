@@ -183,6 +183,8 @@ MainWindow::MainWindow(QWidget* parent)
             this, &MainWindow::onBarItemClicked);
     connect(appBar, &ApplicationBar::settingsRequested,
             this, &MainWindow::openSettingsWindow);
+    connect(appBar, &ApplicationBar::appearanceSettingsRequested,
+            this, &MainWindow::openAppearanceSettingsWindow);
 
     QScreen* screen = QGuiApplication::primaryScreen();
     QRect   sg     = screen->geometry();
@@ -325,8 +327,21 @@ void MainWindow::updateBackdropTheme()
 
 void MainWindow::openSettingsWindow()
 {
+    showSettingsWindow(false);
+}
+
+void MainWindow::openAppearanceSettingsWindow()
+{
+    showSettingsWindow(true);
+}
+
+void MainWindow::showSettingsWindow(bool openAppearancePage)
+{
     if (m_settingsWindow) {
         setSystemFloatingBarsSuppressed(true);
+        if (openAppearancePage) {
+            m_settingsWindow->showAppearancePage();
+        }
         m_settingsWindow->raise();
         m_settingsWindow->setFocus();
         return;
@@ -348,6 +363,9 @@ void MainWindow::openSettingsWindow()
         }
     });
     m_settingsWindow = settings;
+    if (openAppearancePage) {
+        settings->showAppearancePage();
+    }
     settings->showAnimated();
 }
 

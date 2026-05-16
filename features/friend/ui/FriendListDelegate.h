@@ -35,6 +35,8 @@ private:
         QColor primaryText;
         QColor secondaryText;
         QColor tertiaryText;
+        QColor selectedText;
+        QColor selectedSecondaryText;
         QColor imagePlaceholder;
     };
 

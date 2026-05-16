@@ -139,6 +139,7 @@ void MessageListDelegate::paint(QPainter* painter,
                : (hovered ? ThemeManager::instance().color(ThemeColor::ListHover)
                           : ThemeManager::instance().color(ThemeColor::PanelBackground)));
     painter->fillRect(option.rect, backgroundColor);
+    const QColor selectedTextColor = ThemeManager::textColorOn(backgroundColor);
 
     const int itemCenterY = option.rect.center().y();
     const QRect avatarRect(option.rect.left() + kLeftPadding,
@@ -169,8 +170,11 @@ void MessageListDelegate::paint(QPainter* painter,
 
     const int unreadCount = index.data(MessageListModel::UnreadCountRole).toInt();
     const bool doNotDisturb = index.data(MessageListModel::DoNotDisturbRole).toBool();
-    const BadgeLayout badgeLayout = BadgeRenderer::layoutForUnreadCount(
+    BadgeLayout badgeLayout = BadgeRenderer::layoutForUnreadCount(
         unreadCount, doNotDisturb, selected, ThemeManager::instance().isDark());
+    badgeLayout.invertIcon = selected
+            && badgeLayout.drawIcon
+            && selectedTextColor == QColor(Qt::black);
     const int badgeX = rightEdge - badgeLayout.size.width();
 
     const int previewHeight = previewMetrics().height();
@@ -193,7 +197,7 @@ void MessageListDelegate::paint(QPainter* painter,
                          nameHeight);
 
     painter->setFont(nameFont());
-    painter->setPen(selected ? ThemeManager::instance().color(ThemeColor::TextOnAccent) : ThemeManager::instance().color(ThemeColor::PrimaryText));
+    painter->setPen(selected ? selectedTextColor : ThemeManager::instance().color(ThemeColor::PrimaryText));
     painter->drawText(nameRect,
                       Qt::AlignLeft | Qt::AlignVCenter,
                       nameMetrics().elidedText(index.data(MessageListModel::TitleRole).toString(),
@@ -202,12 +206,12 @@ void MessageListDelegate::paint(QPainter* painter,
 
     if (!timeText.isEmpty()) {
         painter->setFont(timeFont());
-        painter->setPen(selected ? ThemeManager::instance().color(ThemeColor::TextOnAccent) : ThemeManager::instance().color(ThemeColor::TertiaryText));
+        painter->setPen(selected ? selectedTextColor : ThemeManager::instance().color(ThemeColor::TertiaryText));
         painter->drawText(timeRect, Qt::AlignLeft | Qt::AlignVCenter, timeText);
     }
 
     painter->setFont(previewFont());
-    painter->setPen(selected ? ThemeManager::instance().color(ThemeColor::TextOnAccent) : ThemeManager::instance().color(ThemeColor::TertiaryText));
+    painter->setPen(selected ? selectedTextColor : ThemeManager::instance().color(ThemeColor::TertiaryText));
     painter->drawText(previewRect,
                       Qt::AlignLeft | Qt::AlignVCenter,
                       previewMetrics().elidedText(index.data(MessageListModel::PreviewTextRole).toString(),

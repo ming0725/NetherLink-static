@@ -98,5 +98,6 @@ private:
     bool m_isHovered;
     bool m_isPressed;
     bool m_forcedPressedVisual;
+    bool m_textColorFollowsBackground;
     QPropertyAnimation* m_colorAnimation;
 };

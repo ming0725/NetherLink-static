@@ -267,6 +267,7 @@ ChatArea::ChatArea(QWidget *parent)
 
     // 创建悬浮输入栏
     inputBar = new FloatingInputBar(this);
+    inputBar->setLiquidGlassSourceWidget(chatView->viewport());
     inputBar->show();
 
     QWidget* chatInfo = new ThemeFillWidget(ThemeColor::PageBackground, this);
@@ -400,6 +401,9 @@ void ChatArea::addImageMessage(QSharedPointer<ImageMessage> message,
 
 void ChatArea::onScrollValueChanged(int)
 {
+    if (inputBar) {
+        inputBar->scheduleLiquidGlassUpdate();
+    }
     m_state.isAtBottom = isScrollAtBottom();
     
     if (m_state.isAtBottom) {
@@ -949,6 +953,7 @@ void ChatArea::updateInputBarPosition() {
                 kInputBarHeight);
         inputBar->setGeometry(inputBarRect);
         inputBar->raise();
+        inputBar->scheduleLiquidGlassUpdate();
 
 #ifdef Q_OS_MACOS
         const bool useBottomGradient =
