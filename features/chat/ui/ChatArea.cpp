@@ -8,6 +8,7 @@
 #include "shared/services/AudioService.h"
 #include "shared/services/ImageService.h"
 #include "shared/theme/ThemeManager.h"
+#include "shared/ui/QtFallbackLiquidGlass.h"
 #ifdef Q_OS_MACOS
 #include "platform/macos/MacFloatingInputBarBridge_p.h"
 #endif
@@ -402,7 +403,7 @@ void ChatArea::addImageMessage(QSharedPointer<ImageMessage> message,
 void ChatArea::onScrollValueChanged(int)
 {
     if (inputBar) {
-        inputBar->scheduleLiquidGlassUpdate();
+        inputBar->scheduleLiquidGlassUpdate(0);
     }
     m_state.isAtBottom = isScrollAtBottom();
     
@@ -970,7 +971,7 @@ void ChatArea::updateInputBarPosition() {
             inputBar->show();
         }
         inputBar->raise();
-        inputBar->scheduleLiquidGlassUpdate();
+        inputBar->scheduleLiquidGlassUpdate(0);
 
 #ifdef Q_OS_MACOS
         const bool useBottomGradient =

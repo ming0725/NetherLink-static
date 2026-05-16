@@ -3,17 +3,12 @@
 
 #include <QWidget>
 #include <QLabel>
-#include <QImage>
-#include <QPointer>
-
-#include <memory>
 
 #include "shared/ui/CustomTooltip.h"
 
-class QTimer;
 class QPainter;
 class QRectF;
-class QtFallbackLiquidGlassRenderer;
+class QtFallbackLiquidGlassController;
 class TransparentTextEdit;
 
 class FloatingInputBar : public QWidget
@@ -64,13 +59,10 @@ private:
     void updateFloatingPanelShadow();
     void updateQtFallbackGeometry();
     void updateSendButtonPosition();
+    void updateQtFallbackEffectMode();
     bool shouldUseQtFallbackLiquidGlass() const;
     void updateQtFallbackLiquidGlassState();
     void releaseQtFallbackLiquidGlassResources(bool updateWidget = true);
-    void updateLiquidGlassBackground();
-    QImage captureLiquidGlassSource(qreal devicePixelRatio) const;
-    QImage renderLiquidGlassBackground(const QImage& source, qreal devicePixelRatio);
-    QImage renderLiquidGlassBackgroundWithQtBlur(const QImage& source, qreal devicePixelRatio) const;
     void paintQtFallbackLiquidGlass(QPainter& painter, const QRectF& panelRect);
 private:
     TransparentTextEdit *m_inputEdit = nullptr;
@@ -80,15 +72,10 @@ private:
     QLabel *m_historyLabel = nullptr;
     QLabel *m_sendLabel = nullptr;
     CustomTooltip *m_tooltip = nullptr;
-    QPointer<QWidget> m_liquidGlassSourceWidget;
-    QTimer *m_liquidGlassUpdateTimer = nullptr;
-    QImage m_liquidGlassBackground;
-    std::unique_ptr<QtFallbackLiquidGlassRenderer> m_liquidGlassRenderer;
+    QtFallbackLiquidGlassController* m_liquidGlass = nullptr;
     qreal m_visualOpacity = 1.0;
     bool m_usesNativeGlass = false;
     bool m_usesNativeInput = false;
-    bool m_liquidGlassSourceFilterInstalled = false;
-    bool m_liquidGlassCaptureInProgress = false;
 
     static constexpr int CORNER_RADIUS = 20;
     static constexpr int BUTTON_SIZE = 24;

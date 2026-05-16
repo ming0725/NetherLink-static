@@ -521,11 +521,11 @@ void ThemeColorPalette::layoutControls()
         confirmX = rowLeft;
         cancelX = confirmX + kButtonWidth + kControlGap;
         const int buttonTop = rowTop + kRowHeight + 12;
-        m_confirmButton->setGeometry(confirmX, buttonTop, kButtonWidth, kButtonHeight);
-        m_cancelButton->setGeometry(cancelX, buttonTop, kButtonWidth, kButtonHeight);
+        m_cancelButton->setGeometry(confirmX, buttonTop, kButtonWidth, kButtonHeight);
+        m_confirmButton->setGeometry(cancelX, buttonTop, kButtonWidth, kButtonHeight);
     } else {
-        m_confirmButton->setGeometry(confirmX, rowTop, kButtonWidth, kButtonHeight);
-        m_cancelButton->setGeometry(cancelX, rowTop, kButtonWidth, kButtonHeight);
+        m_cancelButton->setGeometry(confirmX, rowTop, kButtonWidth, kButtonHeight);
+        m_confirmButton->setGeometry(cancelX, rowTop, kButtonWidth, kButtonHeight);
     }
 
     m_input->setGeometry(inputX,

@@ -113,6 +113,12 @@ public:
         FollowSystem = 3
     };
 
+    enum class QtFallbackInputBarEffect {
+        Default = 0,
+        LiquidGlass = 1,
+        GaussianBlur = 2
+    };
+
     static ThemeManager& instance();
 
     Mode configuredMode() const;
@@ -121,8 +127,12 @@ public:
     QColor color(ThemeColor role) const;
     QColor themeColor() const;
     void setThemeColor(const QColor& color);
+    QtFallbackInputBarEffect qtFallbackInputBarEffect() const;
+    void setQtFallbackInputBarEffect(QtFallbackInputBarEffect effect);
     bool qtFallbackLiquidGlassEnabled() const;
     void setQtFallbackLiquidGlassEnabled(bool enabled);
+    bool postBarQtFallbackLiquidGlassEnabled() const;
+    void setPostBarQtFallbackLiquidGlassEnabled(bool enabled);
     static QColor textColorOn(const QColor& background, int alpha = 255);
 
     QPalette applicationPalette() const;
@@ -146,6 +156,7 @@ private:
     QPointer<QApplication> m_application;
     Mode m_configuredMode = Mode::FollowSystem;
     QColor m_themeColor = QColor(0x00, 0x99, 0xff);
-    bool m_qtFallbackLiquidGlassEnabled = true;
+    QtFallbackInputBarEffect m_qtFallbackInputBarEffect = QtFallbackInputBarEffect::LiquidGlass;
+    bool m_postBarQtFallbackLiquidGlassEnabled = true;
     bool m_refreshing = false;
 };

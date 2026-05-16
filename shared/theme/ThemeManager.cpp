@@ -100,16 +100,43 @@ void ThemeManager::setThemeColor(const QColor& color)
 
 bool ThemeManager::qtFallbackLiquidGlassEnabled() const
 {
-    return m_qtFallbackLiquidGlassEnabled;
+    return m_qtFallbackInputBarEffect == QtFallbackInputBarEffect::LiquidGlass;
 }
 
 void ThemeManager::setQtFallbackLiquidGlassEnabled(bool enabled)
 {
-    if (m_qtFallbackLiquidGlassEnabled == enabled) {
+    setQtFallbackInputBarEffect(enabled
+            ? QtFallbackInputBarEffect::LiquidGlass
+            : QtFallbackInputBarEffect::Default);
+}
+
+ThemeManager::QtFallbackInputBarEffect ThemeManager::qtFallbackInputBarEffect() const
+{
+    return m_qtFallbackInputBarEffect;
+}
+
+void ThemeManager::setQtFallbackInputBarEffect(QtFallbackInputBarEffect effect)
+{
+    if (m_qtFallbackInputBarEffect == effect) {
         return;
     }
 
-    m_qtFallbackLiquidGlassEnabled = enabled;
+    m_qtFallbackInputBarEffect = effect;
+    refreshApplicationTheme();
+}
+
+bool ThemeManager::postBarQtFallbackLiquidGlassEnabled() const
+{
+    return m_postBarQtFallbackLiquidGlassEnabled;
+}
+
+void ThemeManager::setPostBarQtFallbackLiquidGlassEnabled(bool enabled)
+{
+    if (m_postBarQtFallbackLiquidGlassEnabled == enabled) {
+        return;
+    }
+
+    m_postBarQtFallbackLiquidGlassEnabled = enabled;
     refreshApplicationTheme();
 }
 

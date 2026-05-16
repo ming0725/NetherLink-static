@@ -55,6 +55,7 @@ private:
     void fadeBar(qreal startOpacity, qreal endOpacity, bool hideAfter);
     QRect detailRectForCurrentPost() const;
     void updateLayerOrder();
+    void schedulePostBarLiquidGlassUpdate();
     void removeTransitionImage();
     void stopActiveTransition();
     void refreshDetailSnapshotFromView(qreal opacity);

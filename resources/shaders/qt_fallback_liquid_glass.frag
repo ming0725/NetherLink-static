@@ -4,6 +4,7 @@ precision highp float;
 
 uniform sampler2D u_blurTexture;
 uniform vec2 u_size;
+uniform vec4 u_shapeRect;
 uniform float u_radius;
 uniform float u_shapeInset;
 uniform float u_dark;
@@ -30,8 +31,10 @@ vec2 roundedBoxNormal(vec2 p, vec2 halfSize, float radius)
 void main()
 {
     vec2 uv = v_texCoord;
-    vec2 p = (uv - 0.5) * u_size;
-    vec2 halfSize = max(u_size * 0.5 - vec2(u_shapeInset), vec2(0.5));
+    vec2 shapeSize = max(u_shapeRect.zw, vec2(1.0));
+    vec2 shapeCenter = u_shapeRect.xy + shapeSize * 0.5;
+    vec2 p = uv * u_size - shapeCenter;
+    vec2 halfSize = max(shapeSize * 0.5 - vec2(u_shapeInset), vec2(0.5));
     float maxRadius = max(0.0, min(halfSize.x, halfSize.y) - 0.5);
     float radius = min(max(u_radius, 0.0), maxRadius);
     float sdf = roundedBoxSdf(p, halfSize, radius);
@@ -39,7 +42,7 @@ void main()
     vec2 normal = roundedBoxNormal(p, halfSize, radius);
     vec2 tangent = vec2(normal.y, -normal.x);
 
-    float minSize = min(u_size.x, u_size.y);
+    float minSize = min(shapeSize.x, shapeSize.y);
     float lensWidth = max(12.0, min(minSize * 0.34, max(radius * 1.45, minSize * 0.16)));
     float normalizedDistance = insideDistance / max(lensWidth, 1.0);
     float edgeFalloff = 1.0 - smoothstep(0.0, 1.0, normalizedDistance);

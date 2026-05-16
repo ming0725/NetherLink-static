@@ -1,6 +1,7 @@
 #include "SettingsWindow.h"
 
 #include "NetherLinkCreditsWindow.h"
+#include "features/post/ui/PostApplicationBar.h"
 #include "shared/services/ImageService.h"
 #include "shared/services/AudioService.h"
 #include "shared/theme/ThemeColorPalette.h"
@@ -8,9 +9,9 @@
 #include "shared/ui/FloatingInputBar.h"
 #include "shared/ui/MinecraftButton.h"
 #include "shared/ui/MinecraftSlider.h"
+#include "shared/ui/QtFallbackLiquidGlass.h"
 
 #ifdef Q_OS_MACOS
-#include "features/post/ui/PostApplicationBar.h"
 #include "platform/macos/MacFloatingInputBarBridge_p.h"
 #include "platform/macos/MacPostBarBridge_p.h"
 #include "platform/macos/MacStyledActionMenuBridge_p.h"
@@ -96,20 +97,79 @@ QStringList imgQualityChoices(){ return {QStringLiteral("原始"), QStringLitera
 QStringList historyChoices()   { return {QStringLiteral("保留全部"), QStringLiteral("保留30天"), QStringLiteral("保留7天")}; }
 QStringList sendKeyChoices()   { return {QStringLiteral("Enter"), QStringLiteral("Ctrl+Enter")}; }
 QStringList verifyChoices()    { return {QStringLiteral("关闭"), QStringLiteral("开启")}; }
+QVector<ThemeManager::QtFallbackInputBarEffect> qtFallbackInputBarEffects()
+{
+    QVector<ThemeManager::QtFallbackInputBarEffect> effects;
+    if (QtFallbackLiquidGlassController::liquidGlassSupported()) {
+        effects.push_back(ThemeManager::QtFallbackInputBarEffect::LiquidGlass);
+    }
+    effects.push_back(ThemeManager::QtFallbackInputBarEffect::GaussianBlur);
+    effects.push_back(ThemeManager::QtFallbackInputBarEffect::Default);
+    return effects;
+}
+
+QString qtFallbackInputBarEffectLabel(ThemeManager::QtFallbackInputBarEffect effect)
+{
+    switch (effect) {
+    case ThemeManager::QtFallbackInputBarEffect::LiquidGlass:
+        return QStringLiteral("液态玻璃");
+    case ThemeManager::QtFallbackInputBarEffect::GaussianBlur:
+        return QStringLiteral("高斯模糊");
+    case ThemeManager::QtFallbackInputBarEffect::Default:
+    default:
+        return QStringLiteral("默认");
+    }
+}
+
 QStringList qtFallbackInputBarChoices()
 {
-    return {
-        QStringLiteral("默认（液态玻璃）"),
-        QStringLiteral("默认")
-    };
+    QStringList choices;
+    const QVector<ThemeManager::QtFallbackInputBarEffect> effects = qtFallbackInputBarEffects();
+    choices.reserve(effects.size());
+    for (ThemeManager::QtFallbackInputBarEffect effect : effects) {
+        choices.push_back(qtFallbackInputBarEffectLabel(effect));
+    }
+    return choices;
 }
 
 int qtFallbackInputBarIndex()
 {
-    return ThemeManager::instance().qtFallbackLiquidGlassEnabled() ? 0 : 1;
+    const QVector<ThemeManager::QtFallbackInputBarEffect> effects = qtFallbackInputBarEffects();
+    const ThemeManager::QtFallbackInputBarEffect current =
+            ThemeManager::instance().qtFallbackInputBarEffect();
+    for (int index = 0; index < effects.size(); ++index) {
+        if (effects.at(index) == current) {
+            return index;
+        }
+    }
+    return effects.isEmpty() ? -1 : 0;
 }
 
-bool qtFallbackLiquidGlassForIndex(int index)
+ThemeManager::QtFallbackInputBarEffect qtFallbackInputBarEffectForIndex(int index)
+{
+    const QVector<ThemeManager::QtFallbackInputBarEffect> effects = qtFallbackInputBarEffects();
+    if (index >= 0 && index < effects.size()) {
+        return effects.at(index);
+    }
+    return effects.isEmpty()
+            ? ThemeManager::QtFallbackInputBarEffect::Default
+            : effects.first();
+}
+
+QStringList qtFallbackPostBarChoices()
+{
+    return {
+        QStringLiteral("高斯模糊"),
+        QStringLiteral("默认")
+    };
+}
+
+int qtFallbackPostBarIndex()
+{
+    return ThemeManager::instance().postBarQtFallbackLiquidGlassEnabled() ? 0 : 1;
+}
+
+bool postBarQtFallbackLiquidGlassForIndex(int index)
 {
     return index == 0;
 }
@@ -118,11 +178,13 @@ bool qtFallbackLiquidGlassForIndex(int index)
 QVariantList floatingInputBarModeValues(const QVector<MacFloatingInputBarBridge::Mode>& modes)
 {
     QVariantList values;
-    values.reserve(modes.size() + 1);
+    values.reserve(modes.size() + qtFallbackInputBarEffects().size());
     for (MacFloatingInputBarBridge::Mode mode : modes) {
         if (mode == MacFloatingInputBarBridge::Mode::QtFallback) {
-            values.push_back(static_cast<int>(MacFloatingInputBarBridge::Mode::QtFallback));
-            values.push_back(static_cast<int>(MacFloatingInputBarBridge::Mode::QtFallback));
+            const QVector<ThemeManager::QtFallbackInputBarEffect> effects = qtFallbackInputBarEffects();
+            for (int i = 0; i < effects.size(); ++i) {
+                values.push_back(static_cast<int>(MacFloatingInputBarBridge::Mode::QtFallback));
+            }
         } else {
             values.push_back(static_cast<int>(mode));
         }
@@ -130,16 +192,18 @@ QVariantList floatingInputBarModeValues(const QVector<MacFloatingInputBarBridge:
     return values;
 }
 
-QVariantList floatingInputBarFallbackGlassValues(const QVector<MacFloatingInputBarBridge::Mode>& modes)
+QVariantList floatingInputBarFallbackEffectValues(const QVector<MacFloatingInputBarBridge::Mode>& modes)
 {
     QVariantList values;
-    values.reserve(modes.size() + 1);
+    values.reserve(modes.size() + qtFallbackInputBarEffects().size());
     for (MacFloatingInputBarBridge::Mode mode : modes) {
         if (mode == MacFloatingInputBarBridge::Mode::QtFallback) {
-            values.push_back(true);
-            values.push_back(false);
+            const QVector<ThemeManager::QtFallbackInputBarEffect> effects = qtFallbackInputBarEffects();
+            for (ThemeManager::QtFallbackInputBarEffect effect : effects) {
+                values.push_back(static_cast<int>(effect));
+            }
         } else {
-            values.push_back(true);
+            values.push_back(static_cast<int>(ThemeManager::QtFallbackInputBarEffect::Default));
         }
     }
     return values;
@@ -148,18 +212,19 @@ QVariantList floatingInputBarFallbackGlassValues(const QVector<MacFloatingInputB
 QStringList floatingInputBarModeChoices(const QVector<MacFloatingInputBarBridge::Mode>& modes)
 {
     QStringList choices;
-    choices.reserve(modes.size() + 1);
+    choices.reserve(modes.size() + qtFallbackInputBarEffects().size());
     for (MacFloatingInputBarBridge::Mode mode : modes) {
         switch (mode) {
         case MacFloatingInputBarBridge::Mode::LiquidGlass:
-            choices.push_back(QStringLiteral("液态玻璃"));
+            choices.push_back(QStringLiteral("macOS液态玻璃"));
             break;
         case MacFloatingInputBarBridge::Mode::NativeBlur:
-            choices.push_back(QStringLiteral("高斯模糊"));
+            choices.push_back(QStringLiteral("macOS高斯模糊"));
             break;
         case MacFloatingInputBarBridge::Mode::QtFallback:
-            choices.push_back(QStringLiteral("默认（液态玻璃）"));
-            choices.push_back(QStringLiteral("默认"));
+            for (ThemeManager::QtFallbackInputBarEffect effect : qtFallbackInputBarEffects()) {
+                choices.push_back(qtFallbackInputBarEffectLabel(effect));
+            }
             break;
         }
     }
@@ -167,10 +232,11 @@ QStringList floatingInputBarModeChoices(const QVector<MacFloatingInputBarBridge:
 }
 
 int indexForFloatingInputBarStyle(const QVariantList& modeValues,
-                                  const QVariantList& fallbackGlassValues,
+                                  const QVariantList& fallbackEffectValues,
                                   int modeValue,
-                                  bool fallbackGlassEnabled)
+                                  ThemeManager::QtFallbackInputBarEffect fallbackEffect)
 {
+    int firstFallbackMatch = -1;
     for (int i = 0; i < modeValues.size(); ++i) {
         if (modeValues.at(i).toInt() != modeValue) {
             continue;
@@ -178,22 +244,46 @@ int indexForFloatingInputBarStyle(const QVariantList& modeValues,
         if (modeValue != static_cast<int>(MacFloatingInputBarBridge::Mode::QtFallback)) {
             return i;
         }
-        const bool candidateFallbackGlass = i < fallbackGlassValues.size()
-                ? fallbackGlassValues.at(i).toBool()
-                : true;
-        if (candidateFallbackGlass == fallbackGlassEnabled) {
+        if (firstFallbackMatch < 0) {
+            firstFallbackMatch = i;
+        }
+        const auto candidateFallbackEffect = static_cast<ThemeManager::QtFallbackInputBarEffect>(
+                i < fallbackEffectValues.size()
+                        ? fallbackEffectValues.at(i).toInt()
+                        : static_cast<int>(ThemeManager::QtFallbackInputBarEffect::Default));
+        if (candidateFallbackEffect == fallbackEffect) {
             return i;
         }
     }
-    return modeValues.isEmpty() ? -1 : 0;
+    return firstFallbackMatch >= 0 ? firstFallbackMatch : (modeValues.isEmpty() ? -1 : 0);
 }
 
 QVariantList postBarModeValues(const QVector<MacPostBarBridge::Mode>& modes)
 {
     QVariantList values;
-    values.reserve(modes.size());
+    values.reserve(modes.size() + 1);
     for (MacPostBarBridge::Mode mode : modes) {
-        values.push_back(static_cast<int>(mode));
+        if (mode == MacPostBarBridge::Mode::QtFallback) {
+            values.push_back(static_cast<int>(MacPostBarBridge::Mode::QtFallback));
+            values.push_back(static_cast<int>(MacPostBarBridge::Mode::QtFallback));
+        } else {
+            values.push_back(static_cast<int>(mode));
+        }
+    }
+    return values;
+}
+
+QVariantList postBarFallbackGlassValues(const QVector<MacPostBarBridge::Mode>& modes)
+{
+    QVariantList values;
+    values.reserve(modes.size() + 1);
+    for (MacPostBarBridge::Mode mode : modes) {
+        if (mode == MacPostBarBridge::Mode::QtFallback) {
+            values.push_back(true);
+            values.push_back(false);
+        } else {
+            values.push_back(true);
+        }
     }
     return values;
 }
@@ -205,12 +295,13 @@ QStringList postBarModeChoices(const QVector<MacPostBarBridge::Mode>& modes)
     for (MacPostBarBridge::Mode mode : modes) {
         switch (mode) {
         case MacPostBarBridge::Mode::LiquidGlass:
-            choices.push_back(QStringLiteral("液态玻璃"));
+            choices.push_back(QStringLiteral("macOS液态玻璃"));
             break;
         case MacPostBarBridge::Mode::NativeBlur:
-            choices.push_back(QStringLiteral("高斯模糊"));
+            choices.push_back(QStringLiteral("macOS高斯模糊"));
             break;
         case MacPostBarBridge::Mode::QtFallback:
+            choices.push_back(QStringLiteral("高斯模糊"));
             choices.push_back(QStringLiteral("默认"));
             break;
         }
@@ -255,6 +346,29 @@ int indexForModeValue(const QVariantList& values, int modeValue)
     return values.isEmpty() ? -1 : 0;
 }
 
+int indexForFallbackStyle(const QVariantList& modeValues,
+                          const QVariantList& fallbackGlassValues,
+                          int fallbackModeValue,
+                          int modeValue,
+                          bool fallbackGlassEnabled)
+{
+    for (int i = 0; i < modeValues.size(); ++i) {
+        if (modeValues.at(i).toInt() != modeValue) {
+            continue;
+        }
+        if (modeValue != fallbackModeValue) {
+            return i;
+        }
+        const bool candidateFallbackGlass = i < fallbackGlassValues.size()
+                ? fallbackGlassValues.at(i).toBool()
+                : true;
+        if (candidateFallbackGlass == fallbackGlassEnabled) {
+            return i;
+        }
+    }
+    return modeValues.isEmpty() ? -1 : 0;
+}
+
 int modeValueForToggle(const MinecraftButton* button)
 {
     if (!button) {
@@ -270,10 +384,24 @@ int modeValueForToggle(const MinecraftButton* button)
 }
 #endif
 
-bool qtFallbackLiquidGlassForToggle(const MinecraftButton* button)
+ThemeManager::QtFallbackInputBarEffect qtFallbackInputBarEffectForToggle(const MinecraftButton* button)
 {
     if (!button) {
-        return ThemeManager::instance().qtFallbackLiquidGlassEnabled();
+        return ThemeManager::instance().qtFallbackInputBarEffect();
+    }
+
+    const QVariantList values = button->property("fallbackEffectValues").toList();
+    const int index = button->property("toggleIndex").toInt();
+    if (index >= 0 && index < values.size()) {
+        return static_cast<ThemeManager::QtFallbackInputBarEffect>(values.at(index).toInt());
+    }
+    return qtFallbackInputBarEffectForIndex(index);
+}
+
+bool postBarQtFallbackLiquidGlassForToggle(const MinecraftButton* button)
+{
+    if (!button) {
+        return ThemeManager::instance().postBarQtFallbackLiquidGlassEnabled();
     }
 
     const QVariantList values = button->property("fallbackGlassValues").toList();
@@ -281,7 +409,7 @@ bool qtFallbackLiquidGlassForToggle(const MinecraftButton* button)
     if (index >= 0 && index < values.size()) {
         return values.at(index).toBool();
     }
-    return qtFallbackLiquidGlassForIndex(index);
+    return postBarQtFallbackLiquidGlassForIndex(index);
 }
 
 } // namespace
@@ -890,20 +1018,20 @@ void SettingsWindow::createAppearancePage()
     const QVector<MacFloatingInputBarBridge::Mode> inputBarModes =
             MacFloatingInputBarBridge::supportedModes();
     const QVariantList inputBarModeValues = floatingInputBarModeValues(inputBarModes);
-    const QVariantList inputBarFallbackGlassValues = floatingInputBarFallbackGlassValues(inputBarModes);
+    const QVariantList inputBarFallbackEffectValues = floatingInputBarFallbackEffectValues(inputBarModes);
     m_inputBarStyleToggle = createToggleButton(
-            QStringLiteral("聊天输入栏样式"),
+            QStringLiteral("聊天输入栏"),
             floatingInputBarModeChoices(inputBarModes),
             indexForFloatingInputBarStyle(
                     inputBarModeValues,
-                    inputBarFallbackGlassValues,
+                    inputBarFallbackEffectValues,
                     static_cast<int>(MacFloatingInputBarBridge::mode()),
-                    ThemeManager::instance().qtFallbackLiquidGlassEnabled()),
+                    ThemeManager::instance().qtFallbackInputBarEffect()),
             page);
     m_inputBarStyleToggle->setProperty("modeValues", inputBarModeValues);
-    m_inputBarStyleToggle->setProperty("fallbackGlassValues", inputBarFallbackGlassValues);
+    m_inputBarStyleToggle->setProperty("fallbackEffectValues", inputBarFallbackEffectValues);
 #else
-    m_inputBarStyleToggle = createToggleButton(QStringLiteral("聊天输入栏样式"),
+    m_inputBarStyleToggle = createToggleButton(QStringLiteral("聊天输入栏"),
                                                qtFallbackInputBarChoices(),
                                                qtFallbackInputBarIndex(),
                                                page);
@@ -911,16 +1039,30 @@ void SettingsWindow::createAppearancePage()
 
 #ifdef Q_OS_MACOS
     const QVector<MacPostBarBridge::Mode> postBarModes = MacPostBarBridge::supportedModes();
-    if (postBarModes.size() >= 2) {
+    if (!postBarModes.isEmpty()) {
         const QVariantList values = postBarModeValues(postBarModes);
+        const QVariantList fallbackGlassValues = postBarFallbackGlassValues(postBarModes);
         m_postBarStyleToggle = createToggleButton(
                 QStringLiteral("帖子导航栏"),
                 postBarModeChoices(postBarModes),
-                indexForModeValue(values, static_cast<int>(MacPostBarBridge::mode())),
+                indexForFallbackStyle(
+                        values,
+                        fallbackGlassValues,
+                        static_cast<int>(MacPostBarBridge::Mode::QtFallback),
+                        static_cast<int>(MacPostBarBridge::mode()),
+                        ThemeManager::instance().postBarQtFallbackLiquidGlassEnabled()),
                 page);
         m_postBarStyleToggle->setProperty("modeValues", values);
+        m_postBarStyleToggle->setProperty("fallbackGlassValues", fallbackGlassValues);
     }
+#else
+    m_postBarStyleToggle = createToggleButton(QStringLiteral("帖子导航栏"),
+                                              qtFallbackPostBarChoices(),
+                                              qtFallbackPostBarIndex(),
+                                              page);
+#endif
 
+#ifdef Q_OS_MACOS
     const QVector<MacStyledActionMenuBridge::Mode> actionMenuModes =
             MacStyledActionMenuBridge::supportedModes();
     if (actionMenuModes.size() >= 2) {
@@ -945,10 +1087,10 @@ void SettingsWindow::createAppearancePage()
     if (m_inputBarStyleToggle) {
         orderedItems.push_back(m_inputBarStyleToggle);
     }
-#ifdef Q_OS_MACOS
     if (m_postBarStyleToggle) {
         orderedItems.push_back(m_postBarStyleToggle);
     }
+#ifdef Q_OS_MACOS
     if (m_actionMenuStyleToggle) {
         orderedItems.push_back(m_actionMenuStyleToggle);
     }
@@ -1172,9 +1314,9 @@ void SettingsWindow::resetAppearanceControls()
                 m_inputBarStyleToggle,
                 indexForFloatingInputBarStyle(
                         m_inputBarStyleToggle->property("modeValues").toList(),
-                        m_inputBarStyleToggle->property("fallbackGlassValues").toList(),
+                        m_inputBarStyleToggle->property("fallbackEffectValues").toList(),
                         static_cast<int>(MacFloatingInputBarBridge::mode()),
-                        ThemeManager::instance().qtFallbackLiquidGlassEnabled()));
+                        ThemeManager::instance().qtFallbackInputBarEffect()));
     }
 #else
     if (m_inputBarStyleToggle) {
@@ -1186,14 +1328,22 @@ void SettingsWindow::resetAppearanceControls()
     if (m_postBarStyleToggle) {
         setToggleIndex(
                 m_postBarStyleToggle,
-                indexForModeValue(m_postBarStyleToggle->property("modeValues").toList(),
-                                  static_cast<int>(MacPostBarBridge::mode())));
+                indexForFallbackStyle(
+                        m_postBarStyleToggle->property("modeValues").toList(),
+                        m_postBarStyleToggle->property("fallbackGlassValues").toList(),
+                        static_cast<int>(MacPostBarBridge::Mode::QtFallback),
+                        static_cast<int>(MacPostBarBridge::mode()),
+                        ThemeManager::instance().postBarQtFallbackLiquidGlassEnabled()));
     }
     if (m_actionMenuStyleToggle) {
         setToggleIndex(
                 m_actionMenuStyleToggle,
                 indexForModeValue(m_actionMenuStyleToggle->property("modeValues").toList(),
                                   static_cast<int>(MacStyledActionMenuBridge::mode())));
+    }
+#else
+    if (m_postBarStyleToggle) {
+        setToggleIndex(m_postBarStyleToggle, qtFallbackPostBarIndex());
     }
 #endif
 }
@@ -1204,8 +1354,10 @@ void SettingsWindow::applyAppearance()
 
     const int idx = toggleCurrentIndex(m_appearanceModeToggle);
     ThemeManager::instance().setMode(indexToMode(idx));
-    ThemeManager::instance().setQtFallbackLiquidGlassEnabled(
-            qtFallbackLiquidGlassForToggle(m_inputBarStyleToggle));
+    ThemeManager::instance().setQtFallbackInputBarEffect(
+            qtFallbackInputBarEffectForToggle(m_inputBarStyleToggle));
+    ThemeManager::instance().setPostBarQtFallbackLiquidGlassEnabled(
+            postBarQtFallbackLiquidGlassForToggle(m_postBarStyleToggle));
 
 #ifdef Q_OS_MACOS
     if (m_inputBarStyleToggle) {
@@ -1227,10 +1379,8 @@ void SettingsWindow::applyAppearance()
         if (auto* inputBar = qobject_cast<FloatingInputBar*>(widget)) {
             inputBar->refreshPlatformAppearance();
         }
-#ifdef Q_OS_MACOS
         else if (auto* postBar = qobject_cast<PostApplicationBar*>(widget)) {
             postBar->refreshPlatformAppearance();
         }
-#endif
     }
 }

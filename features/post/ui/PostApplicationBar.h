@@ -4,6 +4,8 @@
 #include <QVector>
 #include <QWidget>
 
+class QtFallbackLiquidGlassController;
+
 class PostApplicationBar : public QWidget {
     Q_OBJECT
 public:
@@ -14,8 +16,11 @@ public:
     void setCurrentIndex(int index);
     void setVisualOpacity(qreal opacity);
     void refreshPlatformAppearance();
+    void setLiquidGlassSourceWidget(QWidget* widget);
+    void scheduleLiquidGlassUpdate(int delayMs = 0);
     qreal visualOpacity() const { return m_visualOpacity; }
     bool usesNativeBar() const { return m_usesNativeBar; }
+    bool usesQtFallbackLiquidGlass() const;
 
 signals:
     void pageClicked(int index);
@@ -45,8 +50,13 @@ private:
     void updateSelectedRect();
     int indexAtPosition(const QPoint& pos) const;
     void syncPlatformBar();
+    void updatePanelShadow();
+    bool shouldUseQtFallbackLiquidGlass() const;
+    void updateQtFallbackLiquidGlassState();
+    void releaseQtFallbackLiquidGlassResources(bool updateWidget = true);
     QStringList labels() const;
 
+    QtFallbackLiquidGlassController* m_liquidGlass = nullptr;
     QVector<TabItem> items;
     int selectedIndex = 0;
     int hoveredIndex = -1;

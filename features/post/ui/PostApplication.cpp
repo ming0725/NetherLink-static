@@ -7,10 +7,12 @@
 #include "PostSessionController.h"
 #include "shared/services/ImageService.h"
 #include "shared/theme/ThemeManager.h"
+#include "shared/ui/QtFallbackLiquidGlass.h"
 #include <QParallelAnimationGroup>
 #include <QPropertyAnimation>
 #include <QPainter>
 #include <QResizeEvent>
+#include <QScrollBar>
 #include <QStackedWidget>
 #include <QTimer>
 
@@ -210,6 +212,10 @@ PostApplication::PostApplication(QWidget* parent)
             this, &PostApplication::onCurrentPostDetailLoaded);
     connect(m_postController, &PostSessionController::currentPostUpdated,
             this, &PostApplication::onPostUpdated);
+    connect(m_postController, &PostSessionController::postUpdated,
+            this, [this](const PostSummary&) {
+                schedulePostBarLiquidGlassUpdate();
+            });
 
     m_barFadeAnimation = new QVariantAnimation(this);
     m_barFadeAnimation->setDuration(220);
@@ -236,6 +242,7 @@ PostApplication::PostApplication(QWidget* parent)
     }
     m_overlay->setGeometry(rect());
     m_overlay->lower();
+    m_bar->setLiquidGlassSourceWidget(m_stack);
     m_bar->setVisualOpacity(1.0);
     updateLayerOrder();
 
@@ -509,8 +516,13 @@ void PostApplication::ensurePageLoaded(int index)
             m_homeFeedPage->setController(m_postController);
             connect(m_homeFeedPage, &PostFeedPage::postClickedWithGeometry,
                     this, &PostApplication::onPostClickedWithGeometry);
+            connect(m_homeFeedPage->verticalScrollBar(), &QScrollBar::valueChanged,
+                    this, [this]() {
+                        schedulePostBarLiquidGlassUpdate();
+                    });
             m_homeFeedPage->ensureInitialized();
             replaceStackPage(index, m_homeFeedPage);
+            schedulePostBarLiquidGlassUpdate();
         }
         break;
     default:
@@ -637,6 +649,15 @@ void PostApplication::updateLayerOrder()
     if (m_transitionImage) {
         m_transitionImage->raise();
     }
+}
+
+void PostApplication::schedulePostBarLiquidGlassUpdate()
+{
+    if (!m_bar || !m_bar->usesQtFallbackLiquidGlass()) {
+        return;
+    }
+
+    m_bar->scheduleLiquidGlassUpdate(QtFallbackLiquidGlassController::refreshDelayMs());
 }
 
 bool PostApplication::hasModalLayerActive() const

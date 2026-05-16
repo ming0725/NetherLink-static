@@ -1,5 +1,6 @@
 #include "PostApplicationBar.h"
 #include "shared/theme/ThemeManager.h"
+#include "shared/ui/QtFallbackLiquidGlass.h"
 
 #include <QFontMetrics>
 #include <QGraphicsDropShadowEffect>
@@ -14,6 +15,7 @@
 namespace {
 
 constexpr auto kSystemFloatingBarsSuppressedProperty = "systemFloatingBarsSuppressed";
+constexpr qreal kPostBarCornerRadius = 15.0;
 
 } // namespace
 
@@ -22,18 +24,16 @@ PostApplicationBar::PostApplicationBar(QWidget* parent)
 {
     setAttribute(Qt::WA_TranslucentBackground);
     setMouseTracking(true);
+    m_liquidGlass = new QtFallbackLiquidGlassController(this);
+    m_liquidGlass->setEffectMode(QtFallbackLiquidGlassController::EffectMode::GaussianBlur);
+    m_liquidGlass->setShape(QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5),
+                            kPostBarCornerRadius);
 
 #ifdef Q_OS_MACOS
     m_usesNativeBar = MacPostBarBridge::appearance() != MacPostBarBridge::Appearance::Unsupported;
 #endif
 
-    if (!m_usesNativeBar) {
-        auto* shadow = new QGraphicsDropShadowEffect(this);
-        shadow->setBlurRadius(30);
-        shadow->setOffset(0, 0);
-        shadow->setColor(ThemeManager::instance().color(ThemeColor::FloatingPanelShadow));
-        setGraphicsEffect(shadow);
-    }
+    updatePanelShadow();
 
     highlightAnim = new QVariantAnimation(this);
     highlightAnim->setDuration(300);
@@ -42,6 +42,8 @@ PostApplicationBar::PostApplicationBar(QWidget* parent)
             this, &PostApplicationBar::onHighlightValueChanged);
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
         syncPlatformBar();
+        updatePanelShadow();
+        updateQtFallbackLiquidGlassState();
         update();
     });
 
@@ -52,6 +54,7 @@ PostApplicationBar::PostApplicationBar(QWidget* parent)
 
 PostApplicationBar::~PostApplicationBar()
 {
+    releaseQtFallbackLiquidGlassResources(false);
 #ifdef Q_OS_MACOS
     if (m_usesNativeBar) {
         MacPostBarBridge::clearBar(this);
@@ -64,26 +67,45 @@ bool PostApplicationBar::event(QEvent* event)
     const bool handled = QWidget::event(event);
 
 #ifdef Q_OS_MACOS
-    if (!m_usesNativeBar) {
+    if (m_usesNativeBar) {
+        switch (event->type()) {
+        case QEvent::Show:
+        case QEvent::Move:
+        case QEvent::Resize:
+        case QEvent::WinIdChange:
+        case QEvent::ParentChange:
+        case QEvent::ZOrderChange:
+            syncPlatformBar();
+            break;
+        case QEvent::Hide:
+            MacPostBarBridge::clearBar(this);
+            break;
+        default:
+            break;
+        }
         return handled;
     }
+#endif
 
     switch (event->type()) {
     case QEvent::Show:
+        updateQtFallbackLiquidGlassState();
+        break;
     case QEvent::Move:
     case QEvent::Resize:
-    case QEvent::WinIdChange:
     case QEvent::ParentChange:
     case QEvent::ZOrderChange:
-        syncPlatformBar();
+        scheduleLiquidGlassUpdate(QtFallbackLiquidGlassController::refreshDelayMs());
         break;
     case QEvent::Hide:
-        MacPostBarBridge::clearBar(this);
+        releaseQtFallbackLiquidGlassResources();
         break;
     default:
         break;
     }
-#endif
+    if (m_liquidGlass) {
+        m_liquidGlass->handleHostEvent(event);
+    }
 
     return handled;
 }
@@ -116,6 +138,11 @@ void PostApplicationBar::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
     layoutItems();
+    if (m_liquidGlass) {
+        m_liquidGlass->setShape(QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5),
+                                kPostBarCornerRadius);
+    }
+    scheduleLiquidGlassUpdate(0);
 }
 
 QSize PostApplicationBar::minimumSizeHint() const
@@ -135,6 +162,28 @@ void PostApplicationBar::setVisualOpacity(qreal opacity)
     syncPlatformBar();
 }
 
+void PostApplicationBar::setLiquidGlassSourceWidget(QWidget* widget)
+{
+    if (!m_liquidGlass) {
+        return;
+    }
+    m_liquidGlass->setSourceWidget(widget);
+    updateQtFallbackLiquidGlassState();
+}
+
+void PostApplicationBar::scheduleLiquidGlassUpdate(int delayMs)
+{
+    if (!m_liquidGlass || !shouldUseQtFallbackLiquidGlass()) {
+        return;
+    }
+    m_liquidGlass->scheduleUpdate(delayMs);
+}
+
+bool PostApplicationBar::usesQtFallbackLiquidGlass() const
+{
+    return shouldUseQtFallbackLiquidGlass();
+}
+
 void PostApplicationBar::refreshPlatformAppearance()
 {
 #ifdef Q_OS_MACOS
@@ -145,20 +194,16 @@ void PostApplicationBar::refreshPlatformAppearance()
     if (m_usesNativeBar && !shouldUseNative) {
         MacPostBarBridge::clearBar(this);
         m_usesNativeBar = false;
-        if (!graphicsEffect()) {
-            auto* shadow = new QGraphicsDropShadowEffect(this);
-            shadow->setBlurRadius(30);
-            shadow->setOffset(0, 0);
-            shadow->setColor(ThemeManager::instance().color(ThemeColor::FloatingPanelShadow));
-            setGraphicsEffect(shadow);
-        }
+        updatePanelShadow();
         layoutItems();
+        updateQtFallbackLiquidGlassState();
         update();
         return;
     }
 
     if (!m_usesNativeBar && shouldUseNative && systemSuppressed) {
         layoutItems();
+        updateQtFallbackLiquidGlassState();
         update();
         return;
     }
@@ -167,6 +212,7 @@ void PostApplicationBar::refreshPlatformAppearance()
         if (graphicsEffect()) {
             setGraphicsEffect(nullptr);
         }
+        releaseQtFallbackLiquidGlassResources(false);
         m_usesNativeBar = true;
         syncPlatformBar();
         update();
@@ -178,6 +224,8 @@ void PostApplicationBar::refreshPlatformAppearance()
     }
 #endif
 
+    updatePanelShadow();
+    updateQtFallbackLiquidGlassState();
     update();
 }
 
@@ -246,16 +294,24 @@ void PostApplicationBar::paintEvent(QPaintEvent*)
     painter.setPen(Qt::NoPen);
 
     const QRectF contentRect = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-    const qreal outerRadius = 15.0;
+    const qreal outerRadius = kPostBarCornerRadius;
 
-    QColor barBackground = ThemeManager::instance().color(ThemeColor::PanelBackground);
-    barBackground.setAlpha(ThemeManager::instance().isDark() ? 190 : 205);
-    painter.setBrush(barBackground);
-    painter.drawRoundedRect(contentRect, outerRadius, outerRadius);
+    const bool usesGaussianFallback = shouldUseQtFallbackLiquidGlass() && m_liquidGlass;
+    if (usesGaussianFallback) {
+        m_liquidGlass->setShape(contentRect, outerRadius);
+        m_liquidGlass->paint(painter);
+    } else {
+        QColor barBackground = ThemeManager::instance().color(ThemeColor::PanelBackground);
+        barBackground.setAlpha(ThemeManager::instance().isDark() ? 190 : 205);
+        painter.setBrush(barBackground);
+        painter.drawRoundedRect(contentRect, outerRadius, outerRadius);
+    }
 
     if (!selectedRect.isEmpty()) {
-        QColor selectedBackground = ThemeManager::instance().color(ThemeColor::AppBarItemSelectedBackground);
-        selectedBackground.setAlpha(192);
+        QColor selectedBackground = ThemeManager::instance().color(ThemeColor::PostBarItemSelectedBackground);
+        if (usesGaussianFallback) {
+            selectedBackground.setAlpha(ThemeManager::instance().isDark() ? 230 : 40);
+        }
         painter.setBrush(selectedBackground);
         painter.drawRoundedRect(selectedRect, 10, 10);
     }
@@ -265,16 +321,18 @@ void PostApplicationBar::paintEvent(QPaintEvent*)
         painter.drawText(item.rect, Qt::AlignCenter, item.label);
     }
 
-    const qreal borderWidth = 2.0;
-    const qreal inset = borderWidth / 2.0;
-    const QRectF borderRect = rect().adjusted(inset, inset, -inset, -inset);
-    QPen pen(ThemeManager::instance().color(ThemeColor::Accent));
-    pen.setWidthF(borderWidth);
-    pen.setJoinStyle(Qt::RoundJoin);
-    pen.setCapStyle(Qt::RoundCap);
-    painter.setPen(pen);
-    painter.setBrush(Qt::NoBrush);
-    painter.drawRoundedRect(borderRect, outerRadius - inset, outerRadius - inset);
+    if (!shouldUseQtFallbackLiquidGlass()) {
+        const qreal borderWidth = 2.0;
+        const qreal inset = borderWidth / 2.0;
+        const QRectF borderRect = rect().adjusted(inset, inset, -inset, -inset);
+        QPen pen(ThemeManager::instance().color(ThemeColor::Accent));
+        pen.setWidthF(borderWidth);
+        pen.setJoinStyle(Qt::RoundJoin);
+        pen.setCapStyle(Qt::RoundCap);
+        painter.setPen(pen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRoundedRect(borderRect, outerRadius - inset, outerRadius - inset);
+    }
 }
 
 void PostApplicationBar::mouseMoveEvent(QMouseEvent* event)
@@ -390,6 +448,47 @@ void PostApplicationBar::syncPlatformBar()
 
     MacPostBarBridge::syncBar(this, labels(), selectedIndex, false, m_visualOpacity);
 #endif
+}
+
+void PostApplicationBar::updatePanelShadow()
+{
+    if (m_usesNativeBar || shouldUseQtFallbackLiquidGlass()) {
+        if (graphicsEffect()) {
+            setGraphicsEffect(nullptr);
+        }
+        return;
+    }
+
+    auto* shadow = qobject_cast<QGraphicsDropShadowEffect*>(graphicsEffect());
+    if (!shadow) {
+        shadow = new QGraphicsDropShadowEffect(this);
+        setGraphicsEffect(shadow);
+    }
+
+    shadow->setBlurRadius(30);
+    shadow->setOffset(0, 0);
+    shadow->setColor(ThemeManager::instance().color(ThemeColor::FloatingPanelShadow));
+}
+
+bool PostApplicationBar::shouldUseQtFallbackLiquidGlass() const
+{
+    return !m_usesNativeBar
+            && ThemeManager::instance().postBarQtFallbackLiquidGlassEnabled();
+}
+
+void PostApplicationBar::updateQtFallbackLiquidGlassState()
+{
+    updatePanelShadow();
+    if (m_liquidGlass) {
+        m_liquidGlass->setEnabled(shouldUseQtFallbackLiquidGlass() && isVisible());
+    }
+}
+
+void PostApplicationBar::releaseQtFallbackLiquidGlassResources(bool updateWidget)
+{
+    if (m_liquidGlass) {
+        m_liquidGlass->release(updateWidget);
+    }
 }
 
 QStringList PostApplicationBar::labels() const

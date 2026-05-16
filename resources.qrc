@@ -93,8 +93,8 @@
         <file>resources/audio/chestopen.wav</file>
         <file>resources/audio/fuse.wav</file>
         <file>resources/audio/chestclosed.wav</file>
-        <file>resources/shaders/floating_input_liquid_glass.vert</file>
-        <file>resources/shaders/floating_input_blur.frag</file>
-        <file>resources/shaders/floating_input_liquid_glass.frag</file>
+        <file>resources/shaders/qt_fallback_liquid_glass.vert</file>
+        <file>resources/shaders/qt_fallback_liquid_glass_blur.frag</file>
+        <file>resources/shaders/qt_fallback_liquid_glass.frag</file>
     </qresource>
 </RCC>
