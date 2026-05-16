@@ -217,7 +217,6 @@ void NetherLinkCreditsWindow::buildCredits()
 
     addSection(QStringLiteral("第三方库"));
     addRole(QStringLiteral("miniaudio"), QStringLiteral("David Reid"));
-    addRole(QStringLiteral("sokol"), QStringLiteral("Andre Weissflog"));
     addSpacer(48);
 
     addSection(QStringLiteral("特别鸣谢"));

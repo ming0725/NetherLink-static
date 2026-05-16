@@ -121,42 +121,41 @@ public:
             return {};
         }
 
-        QOpenGLFramebufferObjectFormat fboFormat;
-        fboFormat.setAttachment(QOpenGLFramebufferObject::NoAttachment);
-        fboFormat.setInternalTextureFormat(GL_RGBA);
-        QOpenGLFramebufferObject horizontalFbo(renderSize, fboFormat);
-        QOpenGLFramebufferObject verticalFbo(renderSize, fboFormat);
-        if (!horizontalFbo.isValid() || !verticalFbo.isValid()) {
+        QImage output;
+        {
+            QOpenGLFramebufferObjectFormat fboFormat;
+            fboFormat.setAttachment(QOpenGLFramebufferObject::NoAttachment);
+            fboFormat.setInternalTextureFormat(GL_RGBA);
+            QOpenGLFramebufferObject horizontalFbo(renderSize, fboFormat);
+            QOpenGLFramebufferObject verticalFbo(renderSize, fboFormat);
+            if (horizontalFbo.isValid() && verticalFbo.isValid()) {
+                renderBlurPass(sourceTexture,
+                               horizontalFbo,
+                               QVector2D(kLiquidGlassBlurStep / qMax(1, renderSize.width()), 0.0f));
+                renderBlurPass(horizontalFbo.texture(),
+                               verticalFbo,
+                               QVector2D(0.0f, kLiquidGlassBlurStep / qMax(1, renderSize.height())));
+                const bool darkMode = dark;
+                const qreal borderWidth = liquidGlassBorderWidthForMode(darkMode);
+                const qreal contentInset = liquidGlassContentInset(borderWidth, darkMode);
+                renderGlassPass(verticalFbo.texture(),
+                                horizontalFbo,
+                                QVector2D(static_cast<float>(renderSize.width()),
+                                          static_cast<float>(renderSize.height())),
+                                static_cast<float>(liquidGlassInsetRadius(cornerRadius, contentInset)
+                                                   * kLiquidGlassRenderScale
+                                                   * devicePixelRatio),
+                                static_cast<float>(contentInset
+                                                   * kLiquidGlassRenderScale
+                                                   * devicePixelRatio),
+                                dark ? 1.0f : 0.0f);
+
+                // The shader pipeline already keeps the sampled Qt image in widget coordinates.
+                output = horizontalFbo.toImage(false).convertToFormat(QImage::Format_ARGB32_Premultiplied);
+                output.setDevicePixelRatio(devicePixelRatio * kLiquidGlassRenderScale);
+            }
             m_gl->glDeleteTextures(1, &sourceTexture);
-            m_context->doneCurrent();
-            return {};
         }
-
-        renderBlurPass(sourceTexture,
-                       horizontalFbo,
-                       QVector2D(kLiquidGlassBlurStep / qMax(1, renderSize.width()), 0.0f));
-        renderBlurPass(horizontalFbo.texture(),
-                       verticalFbo,
-                       QVector2D(0.0f, kLiquidGlassBlurStep / qMax(1, renderSize.height())));
-        const bool darkMode = dark;
-        const qreal borderWidth = liquidGlassBorderWidthForMode(darkMode);
-        const qreal contentInset = liquidGlassContentInset(borderWidth, darkMode);
-        renderGlassPass(verticalFbo.texture(),
-                        horizontalFbo,
-                        QVector2D(static_cast<float>(renderSize.width()),
-                                  static_cast<float>(renderSize.height())),
-                        static_cast<float>(liquidGlassInsetRadius(cornerRadius, contentInset)
-                                           * kLiquidGlassRenderScale
-                                           * devicePixelRatio),
-                        static_cast<float>(contentInset
-                                           * kLiquidGlassRenderScale
-                                           * devicePixelRatio),
-                        dark ? 1.0f : 0.0f);
-
-        m_gl->glDeleteTextures(1, &sourceTexture);
-        // The shader pipeline already keeps the sampled Qt image in widget coordinates.
-        QImage output = horizontalFbo.toImage(false).convertToFormat(QImage::Format_ARGB32_Premultiplied);
-        output.setDevicePixelRatio(devicePixelRatio * kLiquidGlassRenderScale);
         m_context->doneCurrent();
         return output;
     }
@@ -975,8 +974,8 @@ void FloatingInputBar::paintQtFallbackLiquidGlass(QPainter& painter, const QRect
 
     if (darkMode) {
         QLinearGradient sheen(panelRect.bottomLeft(), panelRect.topLeft());
-        sheen.setColorAt(0.0, QColor(255, 255, 255, 34));
-        sheen.setColorAt(0.42, QColor(255, 255, 255, 10));
+        sheen.setColorAt(0.0, QColor(255, 255, 255, 16));
+        sheen.setColorAt(0.42, QColor(255, 255, 255, 4));
         sheen.setColorAt(1.0, QColor(255, 255, 255, 0));
         painter.fillPath(contentPath, sheen);
     }

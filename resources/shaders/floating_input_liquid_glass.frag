@@ -64,7 +64,7 @@ void main()
     vec2 texel = 1.0 / max(u_size, vec2(1.0));
     vec2 refractedUv = clamp(uv + refract, texel * 0.75, vec2(1.0) - texel * 0.75);
     vec3 color = texture2D(u_blurTexture, refractedUv).rgb;
-    color = mix(color, vec3(1.0), mix(0.060, 0.020, u_dark));
+    color = mix(color, vec3(1.0), mix(0.030, 0.008, u_dark));
 
     gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
 }

@@ -268,7 +268,7 @@ ChatArea::ChatArea(QWidget *parent)
     // 创建悬浮输入栏
     inputBar = new FloatingInputBar(this);
     inputBar->setLiquidGlassSourceWidget(chatView->viewport());
-    inputBar->show();
+    inputBar->hide();
 
     QWidget* chatInfo = new ThemeFillWidget(ThemeColor::PageBackground, this);
     chatInfo->setFixedHeight(kChatInfoHeight);
@@ -489,6 +489,10 @@ void ChatArea::scrollToBottom(bool accelerateFarDistance)
 void ChatArea::adjustBottomSpace()
 {
     if (!chatModel || !chatView || !inputBar) {
+        return;
+    }
+    if (conversationId().isEmpty() || inputBar->isHidden()) {
+        chatModel->setBottomSpaceHeight(0);
         return;
     }
 
@@ -937,11 +941,21 @@ void ChatArea::onSessionConversationRemoved()
 
 void ChatArea::updateInputBarPosition() {
     if (inputBar) {
+        if (conversationId().isEmpty()) {
+            inputBar->hide();
+            if (bottomGapGradientOverlay) {
+                bottomGapGradientOverlay->hide();
+            }
+            adjustBottomSpace();
+            return;
+        }
+
         if (m_systemFloatingBarsSuppressed) {
             inputBar->hide();
             if (bottomGapGradientOverlay) {
                 bottomGapGradientOverlay->hide();
             }
+            adjustBottomSpace();
             return;
         }
 
@@ -952,6 +966,9 @@ void ChatArea::updateInputBarPosition() {
                 qMax(0, width() - 2 * kInputBarSideMargin - infoPanelWidth),
                 kInputBarHeight);
         inputBar->setGeometry(inputBarRect);
+        if (inputBar->isHidden()) {
+            inputBar->show();
+        }
         inputBar->raise();
         inputBar->scheduleLiquidGlassUpdate();
 
@@ -1088,9 +1105,16 @@ void ChatArea::clearConversation(bool closeInfoPanel)
     m_state = {};
     nameLabel->clear();
     statusIcon->hide();
+    if (inputBar) {
+        inputBar->hide();
+    }
+    if (bottomGapGradientOverlay) {
+        bottomGapGradientOverlay->hide();
+    }
     newMessageNotifier->hide();
     updateGroupInfoPanelState();
     updateDirectInfoPanelState(false);
+    adjustBottomSpace();
 }
 
 void ChatArea::closeConversation()
@@ -1154,12 +1178,22 @@ void ChatArea::openConversation(const ConversationThreadData& conversation)
     m_state.hasMoreBefore = conversation.hasMoreBefore;
     m_state.allowOlderMessageFetch = false;
     chatModel->setMessages(conversation.messages);
+    if (inputBar && !m_systemFloatingBarsSuppressed) {
+        inputBar->show();
+        inputBar->refreshPlatformAppearance();
+        inputBar->raise();
+    }
+    updateInputBarPosition();
     adjustBottomSpace();
     QTimer::singleShot(0, this, [this]() {
         chatView->jumpToBottom();
         m_state.allowOlderMessageFetch = true;
     });
-    QTimer::singleShot(0, inputBar, &FloatingInputBar::focusInput);
+    QTimer::singleShot(0, inputBar, [this]() {
+        if (inputBar && inputBar->isVisible()) {
+            inputBar->focusInput();
+        }
+    });
 }
 
 void ChatArea::clearMessageSelection()
@@ -1231,40 +1265,40 @@ void ChatArea::setSystemFloatingBarsSuppressed(bool suppressed)
     inputBar->setProperty("systemFloatingBarsSuppressed", suppressed);
 
     if (m_systemFloatingBarsSuppressed == suppressed) {
-        if (suppressed && inputBar->usesNativeGlass() && !inputBar->isHidden()) {
+        if (suppressed && !inputBar->isHidden()) {
             m_inputBarVisibleBeforeSystemSuppression = true;
             inputBar->hide();
             if (bottomGapGradientOverlay) {
                 bottomGapGradientOverlay->hide();
             }
+            adjustBottomSpace();
         }
         return;
     }
 
     m_systemFloatingBarsSuppressed = suppressed;
     if (suppressed) {
-        if (inputBar->usesNativeGlass()) {
-            m_inputBarVisibleBeforeSystemSuppression = !inputBar->isHidden();
-            inputBar->hide();
-            if (bottomGapGradientOverlay) {
-                bottomGapGradientOverlay->hide();
-            }
-        } else {
-            m_inputBarVisibleBeforeSystemSuppression = false;
+        m_inputBarVisibleBeforeSystemSuppression = !inputBar->isHidden();
+        inputBar->hide();
+        if (bottomGapGradientOverlay) {
+            bottomGapGradientOverlay->hide();
         }
+        adjustBottomSpace();
         return;
     }
 
-    if (m_inputBarVisibleBeforeSystemSuppression) {
+    if (m_inputBarVisibleBeforeSystemSuppression && !conversationId().isEmpty()) {
         updateInputBarPosition();
         inputBar->refreshPlatformAppearance();
         inputBar->show();
         inputBar->raise();
         updateNewMessageNotifierPosition();
+        adjustBottomSpace();
     } else if (!inputBar->isHidden()) {
         updateInputBarPosition();
         inputBar->refreshPlatformAppearance();
         inputBar->raise();
+        adjustBottomSpace();
     }
     m_inputBarVisibleBeforeSystemSuppression = false;
 }
