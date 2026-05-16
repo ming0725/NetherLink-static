@@ -2,6 +2,7 @@
 
 #include <QBrush>
 #include <QFont>
+#include <QFontMetrics>
 #include <QHideEvent>
 #include <QImageReader>
 #include <QKeyEvent>
@@ -48,6 +49,19 @@ constexpr qreal kCornerVignetteRadiusRatio = 0.28;
 constexpr int kCornerVignetteInnerAlpha = 154;
 constexpr int kCornerVignetteMidAlpha = 72;
 constexpr qreal kCornerVignetteMidStop = 0.54;
+
+constexpr int kMainTitlePixelSize = 23;
+constexpr int kSectionPixelSize = 22;
+constexpr int kSmallYellowPixelSize = 14;
+constexpr int kRolePixelSize = 18;
+constexpr int kPersonPixelSize = 17;
+constexpr int kUrlPixelSize = 13;
+
+constexpr qreal kRoleHeaderHeight = 25.0;
+constexpr qreal kPersonNameHeight = 22.0;
+constexpr qreal kUrlLineHeight = 17.0;
+constexpr qreal kPersonGap = 5.0;
+constexpr qreal kRoleBottomPadding = 8.0;
 
 qreal easeOutCubic(qreal value)
 {
@@ -177,11 +191,25 @@ void NetherLinkCreditsWindow::buildCredits()
     auto addYellow = [this](const QString& text) {
         m_entries.push_back({EntryType::YellowLine, text, {}, 0});
     };
+    auto addYellowSmall = [this](const QString& text) {
+        m_entries.push_back({EntryType::YellowSmallLine, text, {}, 0});
+    };
     auto addSection = [this](const QString& text) {
         m_entries.push_back({EntryType::Section, text, {}, 0});
     };
-    auto addRole = [this](const QString& role, const QString& name) {
-        m_entries.push_back({EntryType::RoleName, role, name, 0});
+    auto addRole = [this](const QString& role, const QString& name, const QString& url = QString()) {
+        CreditEntry entry;
+        entry.type = EntryType::RoleName;
+        entry.primary = role;
+        entry.people.push_back({name, url});
+        m_entries.push_back(entry);
+    };
+    auto addRolePeople = [this](const QString& role, const QVector<CreditPerson>& people) {
+        CreditEntry entry;
+        entry.type = EntryType::RoleName;
+        entry.primary = role;
+        entry.people = people;
+        m_entries.push_back(entry);
     };
     auto addSpacer = [this](int spacing) {
         m_entries.push_back({EntryType::Spacer, {}, {}, spacing});
@@ -189,7 +217,10 @@ void NetherLinkCreditsWindow::buildCredits()
 
     addLogo();
     addSpacer(44);
-    addYellow(QStringLiteral("======== NetherLink ========"));
+    addYellow(QStringLiteral("======================="));
+    addYellow(QStringLiteral("NetherLink"));
+    addYellow(QStringLiteral("======================="));
+    addYellowSmall(QStringLiteral("GitHub: https://github.com/ming0725/NetherLink-static"));
     addYellow(QStringLiteral("鸣谢名单"));
     addYellow(QStringLiteral("愿下界之门始终保持连接"));
     addSpacer(54);
@@ -198,25 +229,35 @@ void NetherLinkCreditsWindow::buildCredits()
     addRole(QStringLiteral("项目构想"), QStringLiteral("ming0725"));
     addRole(QStringLiteral("产品方向"), QStringLiteral("ming0725"));
     addRole(QStringLiteral("界面设计"), QStringLiteral("ming0725"));
-    addRole(QStringLiteral("像素视觉"), QStringLiteral("ming0725"));
     addRole(QStringLiteral("交互体验"), QStringLiteral("ming0725"));
     addRole(QStringLiteral("主题与窗口效果"), QStringLiteral("ming0725"));
-    addRole(QStringLiteral("音效与反馈"), QStringLiteral("ming0725"));
     addRole(QStringLiteral("聊天系统"), QStringLiteral("ming0725"));
     addRole(QStringLiteral("好友系统"), QStringLiteral("ming0725"));
     addRole(QStringLiteral("帖子系统"), QStringLiteral("ming0725"));
-    addRole(QStringLiteral("AI 会话体验"), QStringLiteral("ming0725"));
+    addRole(QStringLiteral("AI会话"), QStringLiteral("ming0725"));
     addRole(QStringLiteral("测试与打磨"), QStringLiteral("ming0725"));
     addSpacer(44);
 
     addSection(QStringLiteral("编码协作"));
     addRole(QStringLiteral("核心编码"), QStringLiteral("ming0725"));
-    addRole(QStringLiteral("代码生成与重构支持"), QStringLiteral("codex"));
-    addRole(QStringLiteral("推理与实现辅助"), QStringLiteral("GPT5.5"));
+    addRole(QStringLiteral("Model & Agent"), QStringLiteral("GPT5.5 Codex"));
+    addSpacer(44);
+
+    addSection(QStringLiteral("视听资源"));
+    addRolePeople(QStringLiteral("图标"), {
+        {QStringLiteral("Minecraft"), {}},
+        {QStringLiteral("ming0725"), {}}
+    });
+    addRole(QStringLiteral("音效"), QStringLiteral("Minecraft"));
+    addRole(QStringLiteral("游戏字体"),
+            QStringLiteral("Liko铃口"),
+            QStringLiteral("https://www.bilibili.com/opus/650428219754807321"));
     addSpacer(44);
 
     addSection(QStringLiteral("第三方库"));
-    addRole(QStringLiteral("miniaudio"), QStringLiteral("David Reid"));
+    addRole(QStringLiteral("miniaudio"),
+            QStringLiteral("David Reid"),
+            QStringLiteral("https://github.com/mackron/miniaudio"));
     addSpacer(48);
 
     addSection(QStringLiteral("特别鸣谢"));
@@ -468,15 +509,31 @@ void NetherLinkCreditsWindow::drawEntry(QPainter& painter, const CreditEntry& en
         break;
     }
     case EntryType::YellowLine:
-        drawCenteredText(painter, entry.primary, y, 23, QColor(255, 255, 85), height, false);
+        drawCenteredText(painter, entry.primary, y, kMainTitlePixelSize, QColor(255, 255, 85), height, false);
+        break;
+    case EntryType::YellowSmallLine:
+        drawCenteredText(painter, entry.primary, y, kSmallYellowPixelSize, QColor(255, 255, 85), height, false);
         break;
     case EntryType::Section:
-        drawCenteredText(painter, entry.primary, y + 8.0, 23, QColor(255, 255, 85), height, true);
+        drawCenteredText(painter, entry.primary, y + 8.0, kSectionPixelSize, QColor(255, 255, 85), height, true);
         break;
-    case EntryType::RoleName:
-        drawCenteredText(painter, entry.primary, y, 17, QColor(170, 170, 170), height / 2.0, false);
-        drawCenteredText(painter, entry.secondary, y + 24.0, 19, QColor(255, 255, 255), height / 2.0, false);
+    case EntryType::RoleName: {
+        drawCenteredText(painter, entry.primary, y, kRolePixelSize, QColor(255, 220, 90), kRoleHeaderHeight, false);
+
+        qreal personY = y + kRoleHeaderHeight;
+        for (const CreditPerson& person : entry.people) {
+            drawCenteredText(painter, person.name, personY, kPersonPixelSize, QColor(238, 238, 238), kPersonNameHeight, false);
+            personY += kPersonNameHeight;
+
+            if (!person.url.isEmpty()) {
+                drawWrappedCenteredText(painter, person.url, personY, kUrlPixelSize, QColor(170, 170, 170), kUrlLineHeight, false);
+                personY += wrappedTextHeight(person.url, kUrlPixelSize, kUrlLineHeight, false);
+            }
+
+            personY += kPersonGap;
+        }
         break;
+    }
     case EntryType::Spacer:
         break;
     }
@@ -584,16 +641,76 @@ void NetherLinkCreditsWindow::drawCenteredText(QPainter& painter,
     QFont textFont = font();
     textFont.setPixelSize(pixelSize);
     textFont.setBold(bold);
-    painter.setFont(textFont);
 
     const qreal contentWidth = qMin(width() * 0.82, kMaxCreditsWidth);
+    for (int fittedSize = pixelSize; fittedSize > 8; --fittedSize) {
+        textFont.setPixelSize(fittedSize);
+        if (QFontMetrics(textFont).horizontalAdvance(text) <= static_cast<int>(contentWidth)) {
+            break;
+        }
+    }
+    painter.setFont(textFont);
+
     const QRectF textRect((width() - contentWidth) / 2.0, y, contentWidth, height);
-    const QPointF shadowOffset(qMax<qreal>(1.0, pixelSize / 16.0), qMax<qreal>(1.0, pixelSize / 16.0));
+    const qreal fittedPixelSize = textFont.pixelSize();
+    const QPointF shadowOffset(qMax<qreal>(1.0, fittedPixelSize / 16.0), qMax<qreal>(1.0, fittedPixelSize / 16.0));
 
     painter.setPen(QColor(0, 0, 0, 210));
     painter.drawText(textRect.translated(shadowOffset), Qt::AlignHCenter | Qt::AlignVCenter, text);
     painter.setPen(color);
     painter.drawText(textRect, Qt::AlignHCenter | Qt::AlignVCenter, text);
+}
+
+void NetherLinkCreditsWindow::drawWrappedCenteredText(QPainter& painter,
+                                                      const QString& text,
+                                                      qreal y,
+                                                      int pixelSize,
+                                                      const QColor& color,
+                                                      qreal lineHeight,
+                                                      bool bold) const
+{
+    const QVector<QString> lines = wrappedTextLines(text, pixelSize, bold);
+    qreal lineY = y;
+    for (const QString& line : lines) {
+        drawCenteredText(painter, line, lineY, pixelSize, color, lineHeight, bold);
+        lineY += lineHeight;
+    }
+}
+
+QVector<QString> NetherLinkCreditsWindow::wrappedTextLines(const QString& text, int pixelSize, bool bold) const
+{
+    QVector<QString> lines;
+    if (text.isEmpty()) {
+        return lines;
+    }
+
+    QFont textFont = font();
+    textFont.setPixelSize(pixelSize);
+    textFont.setBold(bold);
+    const QFontMetrics metrics(textFont);
+    const int contentWidth = qMax(1, static_cast<int>(qMin(width() * 0.82, kMaxCreditsWidth)));
+
+    QString current;
+    for (const QChar& character : text) {
+        const QString candidate = current + character;
+        if (!current.isEmpty() && metrics.horizontalAdvance(candidate) > contentWidth) {
+            lines.push_back(current);
+            current = QString(character);
+        } else {
+            current = candidate;
+        }
+    }
+
+    if (!current.isEmpty()) {
+        lines.push_back(current);
+    }
+
+    return lines;
+}
+
+qreal NetherLinkCreditsWindow::wrappedTextHeight(const QString& text, int pixelSize, qreal lineHeight, bool bold) const
+{
+    return wrappedTextLines(text, pixelSize, bold).size() * lineHeight;
 }
 
 qreal NetherLinkCreditsWindow::entryHeight(const CreditEntry& entry) const
@@ -603,10 +720,25 @@ qreal NetherLinkCreditsWindow::entryHeight(const CreditEntry& entry) const
         return logoHeight() + 8.0;
     case EntryType::YellowLine:
         return 31.0;
+    case EntryType::YellowSmallLine:
+        return 24.0;
     case EntryType::Section:
         return 52.0;
-    case EntryType::RoleName:
-        return 62.0;
+    case EntryType::RoleName: {
+        qreal height = kRoleHeaderHeight + kRoleBottomPadding;
+        if (entry.people.isEmpty()) {
+            return height + kPersonNameHeight;
+        }
+
+        for (const CreditPerson& person : entry.people) {
+            height += kPersonNameHeight;
+            if (!person.url.isEmpty()) {
+                height += wrappedTextHeight(person.url, kUrlPixelSize, kUrlLineHeight, false);
+            }
+            height += kPersonGap;
+        }
+        return height;
+    }
     case EntryType::Spacer:
         return entry.spacing;
     }

@@ -56,7 +56,7 @@ constexpr int kPopupHeight = 216;
 constexpr int kIconGlowSpread = 38;
 constexpr int kIconGlowMaxAlpha = 150;
 const QColor kSunIconGlowColor(0xffda66);
-const QColor kMoonIconGlowColor(0x22304d);
+const QColor kMoonIconGlowColor(0x4A68A8);
 
 QFont paletteFont(const QFont& fallback)
 {

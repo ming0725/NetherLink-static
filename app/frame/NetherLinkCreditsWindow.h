@@ -40,15 +40,21 @@ private:
     enum class EntryType {
         Logo,
         YellowLine,
+        YellowSmallLine,
         Section,
         RoleName,
         Spacer
     };
 
+    struct CreditPerson {
+        QString name;
+        QString url;
+    };
+
     struct CreditEntry {
         EntryType type;
         QString primary;
-        QString secondary;
+        QVector<CreditPerson> people;
         int spacing = 0;
     };
 
@@ -72,6 +78,15 @@ private:
                           const QColor& color,
                           qreal height,
                           bool bold = false) const;
+    void drawWrappedCenteredText(QPainter& painter,
+                                 const QString& text,
+                                 qreal y,
+                                 int pixelSize,
+                                 const QColor& color,
+                                 qreal lineHeight,
+                                 bool bold = false) const;
+    QVector<QString> wrappedTextLines(const QString& text, int pixelSize, bool bold = false) const;
+    qreal wrappedTextHeight(const QString& text, int pixelSize, qreal lineHeight, bool bold = false) const;
     qreal entryHeight(const CreditEntry& entry) const;
     qreal logoHeight() const;
     bool isScrollFinished() const;
