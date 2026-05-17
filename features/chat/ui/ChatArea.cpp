@@ -403,7 +403,7 @@ void ChatArea::addImageMessage(QSharedPointer<ImageMessage> message,
 void ChatArea::onScrollValueChanged(int)
 {
     if (inputBar) {
-        inputBar->scheduleLiquidGlassUpdate(0);
+        inputBar->scheduleLiquidGlassInteractiveUpdate();
     }
     m_state.isAtBottom = isScrollAtBottom();
     

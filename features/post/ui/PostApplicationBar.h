@@ -18,6 +18,7 @@ public:
     void refreshPlatformAppearance();
     void setLiquidGlassSourceWidget(QWidget* widget);
     void scheduleLiquidGlassUpdate(int delayMs = 0);
+    void scheduleLiquidGlassInteractiveUpdate();
     qreal visualOpacity() const { return m_visualOpacity; }
     bool usesNativeBar() const { return m_usesNativeBar; }
     bool usesQtFallbackLiquidGlass() const;

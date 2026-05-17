@@ -26,6 +26,7 @@ public:
     bool usesQtFallbackLiquidGlass() const;
     void setLiquidGlassSourceWidget(QWidget* widget);
     void scheduleLiquidGlassUpdate(int delayMs = 0);
+    void scheduleLiquidGlassInteractiveUpdate();
 signals:
     void sendImage(const QString &path);
     void sendText(const QString &text);

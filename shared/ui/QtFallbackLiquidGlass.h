@@ -18,7 +18,6 @@ class QString;
 class QTimer;
 class QVector2D;
 class QWidget;
-class FastGaussianBlur;
 
 class QtFallbackLiquidGlassRenderer
 {
@@ -79,6 +78,7 @@ public:
     bool isEnabled() const;
     void setShape(const QRectF& rect, qreal cornerRadius);
     void scheduleUpdate(int delayMs = 0);
+    void scheduleInteractiveUpdate();
     void release(bool updateWidget = true);
     bool handleHostEvent(QEvent* event);
     void paint(QPainter& painter);
@@ -99,6 +99,8 @@ private:
     QImage captureSource(qreal devicePixelRatio) const;
     QImage renderBackground(const QImage& source, qreal devicePixelRatio);
     QImage renderBackgroundWithFastBlur(const QImage& source, qreal devicePixelRatio);
+    void startGaussianBlurTask(const QImage& source, qreal devicePixelRatio);
+    void finishGaussianBlurTask(quint64 generation, const QImage& background);
     QRectF targetRect() const;
 
     QPointer<QWidget> m_targetWidget;
@@ -106,10 +108,10 @@ private:
     QTimer* m_updateTimer = nullptr;
     QImage m_background;
     std::unique_ptr<QtFallbackLiquidGlassRenderer> m_renderer;
-    std::unique_ptr<FastGaussianBlur> m_fastGaussianBlur;
     QRectF m_shapeRect;
     qreal m_cornerRadius = 0.0;
     EffectMode m_effectMode = EffectMode::LiquidGlass;
+    quint64 m_gaussianBlurGeneration = 0;
     quint64 m_lastSourceSignature = 0;
     int m_unchangedPassiveRefreshCount = 0;
     bool m_enabled = false;
@@ -117,4 +119,6 @@ private:
     bool m_captureInProgress = false;
     bool m_hasSourceSignature = false;
     bool m_pendingUpdateForced = false;
+    bool m_gaussianBlurInFlight = false;
+    bool m_gaussianBlurUpdatePending = false;
 };

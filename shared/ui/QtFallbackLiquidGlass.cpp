@@ -3,8 +3,10 @@
 #include "shared/theme/ThemeManager.h"
 #include "shared/ui/FastGaussianBlur.h"
 
+#include <QCoreApplication>
 #include <QEvent>
 #include <QFile>
+#include <QMetaObject>
 #include <QOffscreenSurface>
 #include <QOpenGLContext>
 #include <QOpenGLFramebufferObject>
@@ -13,8 +15,10 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
+#include <QRunnable>
 #include <QScopedValueRollback>
 #include <QSurfaceFormat>
+#include <QThreadPool>
 #include <QTimer>
 #include <QVector2D>
 #include <QVector4D>
@@ -24,10 +28,13 @@
 namespace {
 
 constexpr qreal kLiquidGlassRenderScale = 0.82;
+constexpr qreal kGaussianBlurRenderScale = 0.62;
 constexpr qreal kLiquidGlassBorderWidth = 1.0;
 constexpr qreal kLiquidGlassLightBorderWidth = 1.0;
 constexpr float kLiquidGlassBlurStep = 1.7f;
 constexpr int kLiquidGlassRefreshDelayMs = 33;
+constexpr int kGaussianScrollRefreshDelayMs = 16;
+constexpr int kGaussianStaticRefreshDelayMs = 33;
 constexpr int kLiquidGlassQtBlurRadius = 18;
 constexpr int kLiquidGlassPassiveRefreshDelayMs = 100;
 constexpr int kLiquidGlassMaxPassiveRefreshDelayMs = 1000;
@@ -118,6 +125,29 @@ quint64 liquidGlassSourceSignature(const QImage& image)
         }
     }
     return hash;
+}
+
+QImage renderGaussianBlurBackground(const QImage& source, qreal devicePixelRatio)
+{
+    if (source.isNull()) {
+        return {};
+    }
+
+    const QSize scaledSize(qMax(1, qRound(source.width() * kGaussianBlurRenderScale)),
+                           qMax(1, qRound(source.height() * kGaussianBlurRenderScale)));
+    QImage scaledSource = source.scaled(scaledSize,
+                                        Qt::IgnoreAspectRatio,
+                                        Qt::SmoothTransformation);
+    scaledSource.setDevicePixelRatio(devicePixelRatio * kGaussianBlurRenderScale);
+
+    FastGaussianBlur gaussianBlur;
+    QImage blurred = gaussianBlur.blur(
+            scaledSource,
+            kLiquidGlassQtBlurRadius * kGaussianBlurRenderScale * devicePixelRatio);
+    if (!blurred.isNull()) {
+        blurred.setDevicePixelRatio(devicePixelRatio * kGaussianBlurRenderScale);
+    }
+    return blurred;
 }
 
 } // namespace
@@ -530,6 +560,13 @@ void QtFallbackLiquidGlassController::scheduleUpdate(int delayMs)
     scheduleUpdateInternal(delayMs, true);
 }
 
+void QtFallbackLiquidGlassController::scheduleInteractiveUpdate()
+{
+    scheduleUpdate(m_effectMode == EffectMode::GaussianBlur
+                   ? kGaussianScrollRefreshDelayMs
+                   : 0);
+}
+
 void QtFallbackLiquidGlassController::scheduleUpdateInternal(int delayMs, bool force)
 {
     if (!m_enabled || !m_targetWidget || !m_targetWidget->isVisible() || !m_sourceWidget) {
@@ -565,7 +602,6 @@ void QtFallbackLiquidGlassController::release(bool updateWidget)
     }
     m_sourceFilterInstalled = false;
     m_renderer.reset();
-    m_fastGaussianBlur.reset();
     if (!m_background.isNull()) {
         m_background = QImage();
     }
@@ -725,10 +761,17 @@ void QtFallbackLiquidGlassController::resetRefreshCache()
     m_unchangedPassiveRefreshCount = 0;
     m_hasSourceSignature = false;
     m_pendingUpdateForced = false;
+    ++m_gaussianBlurGeneration;
+    m_gaussianBlurInFlight = false;
+    m_gaussianBlurUpdatePending = false;
 }
 
 int QtFallbackLiquidGlassController::passiveRefreshDelayMs() const
 {
+    if (m_effectMode == EffectMode::GaussianBlur) {
+        return kGaussianStaticRefreshDelayMs;
+    }
+
     if (m_unchangedPassiveRefreshCount <= 0) {
         return kLiquidGlassRefreshDelayMs;
     }
@@ -750,6 +793,12 @@ void QtFallbackLiquidGlassController::updateBackground()
 
     const bool forcedUpdate = m_pendingUpdateForced;
     m_pendingUpdateForced = false;
+
+    if (m_effectMode == EffectMode::GaussianBlur && m_gaussianBlurInFlight) {
+        m_gaussianBlurUpdatePending = true;
+        return;
+    }
+
     const qreal devicePixelRatio = qMax<qreal>(m_targetWidget->devicePixelRatioF(), 1.0);
     QScopedValueRollback<bool> captureGuard(m_captureInProgress, true);
     QImage source = captureSource(devicePixelRatio);
@@ -772,6 +821,11 @@ void QtFallbackLiquidGlassController::updateBackground()
     m_lastSourceSignature = sourceSignature;
     m_hasSourceSignature = true;
     m_unchangedPassiveRefreshCount = 0;
+
+    if (m_effectMode == EffectMode::GaussianBlur) {
+        startGaussianBlurTask(source, devicePixelRatio);
+        return;
+    }
 
     const QSize scaledSize(qMax(1, qRound(source.width() * kLiquidGlassRenderScale)),
                            qMax(1, qRound(source.height() * kLiquidGlassRenderScale)));
@@ -844,17 +898,61 @@ QImage QtFallbackLiquidGlassController::renderBackground(const QImage& source, q
 QImage QtFallbackLiquidGlassController::renderBackgroundWithFastBlur(const QImage& source,
                                                                      qreal devicePixelRatio)
 {
-    if (!m_fastGaussianBlur) {
-        m_fastGaussianBlur = std::make_unique<FastGaussianBlur>();
+    return renderGaussianBlurBackground(source, devicePixelRatio);
+}
+
+void QtFallbackLiquidGlassController::startGaussianBlurTask(const QImage& source,
+                                                            qreal devicePixelRatio)
+{
+    if (source.isNull()) {
+        return;
     }
 
-    QImage blurred = m_fastGaussianBlur->blur(
-            source,
-            kLiquidGlassQtBlurRadius * kLiquidGlassRenderScale * devicePixelRatio);
-    if (!blurred.isNull()) {
-        blurred.setDevicePixelRatio(devicePixelRatio * kLiquidGlassRenderScale);
+    const quint64 generation = ++m_gaussianBlurGeneration;
+    m_gaussianBlurInFlight = true;
+    m_gaussianBlurUpdatePending = false;
+
+    const QPointer<QtFallbackLiquidGlassController> controller(this);
+    QThreadPool::globalInstance()->start(QRunnable::create(
+            [controller, source, devicePixelRatio, generation]() {
+        QImage background = renderGaussianBlurBackground(source, devicePixelRatio);
+        QObject* receiver = QCoreApplication::instance();
+        if (!receiver) {
+            return;
+        }
+
+        QMetaObject::invokeMethod(receiver,
+                                  [controller, generation, background]() {
+            if (!controller) {
+                return;
+            }
+            controller->finishGaussianBlurTask(generation, background);
+        }, Qt::QueuedConnection);
+    }));
+}
+
+void QtFallbackLiquidGlassController::finishGaussianBlurTask(quint64 generation,
+                                                             const QImage& background)
+{
+    if (generation != m_gaussianBlurGeneration) {
+        return;
     }
-    return blurred;
+
+    m_gaussianBlurInFlight = false;
+    if (!m_enabled
+        || m_effectMode != EffectMode::GaussianBlur
+        || !m_targetWidget
+        || !m_targetWidget->isVisible()) {
+        return;
+    }
+
+    m_background = background;
+    m_targetWidget->update();
+
+    if (m_gaussianBlurUpdatePending) {
+        m_gaussianBlurUpdatePending = false;
+        updateBackground();
+    }
 }
 
 QRectF QtFallbackLiquidGlassController::targetRect() const

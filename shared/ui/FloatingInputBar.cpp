@@ -120,6 +120,14 @@ void FloatingInputBar::scheduleLiquidGlassUpdate(int delayMs)
     m_liquidGlass->scheduleUpdate(delayMs);
 }
 
+void FloatingInputBar::scheduleLiquidGlassInteractiveUpdate()
+{
+    if (!m_liquidGlass || !shouldUseQtFallbackLiquidGlass()) {
+        return;
+    }
+    m_liquidGlass->scheduleInteractiveUpdate();
+}
+
 void FloatingInputBar::initQtFallbackUi()
 {
     m_emojiLabel = new QLabel(this);

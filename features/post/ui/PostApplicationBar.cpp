@@ -179,6 +179,14 @@ void PostApplicationBar::scheduleLiquidGlassUpdate(int delayMs)
     m_liquidGlass->scheduleUpdate(delayMs);
 }
 
+void PostApplicationBar::scheduleLiquidGlassInteractiveUpdate()
+{
+    if (!m_liquidGlass || !shouldUseQtFallbackLiquidGlass()) {
+        return;
+    }
+    m_liquidGlass->scheduleInteractiveUpdate();
+}
+
 bool PostApplicationBar::usesQtFallbackLiquidGlass() const
 {
     return shouldUseQtFallbackLiquidGlass();

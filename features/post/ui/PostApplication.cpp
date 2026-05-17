@@ -657,7 +657,7 @@ void PostApplication::schedulePostBarLiquidGlassUpdate()
         return;
     }
 
-    m_bar->scheduleLiquidGlassUpdate(QtFallbackLiquidGlassController::refreshDelayMs());
+    m_bar->scheduleLiquidGlassInteractiveUpdate();
 }
 
 bool PostApplication::hasModalLayerActive() const
