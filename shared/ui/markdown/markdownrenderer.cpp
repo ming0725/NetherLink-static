@@ -10,6 +10,145 @@ struct InlineParseResult {
     QVector<MarkdownRenderer::InlineSpan> spans;
 };
 
+struct BlockQuoteLine {
+    bool isQuote = false;
+    QString text;
+};
+
+BlockQuoteLine parseBlockQuoteLine(const QString &trimmed)
+{
+    static const QRegularExpression quoteExpression(QStringLiteral(R"(^>\s?(.*)$)"));
+    const QRegularExpressionMatch quoteMatch = quoteExpression.match(trimmed);
+    if (!quoteMatch.hasMatch()) {
+        return {};
+    }
+
+    BlockQuoteLine result;
+    result.isQuote = true;
+    result.text = quoteMatch.captured(1);
+    return result;
+}
+
+bool isDisplayMathBlockDelimiter(const QString &trimmed)
+{
+    return trimmed == QStringLiteral("$$") || trimmed == QStringLiteral("\\[");
+}
+
+bool isAutoDisplayMathEnvironment(const QString &name)
+{
+    return name == QStringLiteral("align") ||
+           name == QStringLiteral("align*") ||
+           name == QStringLiteral("equation") ||
+           name == QStringLiteral("equation*");
+}
+
+bool isEscapedAt(const QString &source, int position)
+{
+    int slashCount = 0;
+    for (int i = position - 1; i >= 0 && source.at(i) == QLatin1Char('\\'); --i) {
+        ++slashCount;
+    }
+    return slashCount % 2 == 1;
+}
+
+int backtickRunLengthAt(const QString &source, int position)
+{
+    int length = 0;
+    while (position + length < source.size() &&
+           source.at(position + length) == QLatin1Char('`')) {
+        ++length;
+    }
+    return length;
+}
+
+bool isInsideInlineCodeSpan(const QString &source, int position)
+{
+    int inlineCodeTicks = 0;
+    for (int i = 0; i < qMin(position, source.size());) {
+        if (source.at(i) != QLatin1Char('`') || isEscapedAt(source, i)) {
+            ++i;
+            continue;
+        }
+
+        const int ticks = backtickRunLengthAt(source, i);
+        if (inlineCodeTicks == 0) {
+            inlineCodeTicks = ticks;
+        } else if (ticks == inlineCodeTicks) {
+            inlineCodeTicks = 0;
+        }
+        i += ticks;
+    }
+    return inlineCodeTicks > 0;
+}
+
+struct DisplayMathEnvironmentSpan {
+    bool found = false;
+    int start = -1;
+    int end = -1;
+    QString name;
+};
+
+DisplayMathEnvironmentSpan findDisplayMathEnvironmentStart(const QString &line)
+{
+    static const QRegularExpression beginExpression(
+            QStringLiteral(R"(\\begin\{([A-Za-z]+\*?)\})"));
+    QRegularExpressionMatchIterator it = beginExpression.globalMatch(line);
+    while (it.hasNext()) {
+        const QRegularExpressionMatch beginMatch = it.next();
+        if (isInsideInlineCodeSpan(line, beginMatch.capturedStart(0))) {
+            continue;
+        }
+
+        const QString name = beginMatch.captured(1);
+        if (!isAutoDisplayMathEnvironment(name)) {
+            continue;
+        }
+
+        DisplayMathEnvironmentSpan span;
+        span.found = true;
+        span.start = beginMatch.capturedStart(0);
+        span.end = beginMatch.capturedEnd(0);
+        span.name = name;
+        return span;
+    }
+    return {};
+}
+
+DisplayMathEnvironmentSpan findClosedDisplayMathEnvironment(const QString &line)
+{
+    const DisplayMathEnvironmentSpan start = findDisplayMathEnvironmentStart(line);
+    if (!start.found) {
+        return {};
+    }
+
+    const QString endMarker = QStringLiteral("\\end{%1}").arg(start.name);
+    const int endStart = line.indexOf(endMarker, start.end, Qt::CaseSensitive);
+    if (endStart < 0) {
+        return {};
+    }
+
+    DisplayMathEnvironmentSpan span = start;
+    span.end = endStart + endMarker.size();
+    return span;
+}
+
+bool nextNonEmptyLineStartsDisplayMathBlock(const QStringList &lines, int index)
+{
+    for (int i = index + 1; i < lines.size(); ++i) {
+        QString line = lines.at(i);
+        line.remove(QLatin1Char('\r'));
+        const QString trimmed = line.trimmed();
+        const BlockQuoteLine quoteLine = parseBlockQuoteLine(trimmed);
+        const QString effectiveTrimmed = quoteLine.isQuote ? quoteLine.text.trimmed() : trimmed;
+        if (effectiveTrimmed.isEmpty()) {
+            continue;
+        }
+        return isDisplayMathBlockDelimiter(effectiveTrimmed) ||
+               findClosedDisplayMathEnvironment(effectiveTrimmed).found;
+    }
+    return false;
+}
+
 bool isHorizontalRule(const QString &trimmed)
 {
     static const QRegularExpression rule(QStringLiteral(R"(^([*\-_])(?:\s*\1){2,}\s*$)"));
@@ -46,6 +185,104 @@ bool isEscaped(const QString &source, int position)
         ++slashCount;
     }
     return slashCount % 2 == 1;
+}
+
+int backtickRunLength(const QString &source, int position)
+{
+    int length = 0;
+    while (position + length < source.size() &&
+           source.at(position + length) == QLatin1Char('`')) {
+        ++length;
+    }
+    return length;
+}
+
+int findUnescapedDoubleDollarOutsideCode(const QString &source, int start = 0)
+{
+    int inlineCodeTicks = 0;
+    for (int i = qMax(0, start); i + 1 < source.size();) {
+        if (source.at(i) == QLatin1Char('`') && !isEscaped(source, i)) {
+            const int ticks = backtickRunLength(source, i);
+            if (inlineCodeTicks == 0) {
+                inlineCodeTicks = ticks;
+            } else if (ticks == inlineCodeTicks) {
+                inlineCodeTicks = 0;
+            }
+            i += ticks;
+            continue;
+        }
+
+        if (inlineCodeTicks > 0) {
+            ++i;
+            continue;
+        }
+
+        if (source.at(i) == QLatin1Char('$') &&
+            source.at(i + 1) == QLatin1Char('$') &&
+            !isEscaped(source, i)) {
+            return i;
+        }
+        ++i;
+    }
+    return -1;
+}
+
+bool hasUnescapedPipe(const QString &line);
+
+QStringList splitDisplayMathDelimiterLines(const QString &markdown)
+{
+    QStringList result;
+    bool inCodeBlock = false;
+
+    const QStringList lines = markdown.split(QLatin1Char('\n'));
+    for (QString line : lines) {
+        line.remove(QLatin1Char('\r'));
+        const QString trimmed = line.trimmed();
+        if (trimmed.startsWith(QStringLiteral("```"))) {
+            result.append(line);
+            inCodeBlock = !inCodeBlock;
+            continue;
+        }
+
+        if (inCodeBlock) {
+            result.append(line);
+            continue;
+        }
+
+        if (hasUnescapedPipe(line) && findUnescapedDoubleDollarOutsideCode(line) < 0) {
+            result.append(line);
+            continue;
+        }
+
+        int cursor = 0;
+        bool splitLine = false;
+        while (true) {
+            const int delimiter = findUnescapedDoubleDollarOutsideCode(line, cursor);
+            if (delimiter < 0) {
+                break;
+            }
+
+            const QString before = line.mid(cursor, delimiter - cursor);
+            if (!before.isEmpty()) {
+                result.append(before);
+            }
+            result.append(QStringLiteral("$$"));
+            cursor = delimiter + 2;
+            splitLine = true;
+        }
+
+        if (!splitLine) {
+            result.append(line);
+            continue;
+        }
+
+        const QString after = line.mid(cursor);
+        if (!after.isEmpty()) {
+            result.append(after);
+        }
+    }
+
+    return result;
 }
 
 int findInlineMathEnd(const QString &source, int start)
@@ -160,6 +397,33 @@ bool hasUnescapedPipe(const QString &line)
     return false;
 }
 
+QString strippedWholeCellMathSource(QString source)
+{
+    source = source.trimmed();
+    if (source.size() >= 4 &&
+        source.startsWith(QStringLiteral("$$")) &&
+        source.endsWith(QStringLiteral("$$"))) {
+        return source.mid(2, source.size() - 4).trimmed();
+    }
+    if (source.size() >= 4 &&
+        source.startsWith(QStringLiteral("\\[")) &&
+        source.endsWith(QStringLiteral("\\]"))) {
+        return source.mid(2, source.size() - 4).trimmed();
+    }
+    if (source.size() >= 4 &&
+        source.startsWith(QStringLiteral("\\(")) &&
+        source.endsWith(QStringLiteral("\\)"))) {
+        return source.mid(2, source.size() - 4).trimmed();
+    }
+    if (source.size() >= 2 &&
+        source.startsWith(QLatin1Char('$')) &&
+        source.endsWith(QLatin1Char('$')) &&
+        !source.startsWith(QStringLiteral("$$"))) {
+        return source.mid(1, source.size() - 2).trimmed();
+    }
+    return {};
+}
+
 QStringList splitTableRow(const QString &line)
 {
     QString trimmed = line.trimmed();
@@ -173,15 +437,13 @@ QStringList splitTableRow(const QString &line)
 
     QStringList cells;
     QString cell;
-    bool escaped = false;
-    for (const QChar ch : trimmed) {
-        if (escaped) {
-            cell += ch;
-            escaped = false;
-            continue;
-        }
-        if (ch == QLatin1Char('\\')) {
-            escaped = true;
+    for (int i = 0; i < trimmed.size(); ++i) {
+        const QChar ch = trimmed.at(i);
+        if (ch == QLatin1Char('\\') &&
+            i + 1 < trimmed.size() &&
+            trimmed.at(i + 1) == QLatin1Char('|')) {
+            cell += QLatin1Char('|');
+            ++i;
             continue;
         }
         if (ch == QLatin1Char('|')) {
@@ -192,9 +454,6 @@ QStringList splitTableRow(const QString &line)
         cell += ch;
     }
 
-    if (escaped) {
-        cell += QLatin1Char('\\');
-    }
     cells.append(cell.trimmed());
     return cells;
 }
@@ -254,8 +513,16 @@ bool isTableStart(const QStringList &lines, int index)
 
 MarkdownRenderer::TableCell tableCell(const QString &source)
 {
-    const InlineParseResult parsed = parseInline(source);
     MarkdownRenderer::TableCell cell;
+    const QString mathSource = strippedWholeCellMathSource(source);
+    if (!mathSource.isEmpty()) {
+        cell.text = mathSource;
+        cell.mathSource = mathSource;
+        cell.math = true;
+        return cell;
+    }
+
+    const InlineParseResult parsed = parseInline(source);
     cell.text = parsed.text;
     cell.spans = parsed.spans;
     return cell;
@@ -332,6 +599,33 @@ MarkdownRenderer::Block paragraphBlock(QStringList &paragraphLines)
     block = MarkdownRenderer::parseInlineText(block, paragraphLines.join(QLatin1Char(' ')).trimmed());
     paragraphLines.clear();
     return block;
+}
+
+void applyTaskListState(MarkdownRenderer::Block &block, QString *text)
+{
+    if (!text) {
+        return;
+    }
+
+    static const QRegularExpression taskExpression(QStringLiteral(R"(^\[( |x|X)\]\s+(.+)$)"));
+    const QRegularExpressionMatch taskMatch = taskExpression.match(*text);
+    if (taskMatch.hasMatch()) {
+        block.taskListItem = true;
+        block.taskChecked = taskMatch.captured(1).compare(QStringLiteral("x"), Qt::CaseInsensitive) == 0;
+        *text = taskMatch.captured(2).trimmed();
+    }
+}
+
+MarkdownRenderer::Block parseUnorderedListBlock(const QString &indent, const QString &source)
+{
+    MarkdownRenderer::Block block;
+    block.type = MarkdownRenderer::BlockType::UnorderedList;
+    block.level = listLevelFromIndent(indent);
+
+    QString text = source.trimmed();
+    applyTaskListState(block, &text);
+
+    return MarkdownRenderer::parseInlineText(block, text);
 }
 
 QString codeLanguageFromFence(const QString &trimmedFence)
@@ -420,16 +714,23 @@ QList<MarkdownRenderer::Block> MarkdownRenderer::parseBlocks(const QString &mark
     QStringList paragraphLines;
     bool inCodeBlock = false;
     bool inMathBlock = false;
+    bool mathBlockQuoted = false;
+    bool mathBlockInlineEndMarker = false;
+    bool pendingQuoteContinuation = false;
     QStringList codeLines;
     QStringList mathLines;
     QString mathBlockEndMarker;
     QString codeLanguage;
 
-    const QStringList lines = markdown.split(QLatin1Char('\n'));
+    const QStringList lines = splitDisplayMathDelimiterLines(markdown);
     for (int lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
         QString line = lines.at(lineIndex);
         line.remove(QLatin1Char('\r'));
         const QString trimmed = line.trimmed();
+        const BlockQuoteLine quoteLine = parseBlockQuoteLine(trimmed);
+        const QString effectiveMathTrimmed = quoteLine.isQuote
+                                                ? quoteLine.text.trimmed()
+                                                : trimmed;
 
         if (trimmed.startsWith(QStringLiteral("```"))) {
             if (!inCodeBlock) {
@@ -461,32 +762,148 @@ QList<MarkdownRenderer::Block> MarkdownRenderer::parseBlocks(const QString &mark
             continue;
         }
 
-        if ((!inMathBlock && (trimmed == QStringLiteral("$$") || trimmed == QStringLiteral("\\["))) ||
-            (inMathBlock && trimmed == mathBlockEndMarker)) {
+        if (inMathBlock && mathBlockInlineEndMarker) {
+            const QString mathLine = mathBlockQuoted && quoteLine.isQuote ? quoteLine.text : line;
+            const int endStart = mathLine.indexOf(mathBlockEndMarker, 0, Qt::CaseSensitive);
+            if (endStart < 0) {
+                mathLines.append(mathLine);
+                continue;
+            }
+
+            mathLines.append(mathLine.left(endStart + mathBlockEndMarker.size()));
+            Block block;
+            block.type = BlockType::MathBlock;
+            block.text = displayBlockText(mathLines);
+            block.quote = mathBlockQuoted;
+            blocks.append(block);
+            mathLines.clear();
+
+            const QString after = mathLine.mid(endStart + mathBlockEndMarker.size()).trimmed();
+            if (!after.isEmpty()) {
+                Block afterBlock;
+                afterBlock.type = quoteLine.isQuote ? BlockType::BlockQuote : BlockType::Paragraph;
+                afterBlock.quote = quoteLine.isQuote;
+                blocks.append(parseInlineText(afterBlock, after));
+            }
+
+            mathBlockEndMarker.clear();
+            mathBlockQuoted = false;
+            mathBlockInlineEndMarker = false;
+            inMathBlock = false;
+            continue;
+        }
+
+        if ((!inMathBlock && isDisplayMathBlockDelimiter(effectiveMathTrimmed)) ||
+            (inMathBlock && effectiveMathTrimmed == mathBlockEndMarker)) {
             if (!inMathBlock) {
                 if (!paragraphLines.isEmpty()) {
                     blocks.append(paragraphBlock(paragraphLines));
                 }
                 mathLines.clear();
-                mathBlockEndMarker = trimmed == QStringLiteral("$$")
+                mathBlockEndMarker = effectiveMathTrimmed == QStringLiteral("$$")
                                          ? QStringLiteral("$$")
                                          : QStringLiteral("\\]");
+                mathBlockQuoted = quoteLine.isQuote || pendingQuoteContinuation;
+                mathBlockInlineEndMarker = false;
+                pendingQuoteContinuation = false;
                 inMathBlock = true;
             } else {
                 Block block;
                 block.type = BlockType::MathBlock;
                 block.text = displayBlockText(mathLines);
+                block.quote = mathBlockQuoted;
                 blocks.append(block);
                 mathLines.clear();
                 mathBlockEndMarker.clear();
+                mathBlockQuoted = false;
+                mathBlockInlineEndMarker = false;
                 inMathBlock = false;
             }
             continue;
         }
 
         if (inMathBlock) {
-            mathLines.append(line);
+            mathLines.append(mathBlockQuoted && quoteLine.isQuote ? quoteLine.text : line);
             continue;
+        }
+
+        const QString displayMathLine = quoteLine.isQuote ? quoteLine.text : line;
+        const DisplayMathEnvironmentSpan displayMathSpan =
+                findClosedDisplayMathEnvironment(displayMathLine);
+        if (displayMathSpan.found) {
+            if (!paragraphLines.isEmpty()) {
+                blocks.append(paragraphBlock(paragraphLines));
+            }
+
+            const QString before = displayMathLine.left(displayMathSpan.start).trimmed();
+            if (!before.isEmpty()) {
+                Block block;
+                block.type = quoteLine.isQuote ? BlockType::BlockQuote : BlockType::Paragraph;
+                block.quote = quoteLine.isQuote;
+                blocks.append(parseInlineText(block, before));
+            }
+
+            Block mathBlock;
+            mathBlock.type = BlockType::MathBlock;
+            mathBlock.text = displayMathLine.mid(displayMathSpan.start,
+                                                 displayMathSpan.end - displayMathSpan.start).trimmed();
+            mathBlock.quote = quoteLine.isQuote || pendingQuoteContinuation;
+            blocks.append(mathBlock);
+
+            const QString after = displayMathLine.mid(displayMathSpan.end).trimmed();
+            if (!after.isEmpty()) {
+                Block block;
+                block.type = quoteLine.isQuote ? BlockType::BlockQuote : BlockType::Paragraph;
+                block.quote = quoteLine.isQuote;
+                blocks.append(parseInlineText(block, after));
+            }
+            pendingQuoteContinuation = false;
+            continue;
+        }
+
+        const DisplayMathEnvironmentSpan displayMathStart =
+                findDisplayMathEnvironmentStart(displayMathLine);
+        if (displayMathStart.found) {
+            if (!paragraphLines.isEmpty()) {
+                blocks.append(paragraphBlock(paragraphLines));
+            }
+
+            const QString before = displayMathLine.left(displayMathStart.start).trimmed();
+            if (!before.isEmpty()) {
+                Block block;
+                block.type = quoteLine.isQuote ? BlockType::BlockQuote : BlockType::Paragraph;
+                block.quote = quoteLine.isQuote;
+                blocks.append(parseInlineText(block, before));
+            }
+
+            mathLines.clear();
+            mathLines.append(displayMathLine.mid(displayMathStart.start));
+            mathBlockEndMarker = QStringLiteral("\\end{%1}").arg(displayMathStart.name);
+            mathBlockQuoted = quoteLine.isQuote || pendingQuoteContinuation;
+            mathBlockInlineEndMarker = true;
+            pendingQuoteContinuation = false;
+            inMathBlock = true;
+            continue;
+        }
+
+        if (quoteLine.isQuote && quoteLine.text.trimmed().isEmpty()) {
+            if (!paragraphLines.isEmpty()) {
+                blocks.append(paragraphBlock(paragraphLines));
+            }
+            if (nextNonEmptyLineStartsDisplayMathBlock(lines, lineIndex)) {
+                pendingQuoteContinuation = true;
+            } else {
+                Block block;
+                block.type = BlockType::BlockQuote;
+                block.quote = true;
+                blocks.append(parseInlineText(block, QString()));
+                pendingQuoteContinuation = false;
+            }
+            continue;
+        }
+
+        if (!quoteLine.isQuote && !trimmed.isEmpty()) {
+            pendingQuoteContinuation = false;
         }
 
         if (isTableStart(lines, lineIndex)) {
@@ -527,15 +944,15 @@ QList<MarkdownRenderer::Block> MarkdownRenderer::parseBlocks(const QString &mark
             continue;
         }
 
-        static const QRegularExpression quoteExpression(QStringLiteral(R"(^>\s?(.*)$)"));
-        const QRegularExpressionMatch quoteMatch = quoteExpression.match(trimmed);
-        if (quoteMatch.hasMatch()) {
+        if (quoteLine.isQuote) {
             if (!paragraphLines.isEmpty()) {
                 blocks.append(paragraphBlock(paragraphLines));
             }
             Block block;
             block.type = BlockType::BlockQuote;
-            blocks.append(parseInlineText(block, quoteMatch.captured(1).trimmed()));
+            block.quote = true;
+            blocks.append(parseInlineText(block, quoteLine.text.trimmed()));
+            pendingQuoteContinuation = false;
             continue;
         }
 
@@ -545,10 +962,8 @@ QList<MarkdownRenderer::Block> MarkdownRenderer::parseBlocks(const QString &mark
             if (!paragraphLines.isEmpty()) {
                 blocks.append(paragraphBlock(paragraphLines));
             }
-            Block block;
-            block.type = BlockType::UnorderedList;
-            block.level = listLevelFromIndent(unorderedMatch.captured(1));
-            blocks.append(parseInlineText(block, unorderedMatch.captured(2).trimmed()));
+            blocks.append(parseUnorderedListBlock(unorderedMatch.captured(1),
+                                                  unorderedMatch.captured(2)));
             continue;
         }
 
@@ -562,7 +977,9 @@ QList<MarkdownRenderer::Block> MarkdownRenderer::parseBlocks(const QString &mark
             block.type = BlockType::OrderedList;
             block.level = listLevelFromIndent(orderedMatch.captured(1));
             block.number = orderedMatch.captured(2).toInt();
-            blocks.append(parseInlineText(block, orderedMatch.captured(3).trimmed()));
+            QString text = orderedMatch.captured(3).trimmed();
+            applyTaskListState(block, &text);
+            blocks.append(parseInlineText(block, text));
             continue;
         }
 
@@ -586,6 +1003,7 @@ QList<MarkdownRenderer::Block> MarkdownRenderer::parseBlocks(const QString &mark
         Block block;
         block.type = BlockType::MathBlock;
         block.text = displayBlockText(mathLines);
+        block.quote = mathBlockQuoted;
         blocks.append(block);
         mathBlockEndMarker.clear();
     }

@@ -20,6 +20,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
+#include <QRegularExpression>
 #include <QScreen>
 #include <QTextLayout>
 #include <QTextOption>
@@ -38,6 +39,7 @@ constexpr int kVerticalPadding = 6;
 constexpr int kListIndent = 18;
 constexpr int kNestedListIndent = 22;
 constexpr int kListMarkerGap = 6;
+constexpr int kTaskCheckboxTextGap = 4;
 constexpr int kQuoteIndent = 16;
 constexpr int kCodePadding = 10;
 constexpr int kCodeBlockExtra = 4;
@@ -59,6 +61,7 @@ constexpr int kInlineCodeRadius = 6;
 constexpr int kTableCellPaddingX = 10;
 constexpr int kTableCellPaddingY = 7;
 constexpr int kTableMinRowHeight = 34;
+constexpr qreal kTableMathScale = 1.24;
 constexpr int kMathHorizontalPadding = 18;
 constexpr int kMathVerticalPadding = 12;
 constexpr qreal kMathAtomGap = 2.0;
@@ -70,6 +73,13 @@ constexpr qreal kMathFractionGap = 5.0;
 constexpr qreal kMathRuleWidth = 1.2;
 constexpr qreal kMathRasterPaddingX = 4.0;
 constexpr qreal kMathRasterPaddingY = 3.0;
+constexpr qreal kInlineMathRasterPaddingX = 0.0;
+constexpr qreal kInlineMathRasterPaddingY = 1.0;
+constexpr qreal kInlineMathHorizontalPadding = 0.0;
+constexpr qreal kInlineMathBaselineOffsetY = 0;
+constexpr int kInlineMathListMarkerOffsetY = 2;
+constexpr int kMathBlockTopPadding = 0;
+constexpr int kMathBlockBottomPadding = 6;
 constexpr int kDefaultFontPixelSize = 18;
 constexpr int kMinFontPixelSize = 10;
 
@@ -188,6 +198,12 @@ QString blockSignature(const MarkdownRenderer::Block &block)
     signature += QLatin1Char('|');
     signature += QString::number(block.number);
     signature += QLatin1Char('|');
+    signature += block.quote ? QLatin1Char('1') : QLatin1Char('0');
+    signature += QLatin1Char('|');
+    signature += block.taskListItem ? QLatin1Char('1') : QLatin1Char('0');
+    signature += QLatin1Char('|');
+    signature += block.taskChecked ? QLatin1Char('1') : QLatin1Char('0');
+    signature += QLatin1Char('|');
     signature += block.open ? QLatin1Char('1') : QLatin1Char('0');
     signature += QLatin1Char('|');
     signature += block.language;
@@ -206,6 +222,9 @@ QString blockSignature(const MarkdownRenderer::Block &block)
             signature += row.header ? QLatin1Char('H') : QLatin1Char('B');
             for (const MarkdownRenderer::TableCell &cell : row.cells) {
                 signature += cell.text;
+                signature += QLatin1Char('\x1f');
+                signature += cell.math ? QLatin1Char('M') : QLatin1Char('T');
+                signature += cell.mathSource;
                 signature += QLatin1Char('\x1f');
                 signature += spansSignature(cell.spans);
                 signature += QLatin1Char('\x1e');
@@ -333,11 +352,18 @@ struct BlockLayout {
 struct TableCellLayout {
     std::unique_ptr<QTextLayout> textLayout;
     QRect cellRect;
+    QRect innerRect;
     QRect textRect;
+    QRect mathRect;
+    QSizeF mathSize;
     QVector<MarkdownRenderer::InlineSpan> spans;
+    QString mathSource;
+    QFont font;
+    MarkdownRenderer::TableAlignment alignment = MarkdownRenderer::TableAlignment::None;
     int textStart = 0;
     int textLength = 0;
     int textHeight = 0;
+    bool math = false;
 };
 
 struct TableRowLayout {
@@ -402,6 +428,7 @@ struct JkMathLayout {
 
 struct MathSizeCacheEntry {
     QSizeF size;
+    qreal baseline = 0.0;
     bool parsed = false;
 };
 
@@ -422,6 +449,12 @@ QSizeF inlineMathRenderedSize(const QFont &font,
                               int dpiY,
                               const QString &source,
                               const QColor &color);
+QSizeF inlineMathReservedSize(const QFont &font,
+                              int dpiY,
+                              const QString &source,
+                              const QColor &color);
+QString inlineMathPlaceholderText(int length);
+QString textWithInlineMathPlaceholders(QString text, const QVector<MarkdownRenderer::InlineSpan> &spans);
 QVector<QTextLayout::FormatRange> inlineFormatsForSpans(const QVector<MarkdownRenderer::InlineSpan> &spans,
                                                         const QFont &font,
                                                         const QColor &color,
@@ -432,6 +465,8 @@ QString layoutTextForBlock(const MarkdownRenderer::Block &block)
     QString text = block.text;
     if (block.type == MarkdownRenderer::BlockType::CodeBlock) {
         text.replace(QLatin1Char('\n'), QChar::LineSeparator);
+    } else {
+        text = textWithInlineMathPlaceholders(std::move(text), block.spans);
     }
     return text;
 }
@@ -446,6 +481,26 @@ MarkdownRenderer::Block modelBlock(const QModelIndex &index)
     MarkdownRenderer::Block block;
     block.text = index.data(Qt::DisplayRole).toString();
     return block;
+}
+
+bool isQuoteDecoratedBlock(const MarkdownRenderer::Block &block)
+{
+    return block.type == MarkdownRenderer::BlockType::BlockQuote ||
+           (block.type == MarkdownRenderer::BlockType::MathBlock && block.quote);
+}
+
+bool isQuoteDecoratedIndex(const QModelIndex &index)
+{
+    return index.isValid() && isQuoteDecoratedBlock(modelBlock(index));
+}
+
+bool shouldConnectQuoteBars(const MarkdownRenderer::Block &current, const MarkdownRenderer::Block &adjacent)
+{
+    if (!isQuoteDecoratedBlock(current) || !isQuoteDecoratedBlock(adjacent)) {
+        return false;
+    }
+    return (current.type == MarkdownRenderer::BlockType::MathBlock && current.quote) ||
+           (adjacent.type == MarkdownRenderer::BlockType::MathBlock && adjacent.quote);
 }
 
 QFont blockFont(const QFont &baseFont, const MarkdownRenderer::Block &block)
@@ -468,7 +523,7 @@ QFont blockFont(const QFont &baseFont, const MarkdownRenderer::Block &block)
 
 QColor textColor(const QPalette &palette, const MarkdownRenderer::Block &block)
 {
-    if (block.type == MarkdownRenderer::BlockType::BlockQuote) {
+    if (isQuoteDecoratedBlock(block)) {
         return ThemeManager::instance().isDark()
                 ? QColor(QStringLiteral("#9aa4b2"))
                 : QColor(QStringLiteral("#57606a"));
@@ -487,13 +542,40 @@ QTextCharFormat baseFormat(const QFont &font, const QColor &color)
     return format;
 }
 
-QSizeF paddedMathSize(const QSizeF &size)
+QSizeF paddedMathSize(const QSizeF &size, qreal paddingX, qreal paddingY)
 {
     if (size.isEmpty()) {
         return {};
     }
-    return QSizeF(size.width() + kMathRasterPaddingX * 2.0,
-                  size.height() + kMathRasterPaddingY * 2.0);
+    return QSizeF(size.width() + paddingX * 2.0,
+                  size.height() + paddingY * 2.0);
+}
+
+QSizeF paddedDisplayMathSize(const QSizeF &size)
+{
+    return paddedMathSize(size, kMathRasterPaddingX, kMathRasterPaddingY);
+}
+
+QSizeF paddedInlineMathSize(const QSizeF &size)
+{
+    return paddedMathSize(size, kInlineMathRasterPaddingX, kInlineMathRasterPaddingY);
+}
+
+QString inlineMathPlaceholderText(int length)
+{
+    return QString(qMax(0, length), QChar(0x00a0));
+}
+
+QString textWithInlineMathPlaceholders(QString text, const QVector<MarkdownRenderer::InlineSpan> &spans)
+{
+    for (const MarkdownRenderer::InlineSpan &span : spans) {
+        if (!(span.style & MarkdownRenderer::Math) || span.length <= 0 ||
+            span.start < 0 || span.start + span.length > text.size()) {
+            continue;
+        }
+        text.replace(span.start, span.length, inlineMathPlaceholderText(span.length));
+    }
+    return text;
 }
 
 QFont inlineCodeFont(const QFont &font)
@@ -534,12 +616,15 @@ QVector<QTextLayout::FormatRange> inlineFormatsForSpans(const QVector<MarkdownRe
             format.setFontUnderline(true);
         }
         if (span.style & MarkdownRenderer::Math) {
-            const QSizeF renderedSize = inlineMathRenderedSize(font, deviceDpiY(option), span.href, color);
+            const QSizeF renderedSize = inlineMathReservedSize(font, deviceDpiY(option), span.href, color);
             if (!renderedSize.isEmpty()) {
                 QFont placeholderFont = font;
-                placeholderFont.setPixelSize(qMax(fontPixelSize(font), qCeil(renderedSize.height())));
+                placeholderFont.setPixelSize(span.length > 1
+                                             ? 1
+                                             : qMax(kMinFontPixelSize, fontPixelSize(font)));
 
-                const qreal naturalWidth = QFontMetricsF(placeholderFont).horizontalAdvance(span.href);
+                const qreal naturalWidth =
+                        QFontMetricsF(placeholderFont).horizontalAdvance(inlineMathPlaceholderText(span.length));
                 if (naturalWidth > 0.0 && span.length > 1) {
                     const qreal spacing = (renderedSize.width() - naturalWidth) / (span.length - 1);
                     placeholderFont.setLetterSpacing(QFont::AbsoluteSpacing, spacing);
@@ -757,6 +842,21 @@ Qt::Alignment tableTextAlignment(MarkdownRenderer::TableAlignment alignment)
         return Qt::AlignLeft;
     }
     return Qt::AlignLeft;
+}
+
+int alignedContentLeft(const QRect &bounds, int contentWidth, MarkdownRenderer::TableAlignment alignment)
+{
+    const int width = qMin(qMax(1, contentWidth), qMax(1, bounds.width()));
+    switch (alignment) {
+    case MarkdownRenderer::TableAlignment::Center:
+        return bounds.left() + qMax(0, (bounds.width() - width) / 2);
+    case MarkdownRenderer::TableAlignment::Right:
+        return bounds.right() - width + 1;
+    case MarkdownRenderer::TableAlignment::Left:
+    case MarkdownRenderer::TableAlignment::None:
+        return bounds.left();
+    }
+    return bounds.left();
 }
 
 int tableColumnCount(const MarkdownRenderer::Block &block)
@@ -1477,7 +1577,7 @@ MathLayout buildMathLayout(const QStyleOptionViewItem &option, const MarkdownRen
 
     const int width = qCeil(root.rect.width());
     const int x = content.left() + qMax(0, (content.width() - width) / 2);
-    const int y = content.top() + kMathVerticalPadding;
+    const int y = content.top() + kMathBlockTopPadding;
 
     MathLayout layout;
     layout.root = std::move(root);
@@ -1506,6 +1606,32 @@ QString normalizedDisplayMathSource(QString source)
             source = source.mid(1, source.size() - 2).trimmed();
             stripped = true;
         }
+    }
+
+    static const QRegularExpression labelExpression(
+            QStringLiteral(R"(\\label\s*\{[^{}]*\})"));
+    static const QRegularExpression unnumberedExpression(
+            QStringLiteral(R"(\\(?:notag|nonumber)\b)"));
+    source.remove(labelExpression);
+    source.remove(unnumberedExpression);
+    source = source.trimmed();
+
+    const auto stripEnvironment = [](const QString &input, const QString &name) -> QString {
+        const QString escapedName = QRegularExpression::escape(name);
+        const QRegularExpression environmentExpression(
+                QStringLiteral(R"(^\\begin\{%1\}(.*)\\end\{%1\}$)").arg(escapedName),
+                QRegularExpression::DotMatchesEverythingOption);
+        const QRegularExpressionMatch match = environmentExpression.match(input);
+        return match.hasMatch() ? match.captured(1).trimmed() : input;
+    };
+
+    bool strippedEnvironment = true;
+    while (strippedEnvironment) {
+        strippedEnvironment = false;
+        const QString before = source;
+        source = stripEnvironment(source, QStringLiteral("equation"));
+        source = stripEnvironment(source, QStringLiteral("equation*"));
+        strippedEnvironment = source != before;
     }
 
     return source;
@@ -1557,6 +1683,38 @@ bool parseDisplayMath(JKQTMathText &mathText, const QString &source)
                           JKQTMathText::LatexParser,
                           JKQTMathText::ParseOptions(JKQTMathText::StartWithMathMode |
                                                      JKQTMathText::AllowLinebreaks));
+}
+
+QSizeF displayMathRenderedSize(const QFont &font,
+                               int dpiY,
+                               const QString &source,
+                               const QColor &color,
+                               qreal scale,
+                               bool *parsed)
+{
+    static QCache<QString, MathSizeCacheEntry> cache(2048);
+    const QString cacheKey = mathSizeCacheKey(font, dpiY, normalizedDisplayMathSource(source), scale);
+    if (const MathSizeCacheEntry *cached = cache.object(cacheKey)) {
+        *parsed = cached->parsed;
+        return cached->size;
+    }
+
+    QImage metricImage(1, 1, QImage::Format_ARGB32_Premultiplied);
+    setImageDpi(metricImage, dpiY);
+    metricImage.fill(Qt::transparent);
+    QPainter metricPainter(&metricImage);
+
+    JKQTMathText mathText;
+    configureMathText(mathText, font, dpiY, color, scale);
+    *parsed = parseDisplayMath(mathText, source);
+    const QSizeF formulaSize = *parsed ? paddedDisplayMathSize(mathText.getSize(metricPainter)) : QSizeF();
+    metricPainter.end();
+
+    auto *entry = new MathSizeCacheEntry;
+    entry->size = formulaSize;
+    entry->parsed = *parsed;
+    cache.insert(cacheKey, entry, qMax(1, source.size() / 64));
+    return formulaSize;
 }
 
 QString normalizedInlineMathSource(QString source)
@@ -1625,7 +1783,9 @@ QPixmap renderMathPixmap(const QFont &font,
     metricPainter.setRenderHint(QPainter::TextAntialiasing, true);
     const JKQTMathTextNodeSize formulaSizeDetail = mathText.getSizeDetail(metricPainter);
     const QSizeF formulaSize = formulaSizeDetail.getSize();
-    const QSizeF paddedSize = paddedMathSize(formulaSize);
+    const qreal paddingX = displayMode ? kMathRasterPaddingX : kInlineMathRasterPaddingX;
+    const qreal paddingY = displayMode ? kMathRasterPaddingY : kInlineMathRasterPaddingY;
+    const QSizeF paddedSize = paddedMathSize(formulaSize, paddingX, paddingY);
     metricPainter.end();
 
     if (paddedSize.isEmpty()) {
@@ -1649,8 +1809,8 @@ QPixmap renderMathPixmap(const QFont &font,
     imagePainter.setRenderHint(QPainter::TextAntialiasing, true);
     imagePainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
     mathText.draw(imagePainter,
-                  kMathRasterPaddingX,
-                  kMathRasterPaddingY + formulaSizeDetail.baselineHeight,
+                  paddingX,
+                  paddingY + formulaSizeDetail.baselineHeight,
                   false);
     imagePainter.end();
 
@@ -1668,12 +1828,20 @@ QPixmap renderMathPixmap(const QFont &font,
     return pixmap;
 }
 
-QSizeF inlineMathSize(const QFont &font, int dpiY, const QString &source, const QColor &color, bool *parsed)
+QSizeF inlineMathSize(const QFont &font,
+                      int dpiY,
+                      const QString &source,
+                      const QColor &color,
+                      bool *parsed,
+                      qreal *baseline = nullptr)
 {
     static QCache<QString, MathSizeCacheEntry> cache(2048);
     const QString cacheKey = mathSizeCacheKey(font, dpiY, normalizedInlineMathSource(source), kMathInlineScale);
     if (const MathSizeCacheEntry *cached = cache.object(cacheKey)) {
         *parsed = cached->parsed;
+        if (baseline) {
+            *baseline = cached->baseline;
+        }
         return cached->size;
     }
 
@@ -1685,13 +1853,23 @@ QSizeF inlineMathSize(const QFont &font, int dpiY, const QString &source, const 
     JKQTMathText mathText;
     configureMathText(mathText, font, dpiY, color, kMathInlineScale);
     *parsed = parseInlineMath(mathText, source);
-    const QSizeF formulaSize = *parsed ? paddedMathSize(mathText.getSize(metricPainter)) : QSizeF();
+    QSizeF formulaSize;
+    qreal formulaBaseline = 0.0;
+    if (*parsed) {
+        const JKQTMathTextNodeSize formulaSizeDetail = mathText.getSizeDetail(metricPainter);
+        formulaSize = paddedInlineMathSize(formulaSizeDetail.getSize());
+        formulaBaseline = kInlineMathRasterPaddingY + formulaSizeDetail.baselineHeight;
+    }
     metricPainter.end();
 
     auto *entry = new MathSizeCacheEntry;
     entry->size = formulaSize;
+    entry->baseline = formulaBaseline;
     entry->parsed = *parsed;
     cache.insert(cacheKey, entry, qMax(1, source.size() / 64));
+    if (baseline) {
+        *baseline = formulaBaseline;
+    }
     return formulaSize;
 }
 
@@ -1703,6 +1881,63 @@ QSizeF inlineMathRenderedSize(const QFont &font,
     bool parsed = false;
     const QSizeF formulaSize = inlineMathSize(font, dpiY, source, color, &parsed);
     return parsed ? formulaSize : QSizeF();
+}
+
+QSizeF inlineMathReservedSize(const QFont &font,
+                              int dpiY,
+                              const QString &source,
+                              const QColor &color)
+{
+    const QSizeF formulaSize = inlineMathRenderedSize(font, dpiY, source, color);
+    if (formulaSize.isEmpty()) {
+        return {};
+    }
+    return QSizeF(formulaSize.width() + kInlineMathHorizontalPadding * 2.0,
+                  formulaSize.height());
+}
+
+struct InlineMathLineInsets {
+    qreal top = 0.0;
+    qreal bottom = 0.0;
+};
+
+InlineMathLineInsets inlineMathLineInsets(const QTextLine &line,
+                                          const QVector<MarkdownRenderer::InlineSpan> &spans,
+                                          const QFont &font,
+                                          int dpiY,
+                                          const QColor &color)
+{
+    InlineMathLineInsets insets;
+    const int lineStart = line.textStart();
+    const int lineEnd = lineStart + line.textLength();
+    for (const MarkdownRenderer::InlineSpan &span : spans) {
+        if (!(span.style & MarkdownRenderer::Math) || span.length <= 0) {
+            continue;
+        }
+        const int spanStart = span.start;
+        const int spanEnd = span.start + span.length;
+        if (spanStart < lineStart || spanEnd > lineEnd) {
+            continue;
+        }
+
+        bool parsed = false;
+        qreal formulaBaseline = 0.0;
+        const QSizeF formulaSize = inlineMathSize(font,
+                                                  dpiY,
+                                                  span.href,
+                                                  color,
+                                                  &parsed,
+                                                  &formulaBaseline);
+        if (!parsed || formulaSize.isEmpty()) {
+            continue;
+        }
+
+        insets.top = qMax(insets.top, formulaBaseline - line.ascent());
+        insets.bottom = qMax(insets.bottom, formulaSize.height() - formulaBaseline - line.descent());
+    }
+    insets.top = qMax<qreal>(0.0, insets.top);
+    insets.bottom = qMax<qreal>(0.0, insets.bottom);
+    return insets;
 }
 
 void drawInlineMath(QPainter *painter,
@@ -1737,8 +1972,14 @@ void drawInlineMath(QPainter *painter,
             const qreal right = line.cursorToX(spanEnd);
             const qreal reservedWidth = qMax<qreal>(1.0, right - left);
             bool parsed = false;
+            qreal formulaBaseline = 0.0;
             const QFont layoutFont = layout->font();
-            const QSizeF formulaSize = inlineMathSize(layoutFont, dpiY, span.href, color, &parsed);
+            const QSizeF formulaSize = inlineMathSize(layoutFont,
+                                                      dpiY,
+                                                      span.href,
+                                                      color,
+                                                      &parsed,
+                                                      &formulaBaseline);
             if (!parsed || formulaSize.isEmpty()) {
                 painter->setFont(option.font);
                 painter->setPen(color);
@@ -1776,10 +2017,19 @@ void drawInlineMath(QPainter *painter,
                 break;
             }
 
-            const QRectF formulaRect(origin.x() + line.position().x() + left,
-                                     origin.y() + line.position().y() + (line.height() - formulaSize.height()) / 2.0,
-                                     qMin<qreal>(reservedWidth, formulaSize.width()),
-                                     formulaSize.height());
+            const qreal formulaTop = origin.y() +
+                                     line.position().y() +
+                                     line.ascent() -
+                                     formulaBaseline +
+                                     kInlineMathBaselineOffsetY;
+            const qreal formulaLeft = origin.x() +
+                                      line.position().x() +
+                                      left +
+                                      qMax<qreal>(0.0, (reservedWidth - pixmapSize.width()) / 2.0);
+            const QRectF formulaRect(formulaLeft,
+                                     formulaTop,
+                                     pixmapSize.width(),
+                                     pixmapSize.height());
             painter->save();
             painter->setClipRect(formulaRect);
             painter->drawPixmap(formulaRect.topLeft(), pixmap);
@@ -1793,8 +2043,11 @@ void drawInlineMath(QPainter *painter,
 
 JkMathLayout buildJkMathLayout(const QStyleOptionViewItem &option, const MarkdownRenderer::Block &block)
 {
-    const QRect content = contentRect(option);
-    const QColor color = option.palette.color(QPalette::Text);
+    QRect content = contentRect(option);
+    if (block.quote) {
+        content.adjust(kQuoteIndent, 0, 0, 0);
+    }
+    const QColor color = textColor(option.palette, block);
 
     static QCache<QString, MathSizeCacheEntry> cache(1024);
     const QString cacheKey = mathSizeCacheKey(option, normalizedDisplayMathSource(block.text), kMathDisplayScale);
@@ -1812,7 +2065,7 @@ JkMathLayout buildJkMathLayout(const QStyleOptionViewItem &option, const Markdow
         JKQTMathText mathText;
         configureMathText(mathText, option, color);
         parsed = parseDisplayMath(mathText, block.text);
-        formulaSize = parsed ? paddedMathSize(mathText.getSize(metricPainter)) : QSizeF();
+        formulaSize = parsed ? paddedDisplayMathSize(mathText.getSize(metricPainter)) : QSizeF();
         metricPainter.end();
 
         auto *entry = new MathSizeCacheEntry;
@@ -1831,13 +2084,13 @@ JkMathLayout buildJkMathLayout(const QStyleOptionViewItem &option, const Markdow
     const int width = qCeil(qMax<qreal>(1.0, formulaSize.width()));
     const int height = qCeil(qMax<qreal>(1.0, formulaSize.height()));
     const int x = content.left() + qMax(0, (content.width() - width) / 2);
-    const int y = content.top() + kMathVerticalPadding;
+    const int y = content.top() + kMathBlockTopPadding;
 
     JkMathLayout layout;
     layout.source = block.text;
     layout.parsed = parsed;
     layout.textRect = QRect(x, y, width, height);
-    layout.height = height + kMathVerticalPadding * 2;
+    layout.height = height + kMathBlockTopPadding + kMathBlockBottomPadding;
     return layout;
 }
 
@@ -1880,6 +2133,8 @@ void drawJkMath(QPainter *painter,
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing, true);
     painter->setRenderHint(QPainter::TextAntialiasing, true);
+    const QColor color = textColor(option.palette, block);
+    painter->setPen(color);
 
     if (!layout.parsed) {
         painter->drawText(layout.textRect, Qt::AlignCenter, normalizedDisplayMathSource(block.text));
@@ -1897,7 +2152,7 @@ void drawJkMath(QPainter *painter,
                                             dpiY,
                                             devicePixelRatio,
                                             block.text,
-                                            option.palette.color(QPalette::Text),
+                                            color,
                                             kMathDisplayScale,
                                             true,
                                             &pixmapSize,
@@ -1912,6 +2167,68 @@ void drawJkMath(QPainter *painter,
                           layout.textRect.top() + (layout.textRect.height() - pixmapSize.height()) / 2.0);
     painter->drawPixmap(topLeft, pixmap);
     painter->restore();
+}
+
+void drawTableCellMath(QPainter *painter,
+                       const QStyleOptionViewItem &option,
+                       const TableCellLayout &cell)
+{
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    painter->setRenderHint(QPainter::TextAntialiasing, true);
+    const QColor color = option.palette.color(QPalette::Text);
+    painter->setPen(color);
+
+    QSizeF pixmapSize;
+    bool parsed = false;
+    const int dpiY = painter->device() ? qMax(1, painter->device()->logicalDpiY()) : deviceDpiY(option);
+    const qreal devicePixelRatio = painter->device()
+                                       ? qMax<qreal>(1.0, painter->device()->devicePixelRatioF())
+                                       : 1.0;
+    const QPixmap pixmap = renderMathPixmap(cell.font,
+                                            dpiY,
+                                            devicePixelRatio,
+                                            cell.mathSource,
+                                            color,
+                                            kTableMathScale,
+                                            true,
+                                            &pixmapSize,
+                                            &parsed);
+    if (!parsed || pixmap.isNull() || pixmapSize.isEmpty()) {
+        painter->drawText(cell.textRect, Qt::AlignCenter, normalizedDisplayMathSource(cell.mathSource));
+        painter->restore();
+        return;
+    }
+
+    const QPointF topLeft(cell.mathRect.left() + (cell.mathRect.width() - pixmapSize.width()) / 2.0,
+                          cell.mathRect.top() + (cell.mathRect.height() - pixmapSize.height()) / 2.0);
+    painter->drawPixmap(topLeft, pixmap);
+    painter->restore();
+}
+
+void drawTableCellMathSelection(QPainter *painter,
+                                const QStyleOptionViewItem &option,
+                                const TableCellLayout &cell)
+{
+    const int selectionStart = option.index.data(MarkdownDocumentModel::SelectionStartRole).toInt();
+    const int selectionEnd = option.index.data(MarkdownDocumentModel::SelectionEndRole).toInt();
+    if (selectionStart < 0 || selectionEnd <= selectionStart || cell.textLength <= 0) {
+        return;
+    }
+
+    const int localStart = qMax(selectionStart, cell.textStart) - cell.textStart;
+    const int localEnd = qMin(selectionEnd, cell.textStart + cell.textLength) - cell.textStart;
+    if (localEnd <= localStart) {
+        return;
+    }
+
+    const qreal leftRatio = static_cast<qreal>(localStart) / cell.textLength;
+    const qreal rightRatio = static_cast<qreal>(localEnd) / cell.textLength;
+    const QRectF selectionRect(cell.mathRect.left() + cell.mathRect.width() * leftRatio,
+                               cell.mathRect.top() - 2,
+                               qMax<qreal>(1.0, cell.mathRect.width() * (rightRatio - leftRatio)),
+                               cell.mathRect.height() + 4);
+    painter->fillRect(selectionRect, selectionHighlightColor());
 }
 
 int jkMathCursorForPosition(const JkMathLayout &layout,
@@ -1949,15 +2266,41 @@ TableCellLayout buildTableCellLayout(const QStyleOptionViewItem &option,
     const QColor color = option.palette.color(QPalette::Text);
 
     TableCellLayout result;
+    result.font = font;
     result.cellRect = cellRect;
     result.spans = cell.spans;
+    result.math = cell.math;
+    result.mathSource = cell.mathSource;
+    result.alignment = alignment;
     result.textStart = textStart;
     result.textLength = cell.text.size();
-    result.textRect = cellRect.adjusted(kTableCellPaddingX,
+    result.innerRect = cellRect.adjusted(kTableCellPaddingX,
                                         kTableCellPaddingY,
                                         -kTableCellPaddingX,
                                         -kTableCellPaddingY);
-    result.textLayout = std::make_unique<QTextLayout>(cell.text, font);
+    result.textRect = result.innerRect;
+    if (cell.math) {
+        bool parsed = false;
+        result.mathSize = displayMathRenderedSize(font,
+                                                  deviceDpiY(option),
+                                                  cell.mathSource,
+                                                  color,
+                                                  kTableMathScale,
+                                                  &parsed);
+        if (result.mathSize.isEmpty()) {
+            const QFontMetricsF metrics(font);
+            result.mathSize = metrics.boundingRect(cell.text).size();
+        }
+        result.textHeight = qCeil(qMax<qreal>(QFontMetricsF(font).height(), result.mathSize.height()));
+        const int mathWidth = qCeil(qMax<qreal>(1.0, result.mathSize.width()));
+        result.mathRect = QRect(alignedContentLeft(result.innerRect, mathWidth, alignment),
+                                result.innerRect.top(),
+                                qMin(mathWidth, qMax(1, result.innerRect.width())),
+                                result.textHeight);
+        return result;
+    }
+
+    result.textLayout = std::make_unique<QTextLayout>(textWithInlineMathPlaceholders(cell.text, cell.spans), font);
     result.textLayout->setCacheEnabled(true);
     result.textLayout->setFormats(tableCellFormats(cell, font, color, option, textStart));
 
@@ -1984,9 +2327,9 @@ TableLayout buildTableLayout(const QStyleOptionViewItem &option, const MarkdownR
     const QVector<int> columnWidths = tableColumnWidths(content.width(), columnCount);
     result.tableRect = QRect(content.left(), content.top(), content.width(), 0);
 
-    int y = content.top();
     result.rows.reserve(block.tableRows.size());
     int textOffset = 0;
+    int bodyRowHeight = kTableMinRowHeight;
     for (int rowIndex = 0; rowIndex < block.tableRows.size(); ++rowIndex) {
         const MarkdownRenderer::TableRow &sourceRow = block.tableRows.at(rowIndex);
         TableRowLayout rowLayout;
@@ -1996,7 +2339,7 @@ TableLayout buildTableLayout(const QStyleOptionViewItem &option, const MarkdownR
         int rowHeight = kTableMinRowHeight;
         for (int column = 0; column < columnCount; ++column) {
             const int cellTextStart = textOffset;
-            const QRect cellRect(x, y, columnWidths.at(column), kTableMinRowHeight);
+            const QRect cellRect(x, content.top(), columnWidths.at(column), kTableMinRowHeight);
             const MarkdownRenderer::TableCell emptyCell;
             const MarkdownRenderer::TableCell &cell = column < sourceRow.cells.size()
                                                           ? sourceRow.cells.at(column)
@@ -2019,16 +2362,49 @@ TableLayout buildTableLayout(const QStyleOptionViewItem &option, const MarkdownR
             }
         }
 
-        for (TableCellLayout &cell : rowLayout.cells) {
-            cell.cellRect.setHeight(rowHeight);
-            cell.textRect.setHeight(qMax(0, rowHeight - kTableCellPaddingY * 2));
+        if (!sourceRow.header) {
+            bodyRowHeight = qMax(bodyRowHeight, rowHeight);
         }
         rowLayout.height = rowHeight;
         result.rows.push_back(std::move(rowLayout));
-        y += rowHeight;
         if (rowIndex < block.tableRows.size() - 1) {
             ++textOffset;
         }
+    }
+
+    int y = content.top();
+    for (int rowIndex = 0; rowIndex < static_cast<int>(result.rows.size()); ++rowIndex) {
+        TableRowLayout &rowLayout = result.rows.at(rowIndex);
+        const bool header = rowIndex < block.tableRows.size() && block.tableRows.at(rowIndex).header;
+        const int rowHeight = header ? rowLayout.height : qMax(rowLayout.height, bodyRowHeight);
+        for (TableCellLayout &cell : rowLayout.cells) {
+            cell.cellRect.moveTop(y);
+            cell.cellRect.setHeight(rowHeight);
+            cell.innerRect = cell.cellRect.adjusted(kTableCellPaddingX,
+                                                    kTableCellPaddingY,
+                                                    -kTableCellPaddingX,
+                                                    -kTableCellPaddingY);
+            const int contentHeight = qMin(qMax(0, cell.textHeight), qMax(0, cell.innerRect.height()));
+            const int contentTop = cell.innerRect.top() +
+                                   qMax(0, (cell.innerRect.height() - contentHeight) / 2);
+            cell.textRect = QRect(cell.innerRect.left(),
+                                  contentTop,
+                                  cell.innerRect.width(),
+                                  contentHeight);
+            if (cell.math) {
+                const int mathWidth = qCeil(qMax<qreal>(1.0, cell.mathSize.width()));
+                const int mathHeight = qCeil(qMax<qreal>(1.0, cell.mathSize.height()));
+                cell.mathRect = QRect(alignedContentLeft(cell.innerRect,
+                                                         mathWidth,
+                                                         cell.alignment),
+                                      cell.innerRect.top() +
+                                          qMax(0, (cell.innerRect.height() - mathHeight) / 2),
+                                      qMin(mathWidth, qMax(1, cell.innerRect.width())),
+                                      qMin(mathHeight, qMax(1, cell.innerRect.height())));
+            }
+        }
+        rowLayout.height = rowHeight;
+        y += rowHeight;
     }
 
     result.height = y - content.top();
@@ -2095,6 +2471,24 @@ QRect codeLoadingSpinnerRect(const QStyleOptionViewItem& option)
     return centeredSquareRect(iconSlot, kCodeHeaderSpinnerSize);
 }
 
+int taskCheckboxSize(const QStyleOptionViewItem &option, const MarkdownRenderer::Block &block)
+{
+    const QFontMetrics metrics(blockFont(option.font, block));
+    return qBound(13, metrics.height() - 3, 20);
+}
+
+QString listMarkerText(const MarkdownRenderer::Block &block)
+{
+    return block.type == MarkdownRenderer::BlockType::OrderedList
+               ? QString::number(block.number) + QLatin1Char('.')
+               : QStringLiteral("•");
+}
+
+int listTextMarkerWidth(const QStyleOptionViewItem &option, const MarkdownRenderer::Block &block)
+{
+    return QFontMetrics(blockFont(option.font, block)).horizontalAdvance(listMarkerText(block));
+}
+
 int listMarkerWidth(const QStyleOptionViewItem &option, const MarkdownRenderer::Block &block)
 {
     if (block.type != MarkdownRenderer::BlockType::UnorderedList &&
@@ -2102,16 +2496,24 @@ int listMarkerWidth(const QStyleOptionViewItem &option, const MarkdownRenderer::
         return 0;
     }
 
-    const QFontMetrics metrics(blockFont(option.font, block));
-    const QString marker = block.type == MarkdownRenderer::BlockType::OrderedList
-                               ? QString::number(block.number) + QLatin1Char('.')
-                               : QStringLiteral("•");
-    return metrics.horizontalAdvance(marker) + kListMarkerGap;
+    const int textMarkerWidth = listTextMarkerWidth(option, block);
+    if (block.taskListItem) {
+        return textMarkerWidth + kListMarkerGap + taskCheckboxSize(option, block) + kTaskCheckboxTextGap;
+    }
+
+    return textMarkerWidth + kListMarkerGap;
 }
 
 int listIndentForBlock(const MarkdownRenderer::Block &block)
 {
     return kListIndent + qMax(0, block.level) * kNestedListIndent;
+}
+
+bool hasInlineMathSpan(const QVector<MarkdownRenderer::InlineSpan> &spans)
+{
+    return std::any_of(spans.cbegin(), spans.cend(), [](const MarkdownRenderer::InlineSpan &span) {
+        return span.style & MarkdownRenderer::Math;
+    });
 }
 
 QRect textRectForBlock(const QStyleOptionViewItem &option, const MarkdownRenderer::Block &block)
@@ -2131,6 +2533,86 @@ QRect textRectForBlock(const QStyleOptionViewItem &option, const MarkdownRendere
     }
 
     return rect;
+}
+
+void drawQuoteBar(QPainter *painter,
+                  const QStyleOptionViewItem &option,
+                  const QModelIndex &index,
+                  const MarkdownRenderer::Block &block)
+{
+    if (!isQuoteDecoratedBlock(block)) {
+        return;
+    }
+
+    QRect bar = contentRect(option);
+    if (index.model()) {
+        const QModelIndex parent = index.parent();
+        const int rowCount = index.model()->rowCount(parent);
+        const QModelIndex previous = index.row() > 0
+                                         ? index.model()->index(index.row() - 1, index.column(), parent)
+                                         : QModelIndex();
+        const QModelIndex next = index.row() + 1 < rowCount
+                                     ? index.model()->index(index.row() + 1, index.column(), parent)
+                                     : QModelIndex();
+        if (isQuoteDecoratedIndex(previous) && shouldConnectQuoteBars(block, modelBlock(previous))) {
+            bar.setTop(option.rect.top());
+        }
+        if (isQuoteDecoratedIndex(next) && shouldConnectQuoteBars(block, modelBlock(next))) {
+            bar.setBottom(option.rect.bottom());
+        }
+    }
+
+    painter->fillRect(QRect(bar.left(), bar.top(), 4, bar.height()),
+                      ThemeManager::instance().color(ThemeColor::Divider));
+}
+
+void drawTaskListMarker(QPainter *painter,
+                        const QRect &markerRect,
+                        const QStyleOptionViewItem &option,
+                        const MarkdownRenderer::Block &block)
+{
+    const int textMarkerWidth = listTextMarkerWidth(option, block);
+    const QRect textMarkerRect(markerRect.left(),
+                               markerRect.top(),
+                               textMarkerWidth + kListMarkerGap,
+                               markerRect.height());
+    painter->drawText(textMarkerRect,
+                      Qt::AlignVCenter | Qt::AlignLeft,
+                      listMarkerText(block));
+
+    const int size = taskCheckboxSize(option, block);
+    QRect box(QPoint(0, 0), QSize(size, size));
+    box.moveLeft(textMarkerRect.right() + 1);
+    box.moveCenter(QPoint(box.center().x(), markerRect.center().y()));
+
+    const QColor text = textColor(option.palette, block);
+    const QColor border = block.taskChecked
+                              ? ThemeManager::instance().color(ThemeColor::Accent)
+                              : QColor(text.red(), text.green(), text.blue(), 150);
+    const QColor fill = block.taskChecked
+                            ? ThemeManager::instance().color(ThemeColor::Accent)
+                            : Qt::transparent;
+    const QColor check = block.taskChecked
+                             ? ThemeManager::textColorOn(fill)
+                             : Qt::transparent;
+
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    painter->setPen(QPen(border, 1.4));
+    painter->setBrush(fill);
+    painter->drawRoundedRect(QRectF(box).adjusted(0.7, 0.7, -0.7, -0.7), 3.0, 3.0);
+
+    if (block.taskChecked) {
+        QPainterPath checkPath;
+        checkPath.moveTo(box.left() + size * 0.25, box.top() + size * 0.53);
+        checkPath.lineTo(box.left() + size * 0.43, box.top() + size * 0.70);
+        checkPath.lineTo(box.left() + size * 0.76, box.top() + size * 0.33);
+        painter->setPen(QPen(check, qMax<qreal>(1.7, size * 0.14), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter->setBrush(Qt::NoBrush);
+        painter->drawPath(checkPath);
+    }
+
+    painter->restore();
 }
 
 BlockLayout buildLayout(const QStyleOptionViewItem &option, const QModelIndex &index)
@@ -2164,8 +2646,13 @@ BlockLayout buildLayout(const QStyleOptionViewItem &option, const QModelIndex &i
         if (block.type == MarkdownRenderer::BlockType::CodeBlock) {
             codeLineHeight = qMax(codeLineHeight, line.height());
         } else {
-            line.setPosition(QPointF(0, y));
-            y += line.height();
+            const InlineMathLineInsets mathInsets = inlineMathLineInsets(line,
+                                                                         block.spans,
+                                                                         font,
+                                                                         deviceDpiY(option),
+                                                                         color);
+            line.setPosition(QPointF(0, y + mathInsets.top));
+            y += mathInsets.top + line.height() + mathInsets.bottom;
         }
     }
 
@@ -2228,6 +2715,20 @@ int tableCursorForPosition(const TableLayout &tableLayout,
             if (!cell.cellRect.adjusted(0, 0, 1, 0).contains(position)) {
                 continue;
             }
+            if (cell.math) {
+                if (cell.textLength <= 0 || position.x() <= cell.mathRect.left()) {
+                    return cell.textStart;
+                }
+                if (position.x() >= cell.mathRect.right()) {
+                    return cell.textStart + cell.textLength;
+                }
+
+                const qreal ratio = qBound<qreal>(0.0,
+                                                  (position.x() - cell.mathRect.left()) /
+                                                      qMax<qreal>(1.0, cell.mathRect.width()),
+                                                  1.0);
+                return cell.textStart + qBound(0, qRound(ratio * cell.textLength), cell.textLength);
+            }
 
             const QPoint local = position - cell.textRect.topLeft();
             if (local.y() <= 0) {
@@ -2257,6 +2758,12 @@ bool tableHasTextAtPosition(const TableLayout &tableLayout, const QPoint &positi
 {
     for (const TableRowLayout &row : tableLayout.rows) {
         for (const TableCellLayout &cell : row.cells) {
+            if (cell.math) {
+                if (cell.textLength > 0 && cell.mathRect.adjusted(-2, -2, 2, 2).contains(position)) {
+                    return true;
+                }
+                continue;
+            }
             if (cell.textLength <= 0 || !cell.textRect.adjusted(-2, 0, 2, 0).contains(position)) {
                 continue;
             }
@@ -2264,8 +2771,12 @@ bool tableHasTextAtPosition(const TableLayout &tableLayout, const QPoint &positi
             const QPoint local = position - cell.textRect.topLeft();
             for (int lineIndex = 0; lineIndex < cell.textLayout->lineCount(); ++lineIndex) {
                 const QTextLine line = cell.textLayout->lineAt(lineIndex);
-                const QRectF lineRect(line.position(),
-                                      QSizeF(qMax(1, cell.textRect.width()), line.height()));
+                const qreal startX = line.cursorToX(line.textStart());
+                const qreal endX = line.cursorToX(line.textStart() + line.textLength());
+                const QRectF lineRect(line.position().x() + qMin(startX, endX),
+                                      line.position().y(),
+                                      qMax<qreal>(1.0, qAbs(endX - startX)),
+                                      line.height());
                 if (lineRect.adjusted(-2, 0, 2, 0).contains(QPointF(local))) {
                     return true;
                 }
@@ -2834,6 +3345,7 @@ void MarkdownDelegate::paint(QPainter *painter,
         const JkMathLayout mathLayout = buildJkMathLayout(viewOption, block);
         const int selectionStart = index.data(MarkdownDocumentModel::SelectionStartRole).toInt();
         const int selectionEnd = index.data(MarkdownDocumentModel::SelectionEndRole).toInt();
+        drawQuoteBar(painter, viewOption, index, block);
         drawJkMathSelection(painter,
                             mathLayout,
                             selectionStart,
@@ -2856,14 +3368,19 @@ void MarkdownDelegate::paint(QPainter *painter,
                 painter->save();
                 painter->setClipRect(cell.textRect);
                 painter->setPen(viewOption.palette.color(QPalette::Text));
-                drawInlineCodeBackgrounds(painter, cell.textLayout.get(), cell.textRect.topLeft(), cell.spans);
-                cell.textLayout->draw(painter, cell.textRect.topLeft());
-                drawInlineMath(painter,
-                               viewOption,
-                               cell.textLayout.get(),
-                               cell.textRect.topLeft(),
-                               cell.spans,
-                               viewOption.palette.color(QPalette::Text));
+                if (cell.math) {
+                    drawTableCellMathSelection(painter, viewOption, cell);
+                    drawTableCellMath(painter, viewOption, cell);
+                } else {
+                    drawInlineCodeBackgrounds(painter, cell.textLayout.get(), cell.textRect.topLeft(), cell.spans);
+                    cell.textLayout->draw(painter, cell.textRect.topLeft());
+                    drawInlineMath(painter,
+                                   viewOption,
+                                   cell.textLayout.get(),
+                                   cell.textRect.topLeft(),
+                                   cell.spans,
+                                   viewOption.palette.color(QPalette::Text));
+                }
                 painter->restore();
             }
         }
@@ -2889,9 +3406,10 @@ void MarkdownDelegate::paint(QPainter *painter,
         return;
     }
 
+    BlockLayout layout = buildLayout(viewOption, index);
+
     if (block.type == MarkdownRenderer::BlockType::BlockQuote) {
-        painter->fillRect(QRect(content.left(), content.top(), 4, content.height()),
-                          ThemeManager::instance().color(ThemeColor::Divider));
+        drawQuoteBar(painter, viewOption, index, block);
     } else if (block.type == MarkdownRenderer::BlockType::CodeBlock) {
         const QRect codeRect = codeContainerRect(viewOption);
         const CodeBlockPalette palette = codeBlockPalette();
@@ -2907,18 +3425,27 @@ void MarkdownDelegate::paint(QPainter *painter,
                block.type == MarkdownRenderer::BlockType::OrderedList) {
         painter->setFont(blockFont(viewOption.font, block));
         painter->setPen(textColor(viewOption.palette, block));
-        const QString marker = block.type == MarkdownRenderer::BlockType::OrderedList
-                                   ? QString::number(block.number) + QLatin1Char('.')
-                                   : QStringLiteral("•");
-        painter->drawText(QRect(content.left() + listIndentForBlock(block),
-                                content.top(),
-                                listMarkerWidth(viewOption, block),
-                                content.height()),
-                          Qt::AlignTop | Qt::AlignLeft,
-                          marker);
+        QRect markerRect(content.left() + listIndentForBlock(block),
+                         content.top(),
+                         listMarkerWidth(viewOption, block),
+                         QFontMetrics(blockFont(viewOption.font, block)).height());
+        if (layout.textLayout && layout.textLayout->lineCount() > 0) {
+            const QTextLine firstLine = layout.textLayout->lineAt(0);
+            const int markerOffset = hasInlineMathSpan(block.spans)
+                                         ? kInlineMathListMarkerOffsetY
+                                         : 0;
+            markerRect.setTop(qRound(layout.textRect.top() + firstLine.position().y()) + markerOffset);
+            markerRect.setHeight(qCeil(firstLine.height()));
+        }
+        if (block.taskListItem) {
+            drawTaskListMarker(painter, markerRect, viewOption, block);
+        } else {
+            painter->drawText(markerRect,
+                              Qt::AlignVCenter | Qt::AlignLeft,
+                              listMarkerText(block));
+        }
     }
 
-    BlockLayout layout = buildLayout(viewOption, index);
     painter->setPen(textColor(viewOption.palette, block));
     if (block.type == MarkdownRenderer::BlockType::CodeBlock) {
         painter->save();
@@ -3086,11 +3613,18 @@ QString MarkdownDelegate::linkAtPosition(const QStyleOptionViewItem &option,
                 }
 
                 const MarkdownRenderer::TableCell &cell = block.tableRows.at(rowIndex).cells.at(column);
+                if (cell.math || !cellLayout.textLayout) {
+                    continue;
+                }
                 const QPoint local = position - cellLayout.textRect.topLeft();
                 for (int lineIndex = 0; lineIndex < cellLayout.textLayout->lineCount(); ++lineIndex) {
                     const QTextLine line = cellLayout.textLayout->lineAt(lineIndex);
-                    const QRectF lineRect(line.position(),
-                                          QSizeF(qMax(1, cellLayout.textRect.width()), line.height()));
+                    const qreal startX = line.cursorToX(line.textStart());
+                    const qreal endX = line.cursorToX(line.textStart() + line.textLength());
+                    const QRectF lineRect(line.position().x() + qMin(startX, endX),
+                                          line.position().y(),
+                                          qMax<qreal>(1.0, qAbs(endX - startX)),
+                                          line.height());
                     if (!lineRect.adjusted(-2, 0, 2, 0).contains(QPointF(local))) {
                         continue;
                     }

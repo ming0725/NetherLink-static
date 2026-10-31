@@ -4,6 +4,7 @@
 
 #include "shared/services/ImageService.h"
 #include "shared/theme/ThemeManager.h"
+#include "shared/ui/renderers/MediaPlaceholderRenderer.h"
 
 namespace {
 
@@ -94,9 +95,7 @@ void drawAvatar(QPainter* painter,
     const qreal dpr = painter->device()->devicePixelRatioF();
     const QPixmap pixmap = ImageService::instance().circularAvatarPreview(avatarPath, avatarSize, dpr);
     if (pixmap.isNull()) {
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(ThemeManager::instance().color(ThemeColor::ImagePlaceholder));
-        painter->drawEllipse(rect);
+        MediaPlaceholderRenderer::drawAvatar(painter, rect);
         return;
     }
     painter->drawPixmap(rect, pixmap);

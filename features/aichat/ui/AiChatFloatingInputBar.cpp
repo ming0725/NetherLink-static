@@ -9,7 +9,6 @@
 #include <QImage>
 #include <QKeyEvent>
 #include <QLineF>
-#include <QLocale>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -27,7 +26,6 @@
 
 #include "shared/services/AppFonts.h"
 #include "shared/theme/ThemeManager.h"
-#include "shared/ui/CustomTooltip.h"
 #include "shared/ui/StyledActionMenu.h"
 #include "shared/ui/TransparentTextEdit.h"
 
@@ -335,120 +333,6 @@ private:
     bool m_suppressHoverUntilLeave = false;
 };
 
-class ContextUsageIndicator final : public QWidget
-{
-public:
-    explicit ContextUsageIndicator(QWidget* parent = nullptr)
-        : QWidget(parent)
-    {
-        setCursor(Qt::ArrowCursor);
-        setMouseTracking(true);
-        setAttribute(Qt::WA_TranslucentBackground);
-        setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-        hide();
-    }
-
-    QSize sizeHint() const override
-    {
-        return QSize(kIndicatorSide, kIndicatorSide);
-    }
-
-    void setUsage(const AiChatContextUsage& usage)
-    {
-        m_usage = usage;
-        setVisible(usage.available);
-        update();
-    }
-
-protected:
-    bool event(QEvent* event) override
-    {
-        if (event->type() == QEvent::Enter || event->type() == QEvent::MouseMove) {
-            showContextTooltip();
-        } else if (event->type() == QEvent::Leave || event->type() == QEvent::Hide) {
-            hideContextTooltip();
-        }
-        return QWidget::event(event);
-    }
-
-    void paintEvent(QPaintEvent* event) override
-    {
-        Q_UNUSED(event);
-        if (!m_usage.available) {
-            return;
-        }
-
-        QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing, true);
-
-        const bool dark = ThemeManager::instance().isDark();
-        const qreal ratio = contextUsageRatio();
-        const QRectF arcRect = QRectF(rect()).adjusted(5.2, 5.2, -5.2, -5.2);
-        const QColor trackColor = dark ? QColor(255, 255, 255, 48) : QColor(0, 0, 0, 32);
-        QColor progressColor;
-        if (ratio >= 0.82) {
-            progressColor = dark ? QColor(255, 112, 112) : QColor(190, 58, 58);
-        } else if (ratio >= 0.62) {
-            progressColor = dark ? QColor(255, 190, 88) : QColor(178, 112, 28);
-        } else {
-            progressColor = dark ? QColor(112, 205, 255) : QColor(30, 124, 190);
-        }
-
-        painter.setBrush(Qt::NoBrush);
-        painter.setPen(QPen(trackColor, 2.3, Qt::SolidLine, Qt::RoundCap));
-        painter.drawEllipse(arcRect);
-        painter.setPen(QPen(progressColor, 2.3, Qt::SolidLine, Qt::RoundCap));
-        painter.drawArc(arcRect, 90 * 16, qRound(-360.0 * ratio * 16.0));
-    }
-
-private:
-    qreal contextUsageRatio() const
-    {
-        return qBound<qreal>(0.0,
-                             static_cast<qreal>(m_usage.usedTokens) /
-                                     static_cast<qreal>(qMax(1, m_usage.maxTokens)),
-                             1.0);
-    }
-
-    QString contextTooltipText() const
-    {
-        const int percent = qRound(contextUsageRatio() * 100.0);
-        const QLocale locale;
-        return QStringLiteral("上下文使用情况：%1%\n已使用：%2 / %3 tokens\n\n该数值由当前对话长度模拟生成，包含历史消息、系统提示和待发送内容。接近上限时，较早内容可能会被压缩或裁剪；需要完整保留上下文时，建议开启新对话或精简历史。")
-                .arg(percent)
-                .arg(locale.toString(m_usage.usedTokens))
-                .arg(locale.toString(m_usage.maxTokens));
-    }
-
-    void showContextTooltip()
-    {
-        if (!m_usage.available) {
-            hideContextTooltip();
-            return;
-        }
-
-        if (!m_contextTooltip) {
-            m_contextTooltip = new CustomTooltip(this);
-            m_contextTooltip->setBackgroundOpacity(1.0);
-        }
-        m_contextTooltip->setText(contextTooltipText());
-        const QPoint tooltipAnchor(width() / 2 - m_contextTooltip->width() / 2, -10);
-        m_contextTooltip->showTooltip(mapToGlobal(tooltipAnchor));
-    }
-
-    void hideContextTooltip()
-    {
-        if (m_contextTooltip) {
-            m_contextTooltip->hide();
-        }
-    }
-
-    static constexpr int kIndicatorSide = 28;
-
-    AiChatContextUsage m_usage;
-    CustomTooltip* m_contextTooltip = nullptr;
-};
-
 class SendButton final : public QAbstractButton
 {
 public:
@@ -536,7 +420,6 @@ AiChatFloatingInputBar::AiChatFloatingInputBar(QWidget* parent)
     : QWidget(parent)
     , m_inputEdit(new TransparentTextEdit(this))
     , m_addButton(new PlusButton(this))
-    , m_contextUsageIndicator(new ContextUsageIndicator(this))
     , m_permissionButton(new MenuTextButton(QStringLiteral("Default permissions"), this))
     , m_modelButton(new MenuTextButton(QString(), this))
     , m_actionButton(new SendButton(this))
@@ -596,7 +479,6 @@ AiChatFloatingInputBar::AiChatFloatingInputBar(QWidget* parent)
 
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
             this, &AiChatFloatingInputBar::applyTheme);
-
     applyTheme();
     updateActionButtonIcon();
     updateModelButtonText();
@@ -667,20 +549,12 @@ void AiChatFloatingInputBar::clearText()
 
 void AiChatFloatingInputBar::setContextUsage(const AiChatContextUsage& usage)
 {
-    if (auto* indicator = dynamic_cast<ContextUsageIndicator*>(m_contextUsageIndicator)) {
-        indicator->setUsage(usage);
-    }
-    updateInputGeometry();
+    Q_UNUSED(usage)
 }
 
 void AiChatFloatingInputBar::setContextUsageVisible(bool visible)
 {
-    if (!m_contextUsageIndicator) {
-        return;
-    }
-
-    m_contextUsageIndicator->setVisible(visible);
-    updateInputGeometry();
+    Q_UNUSED(visible)
 }
 
 int AiChatFloatingInputBar::preferredHeightForWidth(int width) const
@@ -796,7 +670,6 @@ void AiChatFloatingInputBar::applyTheme()
 
     updateActionButtonIcon();
     m_addButton->update();
-    m_contextUsageIndicator->update();
     m_permissionButton->update();
     m_modelButton->update();
     update();
@@ -852,7 +725,7 @@ void AiChatFloatingInputBar::showModelMenu()
         QStringLiteral("Low"),
         QStringLiteral("Medium"),
         QStringLiteral("High"),
-        QStringLiteral("Extra High"),
+        QStringLiteral("Max"),
     };
     for (const QString& level : thinkingLevels) {
         QAction* action = addMenuAction(menu, level, level == m_selectedThinkingLevel);
@@ -869,40 +742,16 @@ void AiChatFloatingInputBar::showModelMenu()
     auto* modelGroup = new QActionGroup(menu);
     modelGroup->setExclusive(true);
 
-    StyledActionMenu* deepSeekMenu = menu->addStyledMenu(QStringLiteral("DeepSeek V4 Pro"));
+    StyledActionMenu* deepSeekMenu = menu->addStyledMenu(QStringLiteral("DeepSeek"));
     const QStringList deepSeekModels = {
         QStringLiteral("DeepSeek V4 Pro"),
-        QStringLiteral("DeepSeek R1"),
-        QStringLiteral("Qwen3 Max"),
-        QStringLiteral("Claude Sonnet 4.5"),
-        QStringLiteral("GPT-5.5"),
-        QStringLiteral("Gemini 2.5 Pro"),
+        QStringLiteral("DeepSeek V4 Flash"),
     };
     for (const QString& model : deepSeekModels) {
         QAction* action = addMenuAction(deepSeekMenu, model, model == m_selectedModelName);
         modelGroup->addAction(action);
         connect(action, &QAction::triggered, this, [this, model]() {
             m_selectedModelName = model;
-            updateModelButtonText();
-            updateInputGeometry();
-        });
-    }
-
-    auto* speedModeGroup = new QActionGroup(menu);
-    speedModeGroup->setExclusive(true);
-
-    StyledActionMenu* speedMenu = menu->addStyledMenu(QStringLiteral("Speed"));
-    const QStringList speedModes = {
-        QStringLiteral("Standard"),
-        QStringLiteral("Speed"),
-    };
-    for (const QString& speedMode : speedModes) {
-        QAction* action = addMenuAction(speedMenu,
-                                        speedMode,
-                                        speedMode == m_selectedSpeedMode);
-        speedModeGroup->addAction(action);
-        connect(action, &QAction::triggered, this, [this, speedMode]() {
-            m_selectedSpeedMode = speedMode;
             updateModelButtonText();
             updateInputGeometry();
         });
@@ -926,7 +775,7 @@ void AiChatFloatingInputBar::updateModelButtonText()
 void AiChatFloatingInputBar::updateModelButtonState()
 {
     if (auto* button = dynamic_cast<MenuTextButton*>(m_modelButton)) {
-        button->setFastIconVisible(m_selectedSpeedMode == QStringLiteral("Speed"));
+        button->setFastIconVisible(false);
     }
 }
 
@@ -973,9 +822,6 @@ void AiChatFloatingInputBar::updateInputGeometry()
 
     int rightCursorX = m_actionButton->geometry().left() - kToolbarGap;
 
-    const bool showUsageIndicator = m_contextUsageIndicator && m_contextUsageIndicator->isVisible();
-    const QSize usageSize = showUsageIndicator ? m_contextUsageIndicator->sizeHint() : QSize();
-
     const QSize modelSize = m_modelButton->sizeHint();
     const int modelAvailableWidth = qMax(28, rightCursorX - kToolbarSideMargin);
     const int modelWidth = qMin(modelSize.width(), modelAvailableWidth);
@@ -986,15 +832,6 @@ void AiChatFloatingInputBar::updateInputGeometry()
                                modelSize.height());
 
     int rightClusterLeft = m_modelButton->geometry().left();
-    if (m_contextUsageIndicator && m_contextUsageIndicator->isVisible()) {
-        m_contextUsageIndicator->setGeometry(modelX - kToolbarGap - usageSize.width(),
-                                             toolbarY + (kToolbarHeight - usageSize.height()) / 2,
-                                             usageSize.width(),
-                                             usageSize.height());
-        rightClusterLeft = m_contextUsageIndicator->geometry().left();
-    } else if (m_contextUsageIndicator) {
-        m_contextUsageIndicator->setGeometry(0, 0, 0, 0);
-    }
 
     int cursorX = m_addButton->geometry().right() + 1 + kToolbarGap;
     const QSize permissionSize = m_permissionButton->sizeHint();

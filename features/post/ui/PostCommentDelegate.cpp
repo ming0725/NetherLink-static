@@ -21,6 +21,7 @@
 #include "shared/services/AppFonts.h"
 #include "shared/services/ImageService.h"
 #include "shared/theme/ThemeManager.h"
+#include "shared/ui/renderers/MediaPlaceholderRenderer.h"
 
 namespace {
 
@@ -473,10 +474,14 @@ void PostCommentDelegate::paint(QPainter* painter,
     painter->setClipRect(option.rect);
     painter->fillRect(option.rect, ThemeManager::instance().color(ThemeColor::PanelBackground));
 
-    painter->drawPixmap(layout.avatarRect,
-                        ImageService::instance().circularAvatar(comment->authorAvatarPath,
-                                                                layout.avatarRect.width(),
-                                                                dpr));
+    const QPixmap commentAvatar = ImageService::instance().circularAvatar(comment->authorAvatarPath,
+                                                                          layout.avatarRect.width(),
+                                                                          dpr);
+    if (commentAvatar.isNull()) {
+        MediaPlaceholderRenderer::drawAvatar(painter, layout.avatarRect);
+    } else {
+        painter->drawPixmap(layout.avatarRect, commentAvatar);
+    }
 
     drawSingleLineText(painter,
                        comment->authorName,
@@ -537,10 +542,14 @@ void PostCommentDelegate::paint(QPainter* painter,
         painter->save();
         painter->setClipRect(replyLayout.revealClipRect, Qt::IntersectClip);
         painter->setOpacity(qMin<qreal>(1.0, replyLayout.revealProgress * 1.6));
-        painter->drawPixmap(replyLayout.avatarRect,
-                            ImageService::instance().circularAvatar(reply.authorAvatarPath,
-                                                                    replyLayout.avatarRect.width(),
-                                                                    dpr));
+        const QPixmap replyAvatar = ImageService::instance().circularAvatar(reply.authorAvatarPath,
+                                                                            replyLayout.avatarRect.width(),
+                                                                            dpr);
+        if (replyAvatar.isNull()) {
+            MediaPlaceholderRenderer::drawAvatar(painter, replyLayout.avatarRect);
+        } else {
+            painter->drawPixmap(replyLayout.avatarRect, replyAvatar);
+        }
         drawSingleLineText(painter,
                            reply.authorName,
                            replyLayout.nameRect,

@@ -8,6 +8,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPalette>
+#include <QPixmap>
 #include <QPushButton>
 #include <QScrollBar>
 #include <QTimer>
@@ -23,6 +24,7 @@
 #include "shared/ui/ImageViewer.h"
 #include "shared/ui/popup/InWindowPopupDialogs.h"
 #include "shared/ui/StatefulPushButton.h"
+#include "shared/ui/renderers/MediaPlaceholderRenderer.h"
 #include "PostCommentDelegate.h"
 #include "PostDetailListView.h"
 #include "PostDetailView.h"
@@ -49,6 +51,19 @@ constexpr int kImageCounterRightInset = 14;
 constexpr qreal kImageArrowChevronAngleDegrees = 100.0;
 constexpr qreal kImageArrowChevronHalfHeight = 5.0;
 const QString kCommentIconSource = QStringLiteral(":/resources/icon/selected_message.png");
+
+QPixmap avatarPlaceholderPixmap(int size, qreal dpr)
+{
+    const QSize pixelSize(qMax(1, qRound(size * dpr)),
+                          qMax(1, qRound(size * dpr)));
+    QPixmap pixmap(pixelSize);
+    pixmap.setDevicePixelRatio(dpr);
+    pixmap.fill(Qt::transparent);
+
+    QPainter painter(&pixmap);
+    MediaPlaceholderRenderer::drawAvatar(&painter, QRect(0, 0, size, size));
+    return pixmap;
+}
 
 QString likeIconSource(bool liked)
 {
@@ -211,6 +226,14 @@ PostDetailView::PostDetailView(QWidget* parent)
     setMouseTracking(true);
     setAttribute(Qt::WA_TranslucentBackground);
     disableContextMenu(this);
+    connect(&ImageService::instance(), &ImageService::previewReady, this, [this]() {
+        const QPixmap avatar = ImageService::instance().circularAvatar(m_state.authorAvatarPath,
+                                                                       32,
+                                                                       devicePixelRatioF());
+        m_authorAvatar->setPixmap(avatar.isNull()
+                                  ? avatarPlaceholderPixmap(32, devicePixelRatioF())
+                                  : avatar);
+    });
 }
 
 void PostDetailView::setController(PostSessionController* controller)
@@ -920,7 +943,12 @@ void PostDetailView::applySummaryState(const PostSummary& summary, bool resetDet
 void PostDetailView::syncUiFromState()
 {
     m_authorName->setText(m_state.authorName);
-    m_authorAvatar->setPixmap(ImageService::instance().circularAvatar(m_state.authorAvatarPath, 32));
+    const QPixmap avatar = ImageService::instance().circularAvatar(m_state.authorAvatarPath,
+                                                                   32,
+                                                                   devicePixelRatioF());
+    m_authorAvatar->setPixmap(avatar.isNull()
+                              ? avatarPlaceholderPixmap(32, devicePixelRatioF())
+                              : avatar);
     syncFollowUi();
     const QString contentDateText = postDateText(m_state.contentCreatedAt);
     if (m_detailModel) {

@@ -30,6 +30,7 @@
 #include "shared/ui/PaintedLabel.h"
 #include "shared/ui/StatefulPushButton.h"
 #include "shared/ui/popup/InWindowPopupDialogs.h"
+#include "shared/ui/renderers/MediaPlaceholderRenderer.h"
 
 #ifdef Q_OS_WIN
 #include "platform/windows/WindowsPopupChrome.h"
@@ -37,7 +38,7 @@
 
 namespace {
 
-constexpr int kPopupWidth = 280;
+constexpr int kPopupWidth = 312;
 constexpr int kHorizontalMargin = 28;
 constexpr int kTopMargin = 30;
 constexpr int kBottomMargin = 24;
@@ -53,6 +54,8 @@ constexpr int kInfoRowMinHeight = 24;
 constexpr int kInfoButtonSpacing = 14;
 constexpr int kButtonWidth = 132;
 constexpr int kButtonHeight = 36;
+constexpr int kIdGap = 5;
+constexpr int kIdTextSafetyPadding = 8;
 
 PaintedLabel* makeThemedLabel(ThemeColor role, int pixelSize, QWidget* parent)
 {
@@ -115,6 +118,10 @@ FriendProfilePopup::FriendProfilePopup(QWidget* parent)
     , m_statusIcon(new QLabel(this))
     , m_actionButton(new StatefulPushButton(this))
 {
+    connect(&ImageService::instance(), &ImageService::previewReady, this, [this]() {
+        update(avatarRect());
+    });
+
     setFixedWidth(kPopupWidth);
     setAttribute(Qt::WA_TranslucentBackground);
 #ifdef Q_OS_WIN
@@ -337,7 +344,11 @@ void FriendProfilePopup::paintEvent(QPaintEvent* event)
         const QPixmap avatarPixmap = ImageService::instance().circularAvatar(m_avatarSource,
                                                                              kAvatarSize,
                                                                              devicePixelRatioF());
-        painter.drawPixmap(avatar, avatarPixmap);
+        if (avatarPixmap.isNull()) {
+            MediaPlaceholderRenderer::drawAvatar(&painter, avatar);
+        } else {
+            painter.drawPixmap(avatar, avatarPixmap);
+        }
     }
 
     const int separatorY = avatar.top() + kAvatarSize + kSeparatorTopSpacing;
@@ -517,21 +528,21 @@ void FriendProfilePopup::layoutPopup()
     const int idHeight = QFontMetrics(m_idLabel->font()).height() + 2;
     const int statusHeight = qMax(12, QFontMetrics(m_statusLabel->font()).height() + 2);
     const int idPrefixWidth = QFontMetrics(m_idPrefixLabel->font()).horizontalAdvance(QStringLiteral("ID"));
-    constexpr int idGap = 5;
     const int copyButtonWidth = m_copyIdButton->width();
-    const int maxIdWidth = qMax(0, identityWidth - idPrefixWidth - idGap * 2 - copyButtonWidth);
+    const int maxIdWidth = qMax(0, identityWidth - idPrefixWidth - kIdGap * 2 - copyButtonWidth);
     const int idTextWidth = qMin(maxIdWidth,
-                                 QFontMetrics(m_idLabel->font()).horizontalAdvance(m_user.id));
+                                 QFontMetrics(m_idLabel->font()).horizontalAdvance(m_user.id)
+                                         + kIdTextSafetyPadding);
 
     m_contentWidget->setGeometry(kHorizontalMargin, 0, contentWidth, height());
     m_nameLabel->setGeometry(identityX, nameY, identityWidth, nameHeight);
     const int idY = m_nameLabel->geometry().bottom() + 5;
     m_idPrefixLabel->setGeometry(identityX, idY, idPrefixWidth, idHeight);
-    m_idLabel->setGeometry(m_idPrefixLabel->geometry().right() + idGap,
+    m_idLabel->setGeometry(m_idPrefixLabel->geometry().right() + kIdGap,
                            idY,
                            idTextWidth,
                            idHeight);
-    m_copyIdButton->move(m_idLabel->geometry().right() + idGap,
+    m_copyIdButton->move(m_idLabel->geometry().right() + kIdGap,
                          idY + (idHeight - m_copyIdButton->height()) / 2);
     m_statusIcon->setGeometry(identityX, m_idLabel->geometry().bottom() + 7, 12, 12);
     m_statusLabel->setGeometry(m_statusIcon->geometry().right() + 6,

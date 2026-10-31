@@ -227,6 +227,17 @@ void FloatingInputBar::initQtFallbackUi()
 
     m_tooltip = new CustomTooltip(this);
     m_tooltip->hide();
+
+    // Child widgets created before their parent is shown become visible with
+    // it automatically. When switching from the native macOS input bar at
+    // runtime, however, this parent is already visible and newly-created Qt
+    // children remain explicitly hidden until show() is called.
+    for (QLabel* label : toolbarLabels) {
+        label->show();
+    }
+    m_inputEdit->show();
+    m_sendLabel->show();
+
     applyTheme();
 }
 
@@ -331,7 +342,10 @@ void FloatingInputBar::applyTheme()
 
 void FloatingInputBar::updateFloatingPanelShadow()
 {
-    if (shouldUseQtFallbackLiquidGlass()) {
+    const bool qtEffect = shouldUseQtFallbackLiquidGlass();
+    const bool liquidGlass = qtEffect && resolvedQtFallbackInputBarEffect()
+            == ThemeManager::QtFallbackInputBarEffect::LiquidGlass;
+    if (qtEffect && !liquidGlass) {
         if (graphicsEffect()) {
             setGraphicsEffect(nullptr);
         }
@@ -342,6 +356,15 @@ void FloatingInputBar::updateFloatingPanelShadow()
     if (!shadow) {
         shadow = new QGraphicsDropShadowEffect(this);
         setGraphicsEffect(shadow);
+    }
+
+    if (liquidGlass) {
+        // Project outside the glass instead of darkening its transmission.
+        // The 16px blur + 2px offset fit the chat area's 18px bottom margin.
+        shadow->setBlurRadius(16);
+        shadow->setOffset(0, 2);
+        shadow->setColor(QColor(0, 0, 0, ThemeManager::instance().isDark() ? 88 : 48));
+        return;
     }
 
     shadow->setBlurRadius(30);

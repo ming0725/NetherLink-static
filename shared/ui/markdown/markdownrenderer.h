@@ -56,6 +56,8 @@ public:
     struct TableCell {
         QString text;
         QVector<InlineSpan> spans;
+        QString mathSource;
+        bool math = false;
     };
 
     struct TableRow {
@@ -81,6 +83,9 @@ public:
         int settingValue = 0;
         int level = 0;
         int number = 0;
+        bool quote = false;
+        bool taskListItem = false;
+        bool taskChecked = false;
         bool open = false;
     };
 

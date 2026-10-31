@@ -75,6 +75,7 @@ private:
     StatefulPushButton* m_clearHistoryButton = nullptr;
     StatefulPushButton* m_transferOwnerButton = nullptr;
     StatefulPushButton* m_exitGroupButton = nullptr;
+    QWidget* m_transferOwnerAction = nullptr;
     QWidget* m_groupInfoCard = nullptr;
     QWidget* m_memberSummaryCard = nullptr;
     QWidget* m_memberSummaryHeader = nullptr;

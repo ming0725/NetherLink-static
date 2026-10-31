@@ -42,12 +42,14 @@ private:
     void renderBlurPass(unsigned int sourceTexture,
                         QOpenGLFramebufferObject& target,
                         const QVector2D& texelStep);
-    void renderGlassPass(unsigned int blurredTexture,
+    void renderGlassPass(unsigned int sourceTexture,
+                         unsigned int softenedTexture,
                          QOpenGLFramebufferObject& target,
                          const QVector2D& size,
                          const QRectF& physicalShapeRect,
                          float radius,
                          float shapeInset,
+                         float pixelScale,
                          float dark);
 
     QOffscreenSurface* m_surface = nullptr;

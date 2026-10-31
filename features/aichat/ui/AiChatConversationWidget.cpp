@@ -410,16 +410,11 @@ void AiChatConversationWidget::updateBottomSpace()
 
 void AiChatConversationWidget::requestContextUsage()
 {
-    if (!m_controller || m_currentConversation.conversationId.isEmpty()) {
-        if (m_inputBar) {
-            m_inputBar->setContextUsageVisible(false);
-        }
-        return;
+    m_pendingContextUsageRequestId = 0;
+    m_pendingContextUsageConversationId.clear();
+    if (m_inputBar) {
+        m_inputBar->setContextUsageVisible(false);
     }
-
-    const AiChatContextUsageRequest request {m_currentConversation.conversationId};
-    m_pendingContextUsageConversationId = request.conversationId;
-    m_pendingContextUsageRequestId = m_controller->loadContextUsageAsync(request);
 }
 
 void AiChatConversationWidget::updateHeader()
@@ -672,15 +667,14 @@ void AiChatConversationWidget::onContextUsageLoaded(int requestId,
                                                     const AiChatContextUsageRequest& request,
                                                     const AiChatContextUsage& usage)
 {
-    if (requestId != m_pendingContextUsageRequestId ||
-            request.conversationId != m_pendingContextUsageConversationId ||
-            request.conversationId != m_currentConversation.conversationId) {
-        return;
-    }
-
+    Q_UNUSED(requestId)
+    Q_UNUSED(request)
+    Q_UNUSED(usage)
     m_pendingContextUsageRequestId = 0;
     m_pendingContextUsageConversationId.clear();
-    m_inputBar->setContextUsage(usage);
+    if (m_inputBar) {
+        m_inputBar->setContextUsageVisible(false);
+    }
 }
 
 void AiChatConversationWidget::cancelActiveAiReplyStream()

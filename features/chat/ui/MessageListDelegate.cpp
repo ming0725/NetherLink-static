@@ -7,6 +7,7 @@
 #include "shared/services/ImageService.h"
 #include "shared/theme/ThemeManager.h"
 #include "shared/ui/renderers/BadgeRenderer.h"
+#include "shared/ui/renderers/MediaPlaceholderRenderer.h"
 #include "features/chat/model/MessageListModel.h"
 
 namespace {
@@ -134,7 +135,11 @@ void MessageListDelegate::paint(QPainter* painter,
     const QPixmap avatar = ImageService::instance().circularAvatar(avatarPath,
                                                                    kAvatarSize,
                                                                    devicePixelRatio);
-    painter->drawPixmap(avatarRect, avatar);
+    if (avatar.isNull()) {
+        MediaPlaceholderRenderer::drawAvatar(painter, avatarRect);
+    } else {
+        painter->drawPixmap(avatarRect, avatar);
+    }
 
     const int contentLeft = avatarRect.right() + kContentSpacing + 1;
     const int rightEdge = option.rect.right() - kRightPadding;

@@ -7,6 +7,7 @@
 #include "shared/services/ImageService.h"
 #include "shared/theme/ThemeManager.h"
 #include "shared/ui/GlobalNotification.h"
+#include "shared/ui/renderers/MediaPlaceholderRenderer.h"
 #include <QAbstractTextDocumentLayout>
 #include <QPainter>
 #include <QRegularExpression>
@@ -140,6 +141,33 @@ bool isGroupSystemEventMessage(const ChatMessage* message)
     }
     return message->getType() == MessageType::GroupMemberJoined ||
            message->getType() == MessageType::GroupSystemEvent;
+}
+
+QSize imageBubbleSize(const ImageMessage* message, int maxWidth)
+{
+    constexpr int kImageMaxHeight = 200;
+    QSize sourceSize = ImageService::instance().sourceSize(message->getImageSource());
+    if (!sourceSize.isValid()) {
+        sourceSize = QSize(qMin(maxWidth, 180), 135);
+    }
+
+    return sourceSize.scaled(maxWidth,
+                             kImageMaxHeight,
+                             Qt::KeepAspectRatio);
+}
+
+void drawPlainImagePlaceholder(QPainter* painter, const QRect& rect, int radius)
+{
+    if (!painter || rect.isEmpty()) {
+        return;
+    }
+
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(ThemeManager::instance().color(ThemeColor::ImagePlaceholder));
+    painter->drawRoundedRect(rect, radius, radius);
+    painter->restore();
 }
 
 QString referenceSenderName(const ChatMessage* referencedMessage)
@@ -854,7 +882,11 @@ void ChatItemDelegate::drawMessageReference(QPainter* painter,
             QPainterPath clipPath;
             clipPath.addRoundedRect(imageRect, REFERENCE_IMAGE_RADIUS, REFERENCE_IMAGE_RADIUS);
             painter->setClipPath(clipPath);
-            painter->drawPixmap(imageRect, image);
+            if (image.isNull()) {
+                drawPlainImagePlaceholder(painter, imageRect, REFERENCE_IMAGE_RADIUS);
+            } else {
+                painter->drawPixmap(imageRect, image);
+            }
             painter->restore();
             return;
         }
@@ -893,7 +925,11 @@ void ChatItemDelegate::drawAvatar(QPainter* painter, const QRect& rect,
     const QPixmap avatar = ImageService::instance().circularAvatar(avatarPath,
                                                                    rect.width(),
                                                                    painter->device()->devicePixelRatioF());
-    painter->drawPixmap(rect, avatar);
+    if (avatar.isNull()) {
+        MediaPlaceholderRenderer::drawAvatar(painter, rect);
+    } else {
+        painter->drawPixmap(rect, avatar);
+    }
 }
 
 void ChatItemDelegate::drawTextMessage(QPainter* painter, const QRect& rect,
@@ -1024,11 +1060,6 @@ void ChatItemDelegate::drawImageMessage(QPainter* painter, const QRect& rect,
                                       const QString& imageSource,
                                       bool isSelected) const
 {
-    const QSize sourceSize = ImageService::instance().sourceSize(imageSource);
-    if (!sourceSize.isValid()) {
-        return;
-    }
-
     const QPixmap image = ImageService::instance().scaled(imageSource,
                                                           rect.size(),
                                                           Qt::KeepAspectRatio,
@@ -1038,7 +1069,11 @@ void ChatItemDelegate::drawImageMessage(QPainter* painter, const QRect& rect,
     clipPath.addRoundedRect(rect, IMAGE_RADIUS, IMAGE_RADIUS);
     painter->save();
     painter->setClipPath(clipPath);
-    painter->drawPixmap(rect, image);
+    if (image.isNull()) {
+        drawPlainImagePlaceholder(painter, rect, IMAGE_RADIUS);
+    } else {
+        painter->drawPixmap(rect, image);
+    }
     if (isSelected) {
         painter->fillRect(rect, ThemeManager::instance().color(ThemeColor::ScrollThumb));
     }
@@ -1218,13 +1253,7 @@ QSize ChatItemDelegate::sizeHint(const QStyleOptionViewItem& option,
             bubbleHeight = textSize.height() + 2 * BUBBLE_PADDING;
         } else if (message->getType() == MessageType::Image) {
             const ImageMessage* imgMsg = static_cast<const ImageMessage*>(message);
-            const QSize sourceSize = ImageService::instance().sourceSize(imgMsg->getImageSource());
-            if (sourceSize.isValid()) {
-                QSize scaledSize = sourceSize.scaled(maxBubbleWidth,
-                                                     IMAGE_MAX_HEIGHT,
-                                                     Qt::KeepAspectRatio);
-                bubbleHeight = scaledSize.height();
-            }
+            bubbleHeight = imageBubbleSize(imgMsg, maxBubbleWidth).height();
         }
 
         int referenceHeight = 0;
@@ -1263,14 +1292,9 @@ QRect ChatItemDelegate::calculateBubbleRect(const QRect& contentRect,
         bubbleHeight = textSize.height() + 2 * BUBBLE_PADDING;
     } else if (message->getType() == MessageType::Image) {
         const ImageMessage* imgMsg = static_cast<const ImageMessage*>(message);
-        const QSize sourceSize = ImageService::instance().sourceSize(imgMsg->getImageSource());
-        if (sourceSize.isValid()) {
-            QSize scaledSize = sourceSize.scaled(maxWidth,
-                                                 IMAGE_MAX_HEIGHT,
-                                                 Qt::KeepAspectRatio);
-            bubbleWidth = scaledSize.width();
-            bubbleHeight = scaledSize.height();
-        }
+        const QSize scaledSize = imageBubbleSize(imgMsg, maxWidth);
+        bubbleWidth = scaledSize.width();
+        bubbleHeight = scaledSize.height();
     }
 
     bubbleWidth = qMin(bubbleWidth, maxWidth);

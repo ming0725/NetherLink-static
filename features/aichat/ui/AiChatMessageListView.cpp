@@ -126,7 +126,7 @@ AiChatMessageListView::AiChatMessageListView(QWidget* parent)
     setUniformItemSizes(false);
     setLayoutMode(QListView::Batched);
     setBatchSize(32);
-    setSpacing(2);
+    setSpacing(0);
     setMouseTracking(true);
     viewport()->setMouseTracking(true);
     setThemeBackgroundRole(ThemeColor::PanelBackground);

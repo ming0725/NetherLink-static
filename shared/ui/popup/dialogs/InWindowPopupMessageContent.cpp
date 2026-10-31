@@ -33,6 +33,20 @@ MessageContent::MessageContent(const QString& title,
     buttonLayout->setSpacing(10);
     buttonLayout->addStretch();
 
+    if (defaultButton == Button::Ok) {
+        auto* okButton = DialogStyle::createButton(QStringLiteral("确认"), this);
+        okButton->setPrimaryStyle();
+        okButton->setFocus();
+        buttonLayout->addWidget(okButton);
+        layout->addLayout(buttonLayout);
+        connect(okButton, &QPushButton::clicked, this, [this]() {
+            if (buttonActivated) {
+                buttonActivated(Button::Ok);
+            }
+        });
+        return;
+    }
+
     auto* noButton = DialogStyle::createButton(QStringLiteral("取消"), this);
     DialogStyle::applyDefaultButtonStyle(noButton);
     auto* yesButton = DialogStyle::createButton(QStringLiteral("确认"), this);

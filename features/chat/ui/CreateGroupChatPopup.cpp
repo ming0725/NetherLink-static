@@ -24,6 +24,7 @@
 #include "shared/theme/ThemeManager.h"
 #include "shared/ui/IconLineEdit.h"
 #include "shared/ui/StatefulPushButton.h"
+#include "shared/ui/renderers/MediaPlaceholderRenderer.h"
 #include "shared/ui/popup/InWindowPopupOverlay.h"
 
 namespace {
@@ -343,12 +344,7 @@ void drawAvatar(QPainter* painter, const QString& avatarPath, const QRect& avata
                                                                           avatarRect.width(),
                                                                           dpr);
     if (avatar.isNull()) {
-        painter->save();
-        painter->setRenderHint(QPainter::Antialiasing, true);
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(ThemeManager::instance().color(ThemeColor::ImagePlaceholder));
-        painter->drawEllipse(avatarRect);
-        painter->restore();
+        MediaPlaceholderRenderer::drawAvatar(painter, avatarRect);
         return;
     }
     painter->drawPixmap(avatarRect, avatar);

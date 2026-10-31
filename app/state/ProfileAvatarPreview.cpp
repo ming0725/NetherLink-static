@@ -4,6 +4,7 @@
 #include "shared/services/AudioService.h"
 #include "shared/services/ImageService.h"
 #include "shared/theme/ThemeManager.h"
+#include "shared/ui/renderers/MediaPlaceholderRenderer.h"
 
 #include <QDir>
 #include <QEasingCurve>
@@ -69,8 +70,7 @@ void ProfileAvatarPreview::paintEvent(QPaintEvent*)
         painter.drawPixmap(avatarRect, avatar);
         painter.restore();
     } else {
-        painter.setBrush(ThemeManager::instance().color(ThemeColor::ImagePlaceholder));
-        painter.drawEllipse(avatarRect);
+        MediaPlaceholderRenderer::drawAvatar(&painter, avatarRect);
     }
 
     if (m_hoverProgress > 0.01) {

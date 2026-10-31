@@ -8,6 +8,7 @@
 #include "shared/services/ImageService.h"
 #include "shared/services/AppFonts.h"
 #include "shared/theme/ThemeManager.h"
+#include "shared/ui/renderers/MediaPlaceholderRenderer.h"
 #include "features/post/model/PostFeedModel.h"
 #include "PostMasonryView.h"
 #include "PostTypography.h"
@@ -68,11 +69,13 @@ void PostCardDelegate::paint(QPainter* painter,
                                                                    layout.imageRect.size(),
                                                                    12,
                                                                    devicePixelRatio);
-        painter->drawPixmap(layout.imageRect, cover);
+        if (cover.isNull()) {
+            MediaPlaceholderRenderer::drawImage(painter, layout.imageRect, 12);
+        } else {
+            painter->drawPixmap(layout.imageRect, cover);
+        }
     } else {
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(ThemeManager::instance().color(ThemeColor::ImagePlaceholder));
-        painter->drawRoundedRect(layout.imageRect, 12, 12);
+        MediaPlaceholderRenderer::drawImage(painter, layout.imageRect, 12);
     }
 
     qreal hoverOpacity = 0.0;
@@ -105,7 +108,11 @@ void PostCardDelegate::paint(QPainter* painter,
     const QPixmap avatar = ImageService::instance().circularAvatar(avatarPath,
                                                                    layout.avatarRect.width(),
                                                                    devicePixelRatio);
-    painter->drawPixmap(layout.avatarRect, avatar);
+    if (avatar.isNull()) {
+        MediaPlaceholderRenderer::drawAvatar(painter, layout.avatarRect);
+    } else {
+        painter->drawPixmap(layout.avatarRect, avatar);
+    }
 
     painter->setFont(metaFont());
     painter->setPen(ThemeManager::instance().color(ThemeColor::SecondaryText));

@@ -107,8 +107,9 @@ void drawNoticeRow(QPainter* painter,
     const int arrowCenterY = rect.center().y() + arrowCenterYOffset;
     int rightLimit = arrowCenterX - kArrowBadgeGap;
 
-    const BadgeLayout badgeLayout = BadgeRenderer::layoutForUnreadCount(
-        unreadCount, false, selected, colors.dark);
+    const BadgeLayout badgeLayout = selected
+        ? BadgeLayout{}
+        : BadgeRenderer::layoutForUnreadCount(unreadCount, false, selected, colors.dark);
     if (badgeLayout.size.isValid()) {
         const int badgeX = rightLimit - badgeLayout.size.width();
         const QRect badgeRect(badgeX,

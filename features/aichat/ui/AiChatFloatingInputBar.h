@@ -86,7 +86,6 @@ private:
 
     TransparentTextEdit* m_inputEdit = nullptr;
     QAbstractButton* m_addButton = nullptr;
-    QWidget* m_contextUsageIndicator = nullptr;
     QAbstractButton* m_permissionButton = nullptr;
     QAbstractButton* m_modelButton = nullptr;
     QAbstractButton* m_actionButton = nullptr;
@@ -94,7 +93,6 @@ private:
     QElapsedTimer m_borderGlowClock;
     QString m_selectedThinkingLevel = QStringLiteral("High");
     QString m_selectedModelName = QStringLiteral("DeepSeek V4 Pro");
-    QString m_selectedSpeedMode = QStringLiteral("Standard");
     BorderGlowState m_borderGlowState = BorderGlowState::Idle;
     QVector<BorderGlowSample> m_borderGlowSamples;
     QRectF m_borderGlowCachedRect;

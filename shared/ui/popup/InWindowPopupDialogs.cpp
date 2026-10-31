@@ -11,15 +11,17 @@
 InWindowPopup::Button InWindowPopup::question(QWidget* parent,
                                              const QString& title,
                                              const QString& text,
-                                             Button defaultButton)
+                                             Button defaultButton,
+                                             bool dismissOnOutsideClick,
+                                             bool dismissOnEscape)
 {
     Button result = Button::No;
     auto* content = new MessageContent(title, text, defaultButton);
 
     InWindowPopupOverlay::Options options;
     options.maximumPopupSize = QSize(460, 260);
-    options.dismissOnOutsideClick = true;
-    options.dismissOnEscape = true;
+    options.dismissOnOutsideClick = dismissOnOutsideClick;
+    options.dismissOnEscape = dismissOnEscape;
 
     QPointer<InWindowPopupOverlay> overlay = InWindowPopupOverlay::showPopup(parent, content, options);
     if (!overlay) {
@@ -29,7 +31,7 @@ InWindowPopup::Button InWindowPopup::question(QWidget* parent,
     content->buttonActivated = [&result, overlay](Button button) {
         result = button;
         if (overlay) {
-            overlay->closePopup(button == Button::Yes
+            overlay->closePopup(button == Button::Yes || button == Button::Ok
                                 ? InWindowPopupOverlay::DismissReason::Accepted
                                 : InWindowPopupOverlay::DismissReason::Rejected);
         }

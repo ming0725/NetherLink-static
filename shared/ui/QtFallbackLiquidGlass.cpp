@@ -27,12 +27,18 @@
 
 namespace {
 
-constexpr qreal kLiquidGlassRenderScale = 0.82;
-constexpr qreal kLiquidGlassInteractiveRenderScale = 0.66;
+// Use one authoritative pixel size. Changing resolution between interactive and
+// settled frames moves refracted samples and appears as temporal shaking.
+constexpr qreal kLiquidGlassRenderScale = 1.0;
+constexpr qreal kLiquidGlassInteractiveRenderScale = 1.0;
 constexpr qreal kGaussianBlurRenderScale = 0.62;
 constexpr qreal kLiquidGlassBorderWidth = 1.0;
 constexpr qreal kLiquidGlassLightBorderWidth = 1.0;
-constexpr float kLiquidGlassBlurStep = 1.7f;
+constexpr int kLiquidGlassSamplePaddingDip = 32;
+constexpr int kLiquidGlassBlurIterations = 6;
+// Frosted transmission: keep the six GPU blur iterations, but measure the tap
+// spacing in DIP so the material has the same softness on Retina displays.
+constexpr qreal kLiquidGlassFrostBlurStepDip = 1.15;
 constexpr int kLiquidGlassRefreshDelayMs = 33;
 constexpr int kGaussianScrollRefreshDelayMs = 16;
 constexpr int kGaussianStaticRefreshDelayMs = 33;
@@ -215,16 +221,22 @@ QImage QtFallbackLiquidGlassRenderer::render(const QImage& source,
         QOpenGLFramebufferObject horizontalFbo(renderSize, fboFormat);
         QOpenGLFramebufferObject verticalFbo(renderSize, fboFormat);
         if (horizontalFbo.isValid() && verticalFbo.isValid()) {
-            renderBlurPass(sourceTexture,
-                           horizontalFbo,
-                           QVector2D(kLiquidGlassBlurStep / qMax(1, renderSize.width()), 0.0f));
-            renderBlurPass(horizontalFbo.texture(),
-                           verticalFbo,
-                           QVector2D(0.0f, kLiquidGlassBlurStep / qMax(1, renderSize.height())));
+            const qreal pixelScale = devicePixelRatio * renderScale;
+            const float blurStep = static_cast<float>(kLiquidGlassFrostBlurStepDip * pixelScale);
+            unsigned int blurSource = sourceTexture;
+            for (int iteration = 0; iteration < kLiquidGlassBlurIterations; ++iteration) {
+                renderBlurPass(blurSource,
+                               horizontalFbo,
+                               QVector2D(blurStep / qMax(1, renderSize.width()), 0.0f));
+                renderBlurPass(horizontalFbo.texture(),
+                               verticalFbo,
+                               QVector2D(0.0f, blurStep / qMax(1, renderSize.height())));
+                blurSource = verticalFbo.texture();
+            }
             const qreal borderWidth = liquidGlassBorderWidthForMode(dark);
             const qreal contentInset = liquidGlassContentInset(borderWidth, dark);
-            const qreal pixelScale = devicePixelRatio * renderScale;
-            renderGlassPass(verticalFbo.texture(),
+            renderGlassPass(sourceTexture,
+                            verticalFbo.texture(),
                             horizontalFbo,
                             QVector2D(static_cast<float>(renderSize.width()),
                                       static_cast<float>(renderSize.height())),
@@ -232,6 +244,7 @@ QImage QtFallbackLiquidGlassRenderer::render(const QImage& source,
                             static_cast<float>(liquidGlassInsetRadius(m_cornerRadius,
                                                                        contentInset) * pixelScale),
                             static_cast<float>(contentInset * pixelScale),
+                            static_cast<float>(pixelScale),
                             dark ? 1.0f : 0.0f);
 
             output = horizontalFbo.toImage(false).convertToFormat(QImage::Format_ARGB32_Premultiplied);
@@ -406,6 +419,12 @@ void QtFallbackLiquidGlassRenderer::bindTexture(unsigned int texture, unsigned i
 {
     m_gl->glActiveTexture(textureUnit);
     m_gl->glBindTexture(GL_TEXTURE_2D, texture);
+    // QOpenGLFramebufferObject attachment textures default to GL_NEAREST.
+    // Fractional Gaussian taps and refraction require linear filtering.
+    m_gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    m_gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    m_gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    m_gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 }
 
 void QtFallbackLiquidGlassRenderer::prepareTarget(QOpenGLFramebufferObject& target)
@@ -426,24 +445,32 @@ void QtFallbackLiquidGlassRenderer::renderBlurPass(unsigned int sourceTexture,
     bindTexture(sourceTexture, GL_TEXTURE0);
     m_blurProgram->setUniformValue("u_texture", 0);
     m_blurProgram->setUniformValue("u_texelStep", texelStep);
+    m_blurProgram->setUniformValue(
+            "u_texelSize",
+            QVector2D(1.0f / qMax(1, target.size().width()),
+                      1.0f / qMax(1, target.size().height())));
     drawQuad(*m_blurProgram);
     m_blurProgram->release();
     m_gl->glBindTexture(GL_TEXTURE_2D, 0);
     target.release();
 }
 
-void QtFallbackLiquidGlassRenderer::renderGlassPass(unsigned int blurredTexture,
+void QtFallbackLiquidGlassRenderer::renderGlassPass(unsigned int sourceTexture,
+                                                    unsigned int softenedTexture,
                                                     QOpenGLFramebufferObject& target,
                                                     const QVector2D& size,
                                                     const QRectF& physicalShapeRect,
                                                     float radius,
                                                     float shapeInset,
+                                                    float pixelScale,
                                                     float dark)
 {
     prepareTarget(target);
     m_glassProgram->bind();
-    bindTexture(blurredTexture, GL_TEXTURE0);
-    m_glassProgram->setUniformValue("u_blurTexture", 0);
+    bindTexture(sourceTexture, GL_TEXTURE0);
+    bindTexture(softenedTexture, GL_TEXTURE1);
+    m_glassProgram->setUniformValue("u_sourceTexture", 0);
+    m_glassProgram->setUniformValue("u_softTexture", 1);
     m_glassProgram->setUniformValue("u_size", size);
     m_glassProgram->setUniformValue("u_shapeRect",
                                     QVector4D(static_cast<float>(physicalShapeRect.x()),
@@ -452,9 +479,12 @@ void QtFallbackLiquidGlassRenderer::renderGlassPass(unsigned int blurredTexture,
                                               static_cast<float>(physicalShapeRect.height())));
     m_glassProgram->setUniformValue("u_radius", radius);
     m_glassProgram->setUniformValue("u_shapeInset", shapeInset);
+    m_glassProgram->setUniformValue("u_pixelScale", pixelScale);
     m_glassProgram->setUniformValue("u_dark", dark);
     drawQuad(*m_glassProgram);
     m_glassProgram->release();
+    m_gl->glActiveTexture(GL_TEXTURE1);
+    m_gl->glBindTexture(GL_TEXTURE_2D, 0);
     m_gl->glActiveTexture(GL_TEXTURE0);
     m_gl->glBindTexture(GL_TEXTURE_2D, 0);
     target.release();
@@ -672,6 +702,7 @@ void QtFallbackLiquidGlassController::paint(QPainter& painter)
     if (!m_background.isNull()) {
         painter.save();
         painter.setClipPath(contentPath);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
         painter.drawImage(targetRect(), m_background);
         painter.restore();
     } else {
@@ -681,30 +712,48 @@ void QtFallbackLiquidGlassController::paint(QPainter& painter)
         scheduleUpdate(kLiquidGlassRefreshDelayMs);
     }
 
-    QColor tint = gaussianBlur
+    // The shader owns absorption, frost and curved-surface lighting. A flat
+    // painter tint/sheen over that result would wash out its directional rim.
+    const bool shaderGlass = !gaussianBlur && !m_background.isNull();
+    if (!shaderGlass) {
+        QColor tint = gaussianBlur
             ? (darkMode ? QColor(24, 26, 30, 62) : QColor(255, 255, 255, 58))
-            : (darkMode ? QColor(24, 26, 30, 68) : QColor(255, 255, 255, 60));
-    painter.fillPath(contentPath, tint);
+            : (darkMode ? QColor(24, 26, 30, 34) : QColor(255, 255, 255, 22));
+        painter.fillPath(contentPath, tint);
 
-    if (darkMode && !gaussianBlur) {
-        QLinearGradient sheen(shapeRect.bottomLeft(), shapeRect.topLeft());
-        sheen.setColorAt(0.0, QColor(255, 255, 255, 16));
-        sheen.setColorAt(0.42, QColor(255, 255, 255, 4));
-        sheen.setColorAt(1.0, QColor(255, 255, 255, 0));
-        painter.fillPath(contentPath, sheen);
+        if (darkMode && !gaussianBlur) {
+            QLinearGradient sheen(shapeRect.bottomLeft(), shapeRect.topLeft());
+            sheen.setColorAt(0.0, QColor(255, 255, 255, 16));
+            sheen.setColorAt(0.42, QColor(255, 255, 255, 4));
+            sheen.setColorAt(1.0, QColor(255, 255, 255, 0));
+            painter.fillPath(contentPath, sheen);
+        }
     }
 
-    QPen border(gaussianBlur
-                ? (darkMode ? QColor(255, 255, 255, 40) : QColor(18, 22, 28, 54))
-                : (darkMode
-                ? QColor(255, 255, 255, 50)
-                : QColor(18, 22, 28, 72)));
-    border.setWidthF(borderWidth);
-    border.setCapStyle(Qt::RoundCap);
-    border.setJoinStyle(Qt::RoundJoin);
-    painter.setPen(border);
-    painter.setBrush(Qt::NoBrush);
-    painter.drawPath(borderPath);
+    if (!shaderGlass) {
+        QPen border(gaussianBlur
+                    ? (darkMode ? QColor(255, 255, 255, 40) : QColor(18, 22, 28, 54))
+                    : (darkMode ? QColor(255, 255, 255, 44) : QColor(255, 255, 255, 66)));
+        border.setWidthF(borderWidth);
+        border.setCapStyle(Qt::RoundCap);
+        border.setJoinStyle(Qt::RoundJoin);
+        painter.setPen(border);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPath(borderPath);
+    }
+
+    if (!gaussianBlur && !shaderGlass) {
+        const QPainterPath innerRim = liquidGlassInsetPath(shapeRect,
+                                                            m_cornerRadius,
+                                                            borderWidth + 0.75);
+        QPen innerBorder(darkMode ? QColor(255, 255, 255, 16)
+                                  : QColor(255, 255, 255, 24));
+        innerBorder.setWidthF(0.75);
+        innerBorder.setCapStyle(Qt::RoundCap);
+        innerBorder.setJoinStyle(Qt::RoundJoin);
+        painter.setPen(innerBorder);
+        painter.drawPath(innerRim);
+    }
 }
 
 int QtFallbackLiquidGlassController::refreshDelayMs()
@@ -854,10 +903,9 @@ void QtFallbackLiquidGlassController::updateBackground()
         const quint64 sourceSignature = liquidGlassSourceSignature(source);
         if (!m_background.isNull()
             && m_hasSourceSignature
-            && m_lastSourceSignature == sourceSignature) {
-            if (!forcedUpdate) {
-                ++m_unchangedPassiveRefreshCount;
-            }
+            && m_lastSourceSignature == sourceSignature
+            && !forcedUpdate) {
+            ++m_unchangedPassiveRefreshCount;
             return;
         }
         m_lastSourceSignature = sourceSignature;
@@ -875,9 +923,11 @@ void QtFallbackLiquidGlassController::updateBackground()
             : kLiquidGlassRenderScale;
     const QSize scaledSize(qMax(1, qRound(source.width() * renderScale)),
                            qMax(1, qRound(source.height() * renderScale)));
-    QImage scaledSource = source.scaled(scaledSize,
-                                        Qt::IgnoreAspectRatio,
-                                        Qt::SmoothTransformation);
+    QImage scaledSource = scaledSize == source.size()
+            ? source
+            : source.scaled(scaledSize,
+                            Qt::IgnoreAspectRatio,
+                            Qt::SmoothTransformation);
     scaledSource.setDevicePixelRatio(devicePixelRatio * renderScale);
     m_background = renderBackground(scaledSource, devicePixelRatio, renderScale);
     m_targetWidget->update();
@@ -890,14 +940,22 @@ QImage QtFallbackLiquidGlassController::captureSource(qreal devicePixelRatio) co
         return {};
     }
 
-    const QSize logicalSize = m_targetWidget->size();
-    const QSize imageSize(qMax(1, qRound(logicalSize.width() * devicePixelRatio)),
-                          qMax(1, qRound(logicalSize.height() * devicePixelRatio)));
+    const QSize visiblePixelSize(qMax(1, qRound(m_targetWidget->width() * devicePixelRatio)),
+                                 qMax(1, qRound(m_targetWidget->height() * devicePixelRatio)));
+    const int logicalPadding = m_effectMode == EffectMode::LiquidGlass
+            ? kLiquidGlassSamplePaddingDip
+            : 0;
+    const int paddingPixels = qRound(logicalPadding * devicePixelRatio);
+    const QSize imageSize = visiblePixelSize
+            + QSize(paddingPixels * 2, paddingPixels * 2);
     QImage source(imageSize, QImage::Format_ARGB32_Premultiplied);
     source.setDevicePixelRatio(devicePixelRatio);
     source.fill(ThemeManager::instance().color(ThemeColor::PageBackground));
 
-    const QPoint sourceTopLeft = m_sourceWidget->mapFromGlobal(m_targetWidget->mapToGlobal(QPoint(0, 0)));
+    const QSize logicalSize = m_targetWidget->size()
+            + QSize(logicalPadding * 2, logicalPadding * 2);
+    const QPoint sourceTopLeft = m_sourceWidget->mapFromGlobal(
+            m_targetWidget->mapToGlobal(QPoint(-logicalPadding, -logicalPadding)));
     const QRect sourceRect(sourceTopLeft, logicalSize);
     const QRect clippedSourceRect = sourceRect.intersected(m_sourceWidget->rect());
     if (clippedSourceRect.isEmpty()) {
@@ -930,14 +988,27 @@ QImage QtFallbackLiquidGlassController::renderBackground(const QImage& source,
     if (!m_renderer) {
         m_renderer = std::make_unique<QtFallbackLiquidGlassRenderer>();
     }
-    m_renderer->setShape(m_shapeRect, m_cornerRadius);
+    const QPointF sampleOffset(kLiquidGlassSamplePaddingDip,
+                               kLiquidGlassSamplePaddingDip);
+    const QRectF visibleShape = m_shapeRect.isValid() ? m_shapeRect : targetRect();
+    m_renderer->setShape(visibleShape.translated(sampleOffset), m_cornerRadius);
 
     QImage rendered = m_renderer->render(source,
                                          devicePixelRatio,
                                          renderScale,
                                          ThemeManager::instance().isDark());
     if (!rendered.isNull()) {
-        return rendered;
+        const qreal pixelScale = devicePixelRatio * renderScale;
+        const int paddingPixels = qRound(kLiquidGlassSamplePaddingDip * pixelScale);
+        const QSize visiblePixelSize(qMax(1, qRound(m_targetWidget->width() * pixelScale)),
+                                     qMax(1, qRound(m_targetWidget->height() * pixelScale)));
+        const QRect cropRect(QPoint(paddingPixels, paddingPixels), visiblePixelSize);
+        if (!rendered.rect().contains(cropRect)) {
+            return {};
+        }
+        QImage cropped = rendered.copy(cropRect);
+        cropped.setDevicePixelRatio(pixelScale);
+        return cropped;
     }
 
     m_renderer.reset();

@@ -6,6 +6,7 @@
 
 #include "shared/services/ImageService.h"
 #include "shared/ui/renderers/ContactListDelegateRenderer.h"
+#include "shared/ui/renderers/MediaPlaceholderRenderer.h"
 #include "features/friend/model/FriendListModel.h"
 #include "shared/types/User.h"
 #include "shared/theme/ThemeManager.h"
@@ -245,9 +246,7 @@ void FriendListDelegate::paint(QPainter* painter,
         painter->setOpacity(painter->opacity() * 0.42);
     }
     if (avatar.isNull()) {
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(theme.imagePlaceholder);
-        painter->drawEllipse(avatarRect);
+        MediaPlaceholderRenderer::drawAvatar(painter, avatarRect);
     } else {
         painter->drawPixmap(avatarRect, avatar);
     }

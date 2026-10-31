@@ -7,6 +7,7 @@
 #include "features/friend/model/GroupListModel.h"
 #include "shared/services/ImageService.h"
 #include "shared/ui/renderers/ContactListDelegateRenderer.h"
+#include "shared/ui/renderers/MediaPlaceholderRenderer.h"
 #include "shared/theme/ThemeManager.h"
 
 extern const int kContactGroupArrowYOffset;
@@ -189,9 +190,7 @@ void GroupListDelegate::paint(QPainter* painter,
                                                                           kAvatarSize,
                                                                           devicePixelRatio);
     if (avatar.isNull()) {
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(ThemeManager::instance().color(ThemeColor::ImagePlaceholder));
-        painter->drawEllipse(avatarRect);
+        MediaPlaceholderRenderer::drawAvatar(painter, avatarRect);
     } else {
         painter->drawPixmap(avatarRect, avatar);
     }

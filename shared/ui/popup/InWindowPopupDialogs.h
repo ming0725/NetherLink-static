@@ -18,7 +18,9 @@ enum class Button {
 Button question(QWidget* parent,
                 const QString& title,
                 const QString& text,
-                Button defaultButton = Button::No);
+                Button defaultButton = Button::No,
+                bool dismissOnOutsideClick = true,
+                bool dismissOnEscape = true);
 
 QString getText(QWidget* parent,
                 const QString& title,

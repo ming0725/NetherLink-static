@@ -764,6 +764,9 @@ LoginWindow::LoginWindow(QWidget* parent)
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
         updateBackdropTheme();
         updateBackgroundLightColors();
+        if (m_loginButton) {
+            m_loginButton->setPrimaryStyle();
+        }
         requestBackgroundLayerUpdate(true);
         update();
     });

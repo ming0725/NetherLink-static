@@ -15,6 +15,7 @@
 #include "shared/ui/RedstoneLampSwitch.h"
 #include "shared/ui/StatefulPushButton.h"
 #include "shared/ui/StyledActionMenu.h"
+#include "shared/ui/renderers/MediaPlaceholderRenderer.h"
 #include "shared/theme/ThemeManager.h"
 
 #include <QAction>
@@ -421,7 +422,11 @@ protected:
                                                                avatarRect.size(),
                                                                Qt::KeepAspectRatioByExpanding,
                                                                painter.device()->devicePixelRatioF());
-        painter.drawPixmap(avatarRect, avatar);
+        if (avatar.isNull()) {
+            MediaPlaceholderRenderer::drawImage(&painter, avatarRect, 4);
+        } else {
+            painter.drawPixmap(avatarRect, avatar);
+        }
         painter.restore();
 
         const GroupRole role = memberRole(m_group, m_user);
@@ -691,6 +696,7 @@ GroupConversationInfoPanel::GroupConversationInfoPanel(QWidget* parent)
     , m_clearHistoryButton(new StatefulPushButton(QStringLiteral("删除聊天记录"), this))
     , m_transferOwnerButton(new StatefulPushButton(QStringLiteral("转让群聊"), this))
     , m_exitGroupButton(new StatefulPushButton(QStringLiteral("退出群聊"), this))
+    , m_transferOwnerAction(new QWidget(this))
     , m_groupInfoCard(new RectPanel(this))
     , m_memberSummaryCard(new MemberListPanel(this))
     , m_memberListPage(new QWidget(this))
@@ -789,8 +795,13 @@ GroupConversationInfoPanel::GroupConversationInfoPanel(QWidget* parent)
     applyPanelActionButtonStyle(m_clearHistoryButton, ThemeManager::instance().color(ThemeColor::ChatInfoPanelText), Qt::AlignLeft | Qt::AlignVCenter);
     applyPanelActionButtonStyle(m_transferOwnerButton, ThemeManager::instance().color(ThemeColor::ChatInfoPanelText), Qt::AlignLeft | Qt::AlignVCenter);
     applyPanelActionButtonStyle(m_exitGroupButton, ThemeManager::instance().color(ThemeColor::DangerText), Qt::AlignCenter);
-    layout->addWidget(m_transferOwnerButton);
-    layout->addSpacing(kSectionSpacing);
+    makeTransparentContainer(m_transferOwnerAction);
+    auto* transferOwnerLayout = new QVBoxLayout(m_transferOwnerAction);
+    transferOwnerLayout->setContentsMargins(0, 0, 0, 0);
+    transferOwnerLayout->setSpacing(0);
+    transferOwnerLayout->addWidget(m_transferOwnerButton);
+    transferOwnerLayout->addSpacing(kSectionSpacing);
+    layout->addWidget(m_transferOwnerAction);
     layout->addWidget(m_clearHistoryButton);
     layout->addSpacing(kSectionSpacing);
     layout->addWidget(m_exitGroupButton);
@@ -897,7 +908,8 @@ void GroupConversationInfoPanel::setGroupSummary(const Group& group,
     m_groupRemarkText->setText(validGroup ? group.remark : QString());
     m_pinSwitch->setLampChecked(validGroup && meta.isPinned);
     m_doNotDisturbSwitch->setLampChecked(validGroup && meta.isDoNotDisturb);
-    m_transferOwnerButton->setEnabled(canTransferOwner());
+    m_transferOwnerAction->setVisible(canTransferOwner());
+    m_transferOwnerButton->setEnabled(true);
     m_exitGroupButton->setEnabled(m_canExitGroup);
     m_memberSummaryCard->setVisible(validGroup);
     rebuildMemberPreview();

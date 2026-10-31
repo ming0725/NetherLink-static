@@ -1,41 +1,36 @@
 #ifdef GL_ES
+#ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
+#else
+precision mediump float;
+#endif
 #endif
 
+// Qt port of the contiguous 9-tap Gaussian from ybouane/liquidglass.
+// Source: https://github.com/ybouane/liquidglass/blob/main/src/shaders.ts
 uniform sampler2D u_texture;
 uniform vec2 u_texelStep;
+uniform vec2 u_texelSize;
 
 varying vec2 v_texCoord;
 
-vec4 safeTexture2D(sampler2D tex, vec2 uv)
+vec4 safeTexture2D(vec2 uv)
 {
-    return texture2D(tex, clamp(uv, vec2(0.001), vec2(0.999)));
-}
-
-vec3 adjustSaturation(vec3 color, float saturation)
-{
-    float gray = dot(color, vec3(0.299, 0.587, 0.114));
-    return mix(vec3(gray), color, saturation);
+    vec2 halfTexel = u_texelSize * 0.5;
+    return texture2D(u_texture,
+                     clamp(uv, halfTexel, vec2(1.0) - halfTexel));
 }
 
 void main()
 {
-    vec2 step1 = u_texelStep * 1.3846153846;
-    vec2 step2 = u_texelStep * 3.2307692308;
-
-    vec4 color = safeTexture2D(u_texture, v_texCoord) * 0.2270270270;
-
-    color += safeTexture2D(u_texture, v_texCoord + step1) * 0.3162162162;
-    color += safeTexture2D(u_texture, v_texCoord - step1) * 0.3162162162;
-
-    color += safeTexture2D(u_texture, v_texCoord + step2) * 0.0702702703;
-    color += safeTexture2D(u_texture, v_texCoord - step2) * 0.0702702703;
-
-    vec3 result = color.rgb;
-
-    result = (result - 0.5) * 0.92 + 0.5;
-    result *= 1.08;
-    result = adjustSaturation(result, 1.15);
-
-    gl_FragColor = vec4(result, color.a);
+    vec4 color = safeTexture2D(v_texCoord) * 0.227027;
+    color += safeTexture2D(v_texCoord + u_texelStep) * 0.194594;
+    color += safeTexture2D(v_texCoord - u_texelStep) * 0.194594;
+    color += safeTexture2D(v_texCoord + u_texelStep * 2.0) * 0.121622;
+    color += safeTexture2D(v_texCoord - u_texelStep * 2.0) * 0.121622;
+    color += safeTexture2D(v_texCoord + u_texelStep * 3.0) * 0.054054;
+    color += safeTexture2D(v_texCoord - u_texelStep * 3.0) * 0.054054;
+    color += safeTexture2D(v_texCoord + u_texelStep * 4.0) * 0.016216;
+    color += safeTexture2D(v_texCoord - u_texelStep * 4.0) * 0.016216;
+    gl_FragColor = color;
 }

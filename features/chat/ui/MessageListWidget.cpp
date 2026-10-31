@@ -7,6 +7,7 @@
 #include <QTimer>
 
 #include "app/state/CurrentUser.h"
+#include "shared/services/ImageService.h"
 #include "shared/ui/StyledActionMenu.h"
 #include "shared/theme/ThemeManager.h"
 #include "features/friend/data/UserRepository.h"
@@ -57,6 +58,8 @@ MessageListWidget::MessageListWidget(QWidget* parent)
             this, &MessageListWidget::reloadConversations);
     connect(&GroupRepository::instance(), &GroupRepository::groupListChanged,
             this, &MessageListWidget::reloadConversations);
+    connect(&ImageService::instance(), &ImageService::previewReady,
+            viewport(), QOverload<>::of(&QWidget::update));
     QTimer::singleShot(0, this, [this]() { clearCurrentConversationSelection(); });
 }
 
